@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.3 - 2026-08-29
+
+V1 patch release: ensure nested submodule clones inherit the repository's
+effective SSH command, and make the cancellation regression fixture wait for
+the SSH process to start before cancelling it.
+
+## 1.0.2 - 2026-08-29
+
+V1 patch release: make test repositories use an explicit `main` initial
+branch, repair the golden bare-remote clone fixture, and make tag pruning
+explicit with Git's `--prune --prune-tags` options.
+
 ## 1.0.1 - 2026-08-29
 
 V1 patch release: make the push rejection regression test independent of the

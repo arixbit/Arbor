@@ -428,11 +428,17 @@ fn submodule_add_undo_refuses_new_nested_files() {
 fn submodule_add_with_auth_cancellation_stops_nested_clone() {
     use std::os::unix::fs::PermissionsExt;
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     let outer = TestRepo::new();
     let script = outer.path.join("slow-ssh.sh");
-    std::fs::write(&script, "#!/bin/sh\nsleep 30\n").expect("slow ssh script");
+    let started_marker = outer.path.join(".arbor-ssh-started");
+    let marker_path = started_marker.display().to_string();
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}'\nsleep 30\n", marker_path),
+    )
+    .expect("slow ssh script");
     let mut permissions = std::fs::metadata(&script)
         .expect("script metadata")
         .permissions();
@@ -454,7 +460,11 @@ fn submodule_add_with_auth_cancellation_stops_nested_clone() {
             worker_cancel,
         )
     });
-    thread::sleep(Duration::from_millis(300));
+    let wait_started = Instant::now();
+    while !started_marker.exists() && wait_started.elapsed() < Duration::from_secs(5) {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(started_marker.exists(), "slow SSH command did not start");
     cancel.cancel();
 
     let result = worker.join().expect("submodule worker");

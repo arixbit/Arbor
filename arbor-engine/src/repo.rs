@@ -11150,6 +11150,14 @@ impl Repository {
         let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
             message: "bare repository has no worktree".into(),
         })?;
+        // The nested clone launched by `git submodule add` does not inherit
+        // the parent's local config, so pass the effective SSH command at
+        // command scope when one is configured.
+        let ssh_command = crate::attributes::effective_config_value(
+            &crate::attributes::list_config(workdir)?,
+            "core.sshCommand",
+        )
+        .map(str::to_owned);
         let is_local_url = url.starts_with('/')
             || url.starts_with("./")
             || url.starts_with("../")
@@ -11168,6 +11176,11 @@ impl Repository {
         // URLs retain Git's default transport policy.
         if is_local_url {
             spec.global_args = vec!["-c".into(), "protocol.file.allow=always".into()];
+        }
+        if let Some(ssh_command) = ssh_command {
+            spec = spec
+                .global_arg("-c")
+                .global_arg(format!("core.sshCommand={ssh_command}"));
         }
         run_submodule_command_spec(
             &spec,
