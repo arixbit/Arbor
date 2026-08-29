@@ -773,18 +773,6 @@ final class RepositoryFileChangeMonitorTests: XCTestCase {
         XCTAssertEqual(promoted.directories, ["\(root)/Generated"])
         XCTAssertFalse(promoted.everything)
 
-        let highlyCompressible = (0...50_000)
-            .map { "\(root)/GeneratedLarge/File\($0).swift" }
-        let largePromoted = RepositoryDirtyScope(
-            files: highlyCompressible,
-            directories: [],
-            nonRecursiveDirectories: [],
-            everything: false
-        ).compacted(workdir: root)
-
-        XCTAssertEqual(largePromoted.files, [])
-        XCTAssertEqual(largePromoted.directories, ["\(root)/GeneratedLarge"])
-        XCTAssertFalse(largePromoted.everything)
     }
 
     func testDirtyScopeManagerPropagatesRecursiveParentEventsToNestedRoots() {

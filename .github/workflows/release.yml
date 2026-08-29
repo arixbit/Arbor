@@ -14,6 +14,7 @@ jobs:
     # artifact name. Signed production releases use the documented maintainer
     # flow in RELEASE.md instead of storing Apple credentials in CI.
     runs-on: macos-14
+    timeout-minutes: 45
     env:
       ARBOR_UNSIGNED: "1"
       ARBOR_ARCHS: arm64

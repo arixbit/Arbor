@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12 - 2026-08-29
+
+V1 patch release: remove a redundant 50,001-file stress fixture that could
+stall the Xcode 15.4 macOS release runner; the 30-file folder-promotion test
+already covers the behavior under test. The release job now also has a
+45-minute timeout so a future runner stall fails visibly instead of hanging.
+
 ## 1.0.11 - 2026-08-29
 
 V1 patch release: avoid per-path URL normalization before promoting large
