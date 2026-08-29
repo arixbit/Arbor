@@ -23,7 +23,7 @@ xcodebuild -project Arbor/Arbor.xcodeproj -scheme Arbor \
   -destination 'platform=macOS' test
 ```
 
-For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.9`. The
+For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.10`. The
 default output is explicitly unsigned and arm64; signing and notarization
 require the external Apple Developer credentials described in
 [RELEASE.md](RELEASE.md).

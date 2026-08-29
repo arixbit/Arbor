@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10 - 2026-08-29
+
+V1 patch release: bound large single-directory filesystem event batches before
+the general dirty-scope ancestor walk, keeping macOS 14 CI responsive.
+
 ## 1.0.9 - 2026-08-29
 
 V1 patch release: make asynchronous Swift captures explicit so the Xcode 15.4

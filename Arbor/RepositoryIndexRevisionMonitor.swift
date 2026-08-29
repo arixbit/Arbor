@@ -327,6 +327,30 @@ extension RepositoryDirtyScope {
                 everything: true
             )
         }
+
+        // A burst containing many files from one folder is already a complete
+        // recursive directory scope. Promote it before the general ancestor
+        // walk so large VFS batches stay bounded on older Foundation runtimes.
+        if rawDirectories.isEmpty,
+           rawNonRecursiveDirectories.isEmpty,
+           rawFiles.count >= Self.rootDirtyFolderSizeThreshold,
+           let firstFile = rawFiles.first {
+            let commonParent = URL(fileURLWithPath: firstFile)
+                .deletingLastPathComponent()
+                .path
+            if commonParent != root,
+               rawFiles.allSatisfy({
+                   URL(fileURLWithPath: $0).deletingLastPathComponent().path == commonParent
+               }) {
+                return RepositoryDirtyScope(
+                    files: [],
+                    directories: [commonParent],
+                    nonRecursiveDirectories: [],
+                    everything: false
+                )
+            }
+        }
+
         var retainedPaths = Self.removeDescendants(rawPaths)
         var promotedDirectories = Set<String>()
 
