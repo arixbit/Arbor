@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5 - 2026-08-29
+
+V1 patch release: generate an Xcode 15-compatible project so the public macOS
+release workflow can build and test on its Xcode 15.4 runner.
+
 ## 1.0.4 - 2026-08-29
 
 V1 patch release: make the merge-preserving rebase regression test inspect

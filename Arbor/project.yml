@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.arbor
   createIntermediateGroups: true
   developmentRegion: en
+  projectFormat: xcode15_3
   knownRegions:
     - en
     - zh-Hans

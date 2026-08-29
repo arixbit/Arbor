@@ -25,3 +25,11 @@ xcodegen generate \
   --spec "$repo_root/Arbor/project.yml" \
   --project "$repo_root/Arbor" \
   --quiet
+
+# Keep the generated project readable by the Xcode 15 runner used for the
+# public release workflow. Fail early if a newer XcodeGen ignores the format.
+project_file="$repo_root/Arbor/Arbor.xcodeproj/project.pbxproj"
+if ! grep -q '^\s*objectVersion = 63;\s*$' "$project_file"; then
+  echo "unsupported Xcode project format in $project_file (expected objectVersion 63)" >&2
+  exit 1
+fi
