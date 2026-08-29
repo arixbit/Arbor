@@ -82,6 +82,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleIconName: AppIcon
+        LSApplicationCategoryType: public.app-category.developer-tools
         NSHighResolutionCapable: true
   ArborTests:
     type: bundle.unit-test

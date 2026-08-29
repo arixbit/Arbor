@@ -69,18 +69,8 @@ cargo build \
   --release \
   --manifest-path "$ROOT_DIR/arbor-engine/Cargo.toml" \
   --quiet
-(
-  cd "$ROOT_DIR/arbor-engine"
-  cargo run \
-    --release \
-    --bin uniffi-bindgen \
-    -- generate \
-    --library \
-    --language swift \
-    --out-dir "$ROOT_DIR/arbor-engine/generated/swift" \
-    "$ROOT_DIR/arbor-engine/target/release/libarbor_engine.dylib" \
-    >/dev/null
-)
+"$ROOT_DIR/scripts/generate-swift-bindings.sh" >/dev/null
+"$ROOT_DIR/scripts/generate-xcode-project.sh"
 
 xcodebuild \
   -project "$ROOT_DIR/Arbor/Arbor.xcodeproj" \

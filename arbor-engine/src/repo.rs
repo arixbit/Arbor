@@ -22391,7 +22391,7 @@ fn write_raw_rebase_message_editor(
     use std::os::unix::fs::PermissionsExt;
     let support = shell_quote_for_script(support);
     let script = format!(
-        "#!/bin/sh\nset -eu\nrequest={support}/raw-message.request\nresponse={support}/raw-message.response\ncancel={support}/raw-message.cancel\nrm -f \"$request\" \"$response\" \"$cancel\"\ncp \"$1\" \"$request\"\nwhile [ ! -f \"$response\" ] && [ ! -f \"$cancel\" ]; do\n  sleep 0.1\ndone\nif [ -f \"$cancel\" ]; then\n  rm -f \"$request\" \"$response\" \"$cancel\"\n  exit 1\nfi\ncp \"$response\" \"$1\"\nrm -f \"$request\" \"$response\" \"$cancel\"\nexit 0\n",
+        "#!/bin/sh\nset -eu\nrequest={support}/raw-message.request\nresponse={support}/raw-message.response\ncancel={support}/raw-message.cancel\ntemporary=\"$request.tmp.$$\"\nrm -f \"$request\" \"$response\" \"$cancel\" \"$temporary\"\ncp \"$1\" \"$temporary\"\nmv \"$temporary\" \"$request\"\nwhile [ ! -f \"$response\" ] && [ ! -f \"$cancel\" ]; do\n  sleep 0.1\ndone\nif [ -f \"$cancel\" ]; then\n  rm -f \"$request\" \"$response\" \"$cancel\" \"$temporary\"\n  exit 1\nfi\ncp \"$response\" \"$1\"\nrm -f \"$request\" \"$response\" \"$cancel\" \"$temporary\"\nexit 0\n",
         support = support
     );
     std::fs::write(editor, script).map_err(EngineError::from_gix)?;

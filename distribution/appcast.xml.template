@@ -10,7 +10,7 @@
       <sparkle:shortVersionString>ARBOR_VERSION</sparkle:shortVersionString>
       <pubDate>RFC_2822_DATE</pubDate>
       <enclosure
-        url="https://github.com/OWNER/REPOSITORY/releases/download/vARBOR_VERSION/Arbor-ARBOR_VERSION.zip"
+        url="https://github.com/OWNER/REPOSITORY/releases/download/vARBOR_VERSION/Arbor-ARBOR_VERSION-arm64.zip"
         length="ZIP_LENGTH_BYTES"
         type="application/octet-stream"
         sparkle:edSignature="SPARKLE_ED_SIGNATURE" />

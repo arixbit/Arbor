@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    # macOS 14 public runners are Apple Silicon and match the published arm64
+    # artifact name. Signed production releases use the documented maintainer
+    # flow in RELEASE.md instead of storing Apple credentials in CI.
+    runs-on: macos-14
+    env:
+      ARBOR_UNSIGNED: "1"
+      ARBOR_ARCHS: arm64
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Xcode project generator
+        run: brew install xcodegen
+
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = arm64
+
+      - name: Build and test release artifacts
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ./scripts/release.sh "$version"
+          echo "ARBOR_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Publish unsigned QA release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_dir="build/releases/$ARBOR_RELEASE_VERSION"
+          notes_file="$(mktemp "${TMPDIR:-/tmp}/arbor-release-notes.XXXXXX")"
+          {
+            echo "# Arbor $ARBOR_RELEASE_VERSION"
+            echo
+            echo "This release contains an unsigned arm64 macOS QA build."
+            echo "Read the macOS Gatekeeper instructions in README.md before opening it."
+            echo
+            cat "$release_dir/CHANGELOG.md"
+          } > "$notes_file"
+          gh release create "v$ARBOR_RELEASE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Arbor $ARBOR_RELEASE_VERSION (unsigned QA)" \
+            --notes-file "$notes_file" \
+            "$release_dir"/Arbor-* \
+            "$release_dir/SHA256SUMS"

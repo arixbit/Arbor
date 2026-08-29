@@ -3,7 +3,7 @@ cask "arbor" do
   sha256 "REPLACE_WITH_SHA256SUMS_VALUE"
 
   # Replace OWNER/REPOSITORY and the checksum before publishing a tap.
-  url "https://github.com/OWNER/REPOSITORY/releases/download/v#{version}/Arbor-#{version}.dmg"
+  url "https://github.com/OWNER/REPOSITORY/releases/download/v#{version}/Arbor-#{version}-arm64.dmg"
   name "Arbor"
   desc "Native macOS Git workbench"
   homepage "https://github.com/OWNER/REPOSITORY"
