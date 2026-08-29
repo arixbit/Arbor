@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.13 - 2026-08-29
+
+V1 patch release: keep the large single-directory dirty-scope fast path free
+of Foundation URL normalization until after its lexical checks, avoiding an
+Xcode 15.4 macOS Runner stall.
+
 ## 1.0.12 - 2026-08-29
 
 V1 patch release: remove a redundant 50,001-file stress fixture that could

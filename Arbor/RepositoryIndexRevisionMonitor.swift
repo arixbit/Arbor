@@ -312,11 +312,15 @@ extension RepositoryDirtyScope {
     func compacted(workdir: String) -> RepositoryDirtyScope {
         guard !everything else { return self }
 
-        let root = repositoryEventKey(workdir)
-
         // Avoid normalizing every path in a large single-directory burst. The
         // lexical check preserves the same promotion rule while avoiding a
         // pathological Foundation URL walk on older macOS runners.
+        let lexicalRoot: String
+        if workdir.count > 1 && workdir.last == "/" {
+            lexicalRoot = String(workdir.dropLast())
+        } else {
+            lexicalRoot = workdir
+        }
         if directories.isEmpty,
            nonRecursiveDirectories.isEmpty,
            Set(files).count >= Self.rootDirtyFolderSizeThreshold,
@@ -328,9 +332,8 @@ extension RepositoryDirtyScope {
             }
 
             let commonParent = lexicalParent(firstFile)
-            if commonParent != root,
-               commonParent.hasPrefix(root + "/"),
-               repositoryEventKey(commonParent) == commonParent,
+            if commonParent != lexicalRoot,
+               commonParent.hasPrefix(lexicalRoot + "/"),
                files.allSatisfy({ lexicalParent($0) == commonParent }) {
                 return RepositoryDirtyScope(
                     files: [],
@@ -341,6 +344,7 @@ extension RepositoryDirtyScope {
             }
         }
 
+        let root = repositoryEventKey(workdir)
         let rawFiles = Set(files.map(repositoryEventKey))
         let rawDirectories = Set(directories.map(repositoryEventKey))
         let rawNonRecursiveDirectories = Set(nonRecursiveDirectories.map(repositoryEventKey))
