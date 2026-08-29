@@ -313,6 +313,34 @@ extension RepositoryDirtyScope {
         guard !everything else { return self }
 
         let root = repositoryEventKey(workdir)
+
+        // Avoid normalizing every path in a large single-directory burst. The
+        // lexical check preserves the same promotion rule while avoiding a
+        // pathological Foundation URL walk on older macOS runners.
+        if directories.isEmpty,
+           nonRecursiveDirectories.isEmpty,
+           Set(files).count >= Self.rootDirtyFolderSizeThreshold,
+           let firstFile = files.first {
+            func lexicalParent(_ path: String) -> String {
+                guard let slash = path.lastIndex(of: "/") else { return "" }
+                if slash == path.startIndex { return "/" }
+                return String(path[..<slash])
+            }
+
+            let commonParent = lexicalParent(firstFile)
+            if commonParent != root,
+               commonParent.hasPrefix(root + "/"),
+               repositoryEventKey(commonParent) == commonParent,
+               files.allSatisfy({ lexicalParent($0) == commonParent }) {
+                return RepositoryDirtyScope(
+                    files: [],
+                    directories: [commonParent],
+                    nonRecursiveDirectories: [],
+                    everything: false
+                )
+            }
+        }
+
         let rawFiles = Set(files.map(repositoryEventKey))
         let rawDirectories = Set(directories.map(repositoryEventKey))
         let rawNonRecursiveDirectories = Set(nonRecursiveDirectories.map(repositoryEventKey))
@@ -326,29 +354,6 @@ extension RepositoryDirtyScope {
                 nonRecursiveDirectories: [],
                 everything: true
             )
-        }
-
-        // A burst containing many files from one folder is already a complete
-        // recursive directory scope. Promote it before the general ancestor
-        // walk so large VFS batches stay bounded on older Foundation runtimes.
-        if rawDirectories.isEmpty,
-           rawNonRecursiveDirectories.isEmpty,
-           rawFiles.count >= Self.rootDirtyFolderSizeThreshold,
-           let firstFile = rawFiles.first {
-            let commonParent = URL(fileURLWithPath: firstFile)
-                .deletingLastPathComponent()
-                .path
-            if commonParent != root,
-               rawFiles.allSatisfy({
-                   URL(fileURLWithPath: $0).deletingLastPathComponent().path == commonParent
-               }) {
-                return RepositoryDirtyScope(
-                    files: [],
-                    directories: [commonParent],
-                    nonRecursiveDirectories: [],
-                    everything: false
-                )
-            }
         }
 
         var retainedPaths = Self.removeDescendants(rawPaths)

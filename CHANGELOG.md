@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.11 - 2026-08-29
+
+V1 patch release: avoid per-path URL normalization before promoting large
+single-directory filesystem event batches on older macOS runners.
+
 ## 1.0.10 - 2026-08-29
 
 V1 patch release: bound large single-directory filesystem event batches before

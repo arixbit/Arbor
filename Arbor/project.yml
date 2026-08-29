@@ -60,7 +60,7 @@ targets:
         PRODUCT_NAME: Arbor
         PRODUCT_BUNDLE_IDENTIFIER: com.arbor.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "1.0.10"
+        MARKETING_VERSION: "1.0.11"
         CURRENT_PROJECT_VERSION: "1"
         # 指向 Rust release 产物目录
         LIBRARY_SEARCH_PATHS:
