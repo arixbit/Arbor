@@ -325,15 +325,9 @@ extension RepositoryDirtyScope {
            nonRecursiveDirectories.isEmpty,
            files.count >= Self.rootDirtyFolderSizeThreshold,
            let firstFile = files.first {
-            func lexicalParent(_ path: String) -> String {
-                guard let slash = path.lastIndex(of: "/") else { return "" }
-                if slash == path.startIndex { return "/" }
-                return String(path[..<slash])
-            }
-
-            let commonParent = lexicalParent(firstFile)
+            let commonParent = Self.lexicalParent(firstFile)
             var allFilesShareParent = true
-            for file in files where lexicalParent(file) != commonParent {
+            for file in files where Self.lexicalParent(file) != commonParent {
                 allFilesShareParent = false
                 break
             }
@@ -371,10 +365,10 @@ extension RepositoryDirtyScope {
         while true {
             var descendantCounts: [String: Int] = [:]
             for path in retainedPaths {
-                var parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+                var parent = Self.lexicalParent(path)
                 while isRepositoryPath(parent, isSameOrDescendantOf: root), parent != root {
                     descendantCounts[parent, default: 0] += 1
-                    parent = URL(fileURLWithPath: parent).deletingLastPathComponent().path
+                    parent = Self.lexicalParent(parent)
                 }
             }
 
@@ -460,14 +454,14 @@ extension RepositoryDirtyScope {
     private static func removeDescendants(_ paths: Set<String>) -> Set<String> {
         var retained = Set<String>()
         for path in paths.sorted() {
-            var parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+            var parent = lexicalParent(path)
             var covered = false
             while !parent.isEmpty {
                 if retained.contains(parent) {
                     covered = true
                     break
                 }
-                let next = URL(fileURLWithPath: parent).deletingLastPathComponent().path
+                let next = lexicalParent(parent)
                 if next == parent { break }
                 parent = next
             }
@@ -476,6 +470,12 @@ extension RepositoryDirtyScope {
             }
         }
         return retained
+    }
+
+    private static func lexicalParent(_ path: String) -> String {
+        guard let slash = path.lastIndex(of: "/") else { return "" }
+        if slash == path.startIndex { return "/" }
+        return String(path[..<slash])
     }
 
     /// Mirrors RootDirtySet.belongsTo: an exact file or a descendant of a

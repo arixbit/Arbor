@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.15 - 2026-08-30
+
+V1 patch release: use lexical parent traversal while compacting normalized
+dirty scopes, avoiding repeated Foundation URL walks on older macOS runners.
+
 ## 1.0.14 - 2026-08-29
 
 V1 patch release: simplify the dirty-scope folder-promotion fast path to
