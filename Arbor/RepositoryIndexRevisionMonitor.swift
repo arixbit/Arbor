@@ -323,7 +323,7 @@ extension RepositoryDirtyScope {
         }
         if directories.isEmpty,
            nonRecursiveDirectories.isEmpty,
-           Set(files).count >= Self.rootDirtyFolderSizeThreshold,
+           files.count >= Self.rootDirtyFolderSizeThreshold,
            let firstFile = files.first {
             func lexicalParent(_ path: String) -> String {
                 guard let slash = path.lastIndex(of: "/") else { return "" }
@@ -332,9 +332,14 @@ extension RepositoryDirtyScope {
             }
 
             let commonParent = lexicalParent(firstFile)
+            var allFilesShareParent = true
+            for file in files where lexicalParent(file) != commonParent {
+                allFilesShareParent = false
+                break
+            }
             if commonParent != lexicalRoot,
                commonParent.hasPrefix(lexicalRoot + "/"),
-               files.allSatisfy({ lexicalParent($0) == commonParent }) {
+               allFilesShareParent {
                 return RepositoryDirtyScope(
                     files: [],
                     directories: [commonParent],

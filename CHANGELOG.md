@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.14 - 2026-08-29
+
+V1 patch release: simplify the dirty-scope folder-promotion fast path to
+avoid Set hashing and closure traversal on older Swift runtimes.
+
 ## 1.0.13 - 2026-08-29
 
 V1 patch release: keep the large single-directory dirty-scope fast path free
