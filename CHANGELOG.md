@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.8 - 2026-08-29
+
+V1 patch release: keep the Xcode 15.4 test target compatible with Swift's
+trailing-comma parsing rules.
+
 ## 1.0.7 - 2026-08-29
 
 V1 patch release: restore Xcode 15.4 compatibility for graph traversal and

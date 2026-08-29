@@ -11739,7 +11739,7 @@ final class CompareSelectionTests: XCTestCase {
                 "WIP: one": 1_725_000_123,
                 "WIP: two": 1_725_000_456
             ],
-            shelfNames: ["WIP: one", "WIP: two"],
+            shelfNames: ["WIP: one", "WIP: two"]
         )
 
         let decoded = try JSONDecoder().decode(
