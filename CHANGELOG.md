@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.9 - 2026-08-29
+
+V1 patch release: make asynchronous Swift captures explicit so the Xcode 15.4
+release runner accepts the workspace operations target.
+
 ## 1.0.8 - 2026-08-29
 
 V1 patch release: keep the Xcode 15.4 test target compatible with Swift's

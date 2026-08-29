@@ -2733,7 +2733,7 @@ private func confirmAndPerformExternalVCSActions(
     )
     let notificationID = externalVCSActionNotificationID(repositoryPath: rootPath)
     beginFeedbackOperation("Update Git files", notificationID: notificationID)
-    Task.detached(priority: .userInitiated) {
+    Task.detached(priority: .userInitiated) { [addPaths, stageAddPaths, removePaths] in
         do {
             let completedDetail = try runRepositoryExternalVCSActions(
                 repo: repo,
@@ -5096,7 +5096,7 @@ func runLogCommand(reset: Bool = true) {
     }
     hasMoreLogCommand = !commandHasExplicitLimit
     logCommandError = nil
-    let task = Task.detached(priority: .userInitiated) {
+    let task = Task.detached(priority: .userInitiated) { [commandRepositories] in
         do {
             var entriesByRoot: [[CommitInfo]] = []
             for (_, commandRepository) in commandRepositories {
@@ -14764,7 +14764,7 @@ func performMultiRootCommit(
         projectPath: projectPath
     )
 
-    Task.detached(priority: .userInitiated) {
+    Task.detached(priority: .userInitiated) { [options] in
         do {
             let warningPresentations = try collectMultiRootCommitWarnings(
                 rootPaths: rootPaths,
@@ -15464,7 +15464,7 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
 
     let projectToken = projectPath
     isLoadingMyBranches = true
-    logShowMyTask = Task.detached(priority: .utility) {
+    logShowMyTask = Task.detached(priority: .utility) { [rootPaths] in
         var branchIDs = Set<String>()
         for rootPath in rootPaths {
             guard !Task.isCancelled,
@@ -36994,7 +36994,7 @@ func restoreDeletedShelves(
         total: uniqueNames.count,
         phase: "Restore Shelf"
     )
-    Task.detached(priority: .userInitiated) {
+    Task.detached(priority: .userInitiated) { [uniqueNames] in
         let shelfPathsByName = Dictionary(
             uniqueKeysWithValues: ((try? shelfRepository.shelveDeletedList()) ?? []).map {
                 ($0.name, $0.paths)
@@ -37263,7 +37263,7 @@ func deleteDeletedShelves(
         total: uniqueNames.count,
         phase: "Delete Shelf"
     )
-    Task.detached(priority: .userInitiated) {
+    Task.detached(priority: .userInitiated) { [uniqueNames] in
         let shelfPathsByName = Dictionary(
             uniqueKeysWithValues: ((try? shelfRepository.shelveDeletedList()) ?? []).map {
                 ($0.name, $0.paths)
@@ -42028,9 +42028,9 @@ func restorePersistedMultiRootRebaseSession(for projectPath: String) {
 }
 
 func resumeMultiRootRebase() {
-    guard var session = multiRootRebaseSession else { return }
+    guard let session = multiRootRebaseSession else { return }
     let sessionID = session.id
-    Task.detached(priority: .utility) {
+    Task.detached(priority: .utility) { [session] in
         let activeRoot = session.roots.compactMap { root -> String? in
             guard let rootRepo = try? openRepository(path: root.rootPath),
                   (try? rootRepo.operationState()) != nil else { return nil }
@@ -42050,13 +42050,14 @@ func resumeMultiRootRebase() {
                 )
                 return
             }
-            for index in session.roots.indices where session.roots[index].state == .failed {
-                session.roots[index].state = .pending
-                session.roots[index].message = ""
+            var resumedSession = session
+            for index in resumedSession.roots.indices where resumedSession.roots[index].state == .failed {
+                resumedSession.roots[index].state = .pending
+                resumedSession.roots[index].message = ""
             }
-            self.multiRootRebaseSession = session
-            saveMultiRootRebaseSession(session)
-            self.runPendingMultiRootRebase(session)
+            self.multiRootRebaseSession = resumedSession
+            saveMultiRootRebaseSession(resumedSession)
+            self.runPendingMultiRootRebase(resumedSession)
         }
     }
 }
