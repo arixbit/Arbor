@@ -421,22 +421,8 @@ fn merge_preserving_structured_todo_reorders_rows_inside_a_branch_segment() {
     assert_eq!(r.read("feature-one.txt"), "one");
     assert_eq!(r.read("feature-two.txt"), "two");
 
-    let feature_one_id = r.git(&[
-        "log",
-        "--all",
-        "--format=%H",
-        "--grep=feature one",
-        "-n",
-        "1",
-    ]);
-    let feature_two_id = r.git(&[
-        "log",
-        "--all",
-        "--format=%H",
-        "--grep=feature two",
-        "-n",
-        "1",
-    ]);
+    let feature_one_id = r.git(&["log", "--format=%H", "--grep=feature one", "-n", "1"]);
+    let feature_two_id = r.git(&["log", "--format=%H", "--grep=feature two", "-n", "1"]);
     assert_eq!(
         r.git(&["rev-parse", &format!("{feature_one_id}^")]),
         feature_two_id,

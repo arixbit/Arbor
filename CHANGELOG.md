@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 - 2026-08-29
+
+V1 patch release: make the merge-preserving rebase regression test inspect
+the rewritten history from the current HEAD instead of retaining old branch
+refs in the lookup.
+
 ## 1.0.3 - 2026-08-29
 
 V1 patch release: ensure nested submodule clones inherit the repository's
