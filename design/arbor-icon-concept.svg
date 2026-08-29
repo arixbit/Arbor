@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- 深绿渐变背景 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17734a"/>
+      <stop offset="0.55" stop-color="#0e4a2e"/>
+      <stop offset="1" stop-color="#052e1b"/>
+    </linearGradient>
+    <!-- 左上柔光，增强立体 -->
+    <radialGradient id="glow" cx="0.38" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- commit 点：琥珀暖色，带高光 -->
+    <radialGradient id="dot" cx="0.35" cy="0.30" r="0.95">
+      <stop offset="0" stop-color="#fff3c4"/>
+      <stop offset="0.45" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 背景圆角方形（macOS squircle 示意） -->
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#glow)"/>
+
+  <!-- 分叉枝：从主枝分出、弧线绕回并合拢（branch → merge） -->
+  <path d="M 445 655 C 235 635, 205 425, 385 335 C 525 265, 705 400, 660 475"
+        fill="none" stroke="#cfe0c6" stroke-width="52" stroke-linecap="round"/>
+
+  <!-- 主枝（Arbor）：左下弧线扫向右上 -->
+  <path d="M 185 915 C 250 760, 405 680, 485 620 C 605 532, 700 400, 860 190"
+        fill="none" stroke="#edf3e8" stroke-width="78" stroke-linecap="round"/>
+
+  <!-- 分叉起点的小结节 -->
+  <circle cx="452" cy="648" r="30" fill="#edf3e8"/>
+
+  <!-- 枝尖的叶子 -->
+  <g transform="translate(838,182) rotate(-30)">
+    <path d="M 0 0 C 24 -34, 58 -34, 86 0 C 58 34, 24 34, 0 0 Z" fill="#9ae6b4"/>
+    <path d="M 4 0 C 32 -4, 60 -4, 82 0" fill="none" stroke="#5cb381" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- commit 点：主枝上 -->
+  <circle cx="287" cy="807" r="62" fill="url(#dot)"/>
+  <circle cx="478" cy="616" r="62" fill="url(#dot)"/>
+  <circle cx="700" cy="452" r="62" fill="url(#dot)"/>
+  <circle cx="812" cy="296" r="54" fill="url(#dot)"/>
+  <!-- commit 点：分叉枝上 -->
+  <circle cx="332" cy="460" r="56" fill="url(#dot)"/>
+  <circle cx="470" cy="352" r="56" fill="url(#dot)"/>
+
+  <!-- commit 点的高光（左上小亮斑） -->
+  <g fill="#ffffff" opacity="0.55">
+    <circle cx="267" cy="787" r="14"/>
+    <circle cx="458" cy="596" r="14"/>
+    <circle cx="680" cy="432" r="14"/>
+    <circle cx="796" cy="278" r="12"/>
+    <circle cx="314" cy="442" r="12"/>
+    <circle cx="452" cy="334" r="12"/>
+  </g>
+</svg>

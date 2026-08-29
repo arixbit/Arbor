@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- 明快渐变底（现代 macOS 风格） -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.5" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <!-- 白色符号的柔投影，增强与亮底对比 -->
+    <filter id="sh" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="9" flood-color="#000000" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- 主线：笔直对角线（rebase 后的干净历史） -->
+  <path d="M 175 880 L 855 165" fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" filter="url(#sh)"/>
+
+  <!-- 小菱形：分支分出 → 干净合拢回主线 -->
+  <path d="M 412 632 L 342 542 L 500 476 L 570 465"
+        fill="none" stroke="#ffffff" stroke-width="15" stroke-linejoin="round" filter="url(#sh)"/>
+
+  <!-- 主线上的 commit 点 -->
+  <circle cx="253" cy="798" r="40" fill="#ffffff" filter="url(#sh)"/>
+  <circle cx="412" cy="632" r="40" fill="#ffffff" filter="url(#sh)"/>
+  <circle cx="570" cy="465" r="44" fill="#ffffff" filter="url(#sh)"/>
+  <circle cx="722" cy="305" r="40" fill="#ffffff" filter="url(#sh)"/>
+
+  <!-- 分支上的两个 commit（稍小） -->
+  <circle cx="342" cy="542" r="30" fill="#ffffff" filter="url(#sh)"/>
+  <circle cx="500" cy="476" r="30" fill="#ffffff" filter="url(#sh)"/>
+</svg>

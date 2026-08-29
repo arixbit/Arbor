@@ -1,0 +1,45 @@
+[package]
+name = "arbor-engine"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]   # cdylib 给 uniffi 读元数据；staticlib 给 Xcode 链接；rlib 给集成测试链接
+name = "arbor_engine"
+
+# Keep the bindgen entry point on the exact same UniFFI version as the
+# library.  Invoking a separately installed `uniffi-bindgen` can generate
+# Swift checksums for a different crate version and make the app crash before
+# the first window is shown.
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+uniffi = { version = "0.32", features = ["cli"] }
+gix = { version = "0.86", features = ["tree-editor", "merge", "blocking-network-client", "blocking-http-transport-curl"] }
+# 引擎内忽略 SIGPIPE（gix 文件传输内部用管道；Swift 主程序不像 Rust 默认忽略 SIGPIPE，
+# 管道破裂会直接杀进程，忽略后变为 EPIPE 错误）
+libc = "0.2"
+regex = "1"
+tempfile = "3"
+# 语法高亮（D82）：tree-sitter 解析 + grammar crate 内嵌的 highlights 查询 → 语义 token span。
+# 查询常量命名不统一（HIGHLIGHTS_QUERY / HIGHLIGHT_QUERY），与 grammar 版本严格一致。
+# grammar crate 版本精确 pin，ts/tsx 叠加 JS 查询（TS 是 JS 超集方言）。
+tree-sitter = "0.25"
+tree-sitter-language = "0.1"
+# QueryCursor 迭代需要（QueryCaptures 实现 streaming_iterator::StreamingIterator）
+streaming-iterator = "0.1"
+tree-sitter-swift = "=0.7.3"
+tree-sitter-rust = "=0.24.2"
+tree-sitter-python = "=0.25.0"
+tree-sitter-javascript = "=0.25.0"
+tree-sitter-typescript = "=0.23.2"
+tree-sitter-c = "=0.24.2"
+tree-sitter-cpp = "=0.23.4"
+tree-sitter-java = "=0.23.5"
+tree-sitter-go = "=0.25.0"
+tree-sitter-json = "=0.24.8"
+tree-sitter-bash = "=0.25.1"
+
+[dev-dependencies]

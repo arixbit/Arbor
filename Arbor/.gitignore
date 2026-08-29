@@ -1,0 +1,14 @@
+# xcodegen 产物，由 project.yml 重新生成：xcodegen generate
+/Arbor.xcodeproj/
+/Arbor.xcworkspace/
+
+# Xcode 用户态文件
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+
+# 构建产物
+build/
+DerivedData/
+
+.DS_Store

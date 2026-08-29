@@ -1,0 +1,24 @@
+{
+  "images" : [
+    {
+      "filename" : "ArborAppIcon-light.png",
+      "idiom" : "mac",
+      "scale" : "1x"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "ArborAppIcon-dark.png",
+      "idiom" : "mac",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "Arbor",
+    "version" : 1
+  }
+}

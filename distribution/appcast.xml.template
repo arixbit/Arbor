@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Arbor Updates (staging)</title>
+    <description>Replace every ALL_CAPS value during a signed release.</description>
+    <language>en</language>
+    <item>
+      <title>ARBOR_VERSION</title>
+      <sparkle:version>ARBOR_BUILD_VERSION</sparkle:version>
+      <sparkle:shortVersionString>ARBOR_VERSION</sparkle:shortVersionString>
+      <pubDate>RFC_2822_DATE</pubDate>
+      <enclosure
+        url="https://github.com/OWNER/REPOSITORY/releases/download/vARBOR_VERSION/Arbor-ARBOR_VERSION.zip"
+        length="ZIP_LENGTH_BYTES"
+        type="application/octet-stream"
+        sparkle:edSignature="SPARKLE_ED_SIGNATURE" />
+    </item>
+  </channel>
+</rss>

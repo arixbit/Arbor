@@ -1,0 +1,9 @@
+.DS_Store
+**/.build*/
+build/
+arbor-engine/target/
+**/xcuserdata/
+*.profraw
+.codex/
+.zcode/
+scripts/__pycache__/

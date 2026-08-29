@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- 深色科技底 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101730"/>
+      <stop offset="0.6" stop-color="#0a0f1e"/>
+      <stop offset="1" stop-color="#05070f"/>
+    </linearGradient>
+    <!-- 柔光（克制） -->
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="26" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- 极淡网格 -->
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#ffffff" stroke-opacity="0.04" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#grid)"/>
+
+  <!-- 主线：笔直对角线，青白色 + 克制辉光 -->
+  <path d="M 175 880 L 855 165" fill="none" stroke="#7dd3fc" stroke-width="26" stroke-linecap="round" filter="url(#softglow)" opacity="0.55"/>
+  <path d="M 175 880 L 855 165" fill="none" stroke="#e0f2fe" stroke-width="13" stroke-linecap="round"/>
+
+  <!-- 小菱形：分支分出 → 合拢，青色 -->
+  <path d="M 412 632 L 342 542 L 500 476 L 570 465"
+        fill="none" stroke="#7dd3fc" stroke-width="15" stroke-linejoin="round" filter="url(#glow)" opacity="0.8"/>
+  <path d="M 412 632 L 342 542 L 500 476 L 570 465"
+        fill="none" stroke="#e0f2fe" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- 主线 commit 点：白芯青 -->
+  <g filter="url(#glow)">
+    <circle cx="253" cy="798" r="38" fill="#bae6fd"/>
+    <circle cx="412" cy="632" r="38" fill="#bae6fd"/>
+    <circle cx="570" cy="465" r="44" fill="#c4b5fd"/>
+    <circle cx="722" cy="305" r="38" fill="#bae6fd"/>
+  </g>
+  <circle cx="253" cy="798" r="38" fill="#ffffff" opacity="0.9"/>
+  <circle cx="412" cy="632" r="38" fill="#ffffff" opacity="0.9"/>
+  <circle cx="570" cy="465" r="44" fill="#ffffff" opacity="0.95"/>
+  <circle cx="722" cy="305" r="38" fill="#ffffff" opacity="0.9"/>
+
+  <!-- 分支上的 commit（稍小） -->
+  <g filter="url(#glow)">
+    <circle cx="342" cy="542" r="28" fill="#bae6fd"/>
+    <circle cx="500" cy="476" r="28" fill="#bae6fd"/>
+  </g>
+  <circle cx="342" cy="542" r="28" fill="#ffffff" opacity="0.85"/>
+  <circle cx="500" cy="476" r="28" fill="#ffffff" opacity="0.85"/>
+</svg>
