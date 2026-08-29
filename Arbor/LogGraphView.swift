@@ -777,14 +777,14 @@ struct LinearBekGraphModel {
 
         func calculateMagicSet(from row: Int) -> Set<Int> {
             var result = Set<Int>()
-            var pending = (normalEdgesByUp[row] ?? []).compactMap(\.downRow)
+            var pending = (normalEdgesByUp[row] ?? []).compactMap { $0.downRow }
             var visited = Set<Int>()
             while !pending.isEmpty {
                 pending.sort()
                 let next = pending.removeFirst()
                 guard next <= row + 30, visited.insert(next).inserted else { continue }
                 result.insert(next)
-                pending.append(contentsOf: (normalEdgesByUp[next] ?? []).compactMap(\.downRow))
+                pending.append(contentsOf: (normalEdgesByUp[next] ?? []).compactMap { $0.downRow })
             }
             return result
         }

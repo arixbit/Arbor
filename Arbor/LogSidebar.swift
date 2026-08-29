@@ -2913,12 +2913,13 @@ func loadLogSignatureStatuses() {
     }
     logSignatureFailedIDs.subtract(requestedKeys)
 
+    let requestBatch = requests
     let task = Task { @MainActor in
         let result = await Task.detached(priority: .userInitiated) {
             () -> LogSignatureLoadResult? in
             var statuses: [String: CommitSignatureInfo] = [:]
             var failedKeys: Set<String> = []
-            for request in requests {
+            for request in requestBatch {
                 guard !Task.isCancelled else { return nil }
                 do {
                     let loaded = try request.repository.commitSignatureStatuses(

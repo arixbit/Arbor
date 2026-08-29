@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.7 - 2026-08-29
+
+V1 patch release: restore Xcode 15.4 compatibility for graph traversal and
+signature loading concurrency.
+
 ## 1.0.6 - 2026-08-29
 
 V1 patch release: restore Xcode 15.4 compatibility for the macOS release
