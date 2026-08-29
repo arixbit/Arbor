@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.6 - 2026-08-29
+
+V1 patch release: restore Xcode 15.4 compatibility for the macOS release
+workflow and keep the generated project, notification handling, and release
+metadata buildable from a clean clone.
+
 ## 1.0.5 - 2026-08-29
 
 V1 patch release: generate an Xcode 15-compatible project so the public macOS

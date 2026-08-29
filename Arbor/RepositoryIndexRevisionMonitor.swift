@@ -2294,7 +2294,7 @@ struct GitIncomingBranchesSnapshot: Sendable {
         branches: [GitIncomingBranch],
         configuredRoots: Set<String> = [],
         configuredRemotes: Set<GitIncomingRemote> = [],
-        checkedRemotes: Set<GitIncomingRemote> = [],
+        checkedRemotes: Set<GitIncomingRemote> = []
     ) {
         self.branches = groupedAutoFetchIncomingBranches(branches)
         self.configuredRoots = Set(configuredRoots.map(normalizedGitRootPath))
@@ -2585,7 +2585,7 @@ struct GitAutoFetchMonitor: View {
                 branches: unfetchedBranches,
                 configuredRoots: configuredRoots,
                 configuredRemotes: configuredRemotes,
-                checkedRemotes: checkedRemotes,
+                checkedRemotes: checkedRemotes
             )
             let groupedFailures = groupedAutoFetchValues(failures)
             if !groupedUpdatedRefs.isEmpty {

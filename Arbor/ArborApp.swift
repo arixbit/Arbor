@@ -3187,7 +3187,6 @@ struct ArborVCSActionRequest: Codable, Equatable, Sendable {
 
 struct ProjectCommands: Commands {
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
     @FocusedValue(\.arborRepositoryIsShallow) private var isShallowRepository
     @FocusedValue(\.arborVCSActionContext) private var actionContext
     @FocusedValue(\.arborVCSOperationContext) private var operationContext
@@ -3377,8 +3376,8 @@ struct ProjectCommands: Commands {
             }
         }
         CommandGroup(after: .appSettings) {
-            Button("Language…") {
-                openSettings()
+            SettingsLink {
+                Text("Language…")
             }
         }
     }

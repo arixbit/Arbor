@@ -3322,7 +3322,7 @@ struct ContentView: View {
                         notificationID: "\(autoFetchNotificationIDPrefix).error",
                         localized: false
                     )
-                },
+                }
             )
         }
         .background {

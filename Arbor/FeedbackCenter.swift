@@ -427,13 +427,13 @@ final class ArborNativeNotificationCenter: NSObject, UNUserNotificationCenterDel
                     alertSetting: settings.alertSetting
                 )
                 switch allowed {
-                case true:
+                case .some(true):
                     self.authorizationState = .authorized
                     self.schedulePendingMessages()
-                case false:
+                case .some(false):
                     self.authorizationState = .denied
                     self.pendingMessages.removeAll()
-                case nil:
+                case .none:
                     self.authorizationState = .unknown
                 }
                 self.onAuthorizationStatusChange?(allowed)
@@ -973,9 +973,9 @@ final class FeedbackCenter: ObservableObject {
 
     func applyNativeNotificationAuthorizationStatus(_ allowed: Bool?) {
         switch allowed {
-        case true, nil:
+        case .some(true), .none:
             nativeNotificationPermissionWarning = nil
-        case false:
+        case .some(false):
             nativeNotificationPermissionWarning = FeedbackMessage.raw(
                 "macOS notifications are disabled",
                 level: .warning,
