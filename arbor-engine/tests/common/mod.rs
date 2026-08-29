@@ -66,7 +66,12 @@ impl TestRepo {
 
 /// 跑 git（校验退出码，失败 panic 带 stderr）。
 pub fn git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
+    let mut command = Command::new("git");
+    // Keep local and bare test repositories independent of the host's default branch.
+    if args.first() == Some(&"init") {
+        command.args(["-c", "init.defaultBranch=main"]);
+    }
+    let out = command
         .args(args)
         .current_dir(dir)
         .output()

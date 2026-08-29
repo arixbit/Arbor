@@ -24370,7 +24370,11 @@ fn run_fetch_with_refspecs_and_tag_mode_locked_with_auth_mode(
     for flag in flags {
         spec = spec.arg(*flag);
     }
-    if let Some(flag) = tag_mode.flag() {
+    if tag_mode == FetchTagsMode::PruneTags {
+        // `--prune-tags` adds tag refspecs but only prunes deleted tags when
+        // pruning is enabled explicitly or through the user's global config.
+        spec = spec.arg("--prune").arg("--prune-tags");
+    } else if let Some(flag) = tag_mode.flag() {
         spec = spec.arg(flag);
     }
     let mut spec = spec.arg(&name);

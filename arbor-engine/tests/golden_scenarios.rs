@@ -248,6 +248,8 @@ fn s17_force_with_lease_failure_golden() {
     common::commit(&a.path, "f.txt", "1\n", "init");
     a.git(&["remote", "add", "origin", &remote.display().to_string()]);
     a.git(&["push", "-q", "-u", "origin", "main"]);
+    // Keep clones on `main` even when CI's bare-repository default is `master`.
+    common::git(&remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
     let b = dir.path().join("b");
     common::git(
         dir.path(),
@@ -625,6 +627,8 @@ fn s18_rejected_push_then_update_with_merge_golden() {
     common::commit(&a.path, "f.txt", "1\n", "init");
     a.git(&["remote", "add", "origin", &remote.display().to_string()]);
     a.git(&["push", "-q", "-u", "origin", "main"]);
+    // Keep clones on `main` even when CI's bare-repository default is `master`.
+    common::git(&remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
     let b = dir.path().join("b");
     common::git(
         dir.path(),
