@@ -8,7 +8,7 @@
 已记录的呈现差异；这些宿主能力不阻塞 V1。矩阵不再有未决功能性 `partial` 项，
 跨 root 继续遵循逐 root partial-result 语义，不宣称跨 root 原子事务。
 
-发布命令：`ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.0`（仅本地 QA）；生产
+发布命令：`ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.1`（仅本地 QA）；生产
 发布必须提供 Developer ID、完成 notarization、更新 appcast/Cask 校验和依赖
 许可证清单。
 

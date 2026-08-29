@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-08-29
+
+V1 patch release: make the push rejection regression test independent of the
+host Git default branch so the release workflow is reproducible on CI.
+
 ## 1.0.0 - 2026-08-29
 
 Arbor V1 is the first release-ready native macOS Git workbench built with a

@@ -1,5 +1,5 @@
 cask "arbor" do
-  version "1.0.0"
+  version "1.0.1"
   sha256 "REPLACE_WITH_SHA256SUMS_VALUE"
 
   # Replace OWNER/REPOSITORY and the checksum before publishing a tap.

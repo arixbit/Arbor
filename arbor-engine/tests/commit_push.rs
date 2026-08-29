@@ -94,6 +94,12 @@ fn push_rejected_is_structured_as_non_fast_forward() {
     .unwrap();
     repo.push_with_options(None, "main".into(), false, true)
         .unwrap();
+    // A bare repository may default HEAD to `master` on CI. Point it at the
+    // branch just pushed so clones create a local `main` branch everywhere.
+    common::git(
+        remote_dir.path(),
+        &["symbolic-ref", "HEAD", "refs/heads/main"],
+    );
 
     let clone_dir = tempfile::tempdir().unwrap();
     common::git(

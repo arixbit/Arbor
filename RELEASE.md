@@ -2,14 +2,15 @@
 
 ## V1 scope
 
-The V1 release is `1.0.0`. The local release script builds the Rust engine,
+The V1 release line is `1.0.x`; the current patch release is `1.0.1`. The
+local release script builds the Rust engine,
 runs the Rust and Swift test suites, creates an arm64 macOS archive, packages
 an app DMG and ZIP, and writes `SHA256SUMS`. It generates the Xcode project and
 UniFFI bindings before invoking Xcode, so the command also works from a clean
 clone.
 
 ```sh
-ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.0
+ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.1
 ```
 
 Unsigned artifacts are named `Arbor-VERSION-unsigned-arm64.dmg` and
