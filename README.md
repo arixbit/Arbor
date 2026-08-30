@@ -77,6 +77,19 @@ xcodebuild -project Arbor/Arbor.xcodeproj -scheme Arbor \
   -destination 'platform=macOS' test
 ```
 
+To run the app locally, open `Arbor/Arbor.xcodeproj` in Xcode first. In the
+`Arbor` target's `Signing & Capabilities`, enable automatic signing and choose
+your Apple Development Team. Then run the project with `My Mac` selected, or
+use the repository's repeatable launcher:
+
+```sh
+./script/build_and_run.sh --verify --project /path/to/a/git-repository
+```
+
+The launcher signs the Debug app before opening it. If you configured the Team
+in Xcode, it preserves that setting when regenerating the project. You can also
+pass it explicitly with `ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
+
 For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.17`. The
 default output is explicitly unsigned and arm64; signing and notarization
 require the external Apple Developer credentials described in

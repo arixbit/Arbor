@@ -2282,9 +2282,10 @@ func rebaseOntoCommitFromLog(_ commit: CommitInfo) {
 
 func handleContentViewAppearAndLoadRoots() {
     externalLogSessionDisposed = false
+    // Root discovery starts after the primary status snapshot is visible so
+    // startup work cannot compete with the first usable Changes rows.
     handleContentViewAppear()
     credentialAuth.ensureInstalled()
-    loadMultiRoots()
 }
 
 func externalLogTabIsAlive(_ tabID: UUID) -> Bool {
@@ -2349,6 +2350,11 @@ func disposeExternalLogSession() {
     repositoryExternalVCSActionManager.removeAll()
     repositoryDirtyScopeManager.removeAll()
     repositoryDirtyFileManager.removeAll()
+    multiRootLoadTask?.cancel()
+    multiRootLoadTask = nil
+    multiRootLoadGeneration &+= 1
+    multiRootLoadNeedsRefresh = false
+    multiRootLoadCompletion = nil
     logGeneration &+= 1
     logSignatureGeneration &+= 1
     logCommandGeneration &+= 1
@@ -3554,19 +3560,12 @@ func refreshAll(
             } else {
                 st = try repo.status()
             }
-            let cls: [ChangeListInfo]
-            if incrementalStatusPaths != nil {
-                // `st` is already the complete visible status snapshot after
-                // the path-scoped merge. Projecting Changelists from it keeps
-                // a worktree-only event genuinely incremental instead of
-                // calling changelistList(), which performs another full
-                // status walk inside the engine.
-                cls = (try? repo.changelistListForPaths(
-                    currentPaths: st.map(\.path)
-                )) ?? []
-            } else {
-                cls = (try? repo.changelistList()) ?? []
-            }
+            // `st` is already the authoritative visible status snapshot.
+            // Projecting Changelists from it avoids another full worktree walk
+            // inside the engine for both full and incremental refreshes.
+            let cls = (try? repo.changelistListForPaths(
+                currentPaths: st.map(\.path)
+            )) ?? []
             let hid = repo.headCommitId()
             let mergePending = repo.mergeInProgress()
             let opState = try? repo.operationState()
@@ -3894,6 +3893,11 @@ func openProjectPath(_ projectPath: String) {
     repositoryExternalVCSActionManager.removeAll()
     repositoryDirtyScopeManager.removeAll()
     repositoryDirtyFileManager.removeAll()
+    multiRootLoadTask?.cancel()
+    multiRootLoadTask = nil
+    multiRootLoadGeneration &+= 1
+    multiRootLoadNeedsRefresh = false
+    multiRootLoadCompletion = nil
     beginFeedbackOperation("Open project")
     logRefreshTask?.cancel()
     logRefreshTask = nil
@@ -3911,7 +3915,7 @@ func openProjectPath(_ projectPath: String) {
     compareRepositoryPath = nil
     logGeneration += 1
     isLoading = true
-    isLoadingLog = true
+    isLoadingLog = toolWindowMode == .log
     loadError = nil
     commitFeedback = nil
     stashPopConflictInProgress = false
@@ -4074,7 +4078,9 @@ func openProjectPath(_ projectPath: String) {
             // after relaunch and the active tab query is not silently dropped.
             await MainActor.run {
                 guard self.projectRepo === r else { return }
-                self.loadLog(reset: true)
+                if self.toolWindowMode == .log {
+                    self.loadLog(reset: true)
+                }
             }
 
             // Status is the first thing the Commit/Stash workspace needs.
@@ -4085,7 +4091,7 @@ func openProjectPath(_ projectPath: String) {
             Task.detached(priority: .utility) {
                 do {
                     let st = try r.status()
-                    let cls = try r.changelistList()
+                    let cls = (try? r.changelistListForPaths(currentPaths: st.map(\.path))) ?? []
                     let mergePending = r.mergeInProgress()
                     let shelveRestore = try? r.shelveRestoreInfo()
                     await MainActor.run {
@@ -4122,6 +4128,7 @@ func openProjectPath(_ projectPath: String) {
                                 self.showMergeRevisionsDialog = true
                             }
                         }
+                        self.loadMultiRoots()
                     }
                 } catch {
                     await MainActor.run {
@@ -4132,6 +4139,7 @@ func openProjectPath(_ projectPath: String) {
                             detail: errorMessage(error),
                             nextStep: "Refresh the Changes view after checking the repository."
                         )
+                        self.loadMultiRoots()
                     }
                 }
 
@@ -4227,6 +4235,11 @@ func resetProjectState() {
     repositoryExternalVCSActionManager.removeAll()
     repositoryDirtyScopeManager.removeAll()
     repositoryDirtyFileManager.removeAll()
+    multiRootLoadTask?.cancel()
+    multiRootLoadTask = nil
+    multiRootLoadGeneration &+= 1
+    multiRootLoadNeedsRefresh = false
+    multiRootLoadCompletion = nil
     logRefreshTask?.cancel()
     logRefreshTask = nil
     logLoadTask?.cancel()
@@ -14234,16 +14247,30 @@ func showFileHistoryForRevision(_ commit: CommitInfo, _ path: String) {
 
 /// REPO-001:发现项目下的所有 Git root(聚合视图数据源)。
 func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
+    if multiRootLoadTask != nil {
+        // Native repository calls are synchronous, so cancelling their Swift
+        // task does not stop work already running in the engine. Coalesce
+        // requests and run one fresh scan after the active one finishes.
+        multiRootLoadNeedsRefresh = true
+        if let onCompleted {
+            multiRootLoadCompletion = onCompleted
+        }
+        return
+    }
+    multiRootLoadGeneration &+= 1
+    let generation = multiRootLoadGeneration
     guard let projectPath else {
         onCompleted?()
         return
     }
+    let requestedProjectPath = canonicalExternalLogPath(projectPath)
     let requestedExternalRootPaths = externalLogWindow
         ? initialExternalLogRootPaths.map(canonicalExternalLogPath)
         : []
-    Task.detached(priority: .userInitiated) {
+    let task = Task.detached(priority: .utility) {
         do {
             var roots = try discoverGitRoots(scanRoot: projectPath, maxDepth: nil)
+            guard !Task.isCancelled else { return }
             if !requestedExternalRootPaths.isEmpty {
                 var knownRootPaths = Set(roots.map { canonicalExternalLogPath($0.path) })
                 for requestedRootPath in requestedExternalRootPaths
@@ -14260,6 +14287,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     knownRootPaths.insert(requestedRootPath)
                 }
             }
+            guard !Task.isCancelled else { return }
             let operationStates = roots.compactMap { root -> (String, OperationState)? in
                 guard root.operation != nil,
                       let rootRepo = try? openRepository(path: root.path),
@@ -14282,7 +14310,9 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             } else {
                 clearProjectGitExecutable(projectPath: projectPath)
             }
+            guard !Task.isCancelled else { return }
             var snapshots = try listMultiRootBranches(scanRoot: projectPath)
+            guard !Task.isCancelled else { return }
             if !requestedExternalRootPaths.isEmpty {
                 let knownSnapshotPaths = Set(snapshots.map {
                     canonicalExternalLogPath($0.rootPath)
@@ -14299,6 +14329,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 }
             }
             let conflictGroups = roots.compactMap { root -> MultiRootConflictGroup? in
+                guard !Task.isCancelled else { return nil }
                 guard let rootRepo = try? openRepository(path: root.path),
                       let entries = try? rootRepo.status() else { return nil }
                 let paths = entries
@@ -14314,6 +14345,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     paths: paths
                 )
             }
+            guard !Task.isCancelled else { return }
             let updateStashRoots = Set(
                 snapshots.compactMap { snapshot in
                     snapshot.stashes.contains(where: { isArborUpdateLocalChangesName($0.message) })
@@ -14325,7 +14357,19 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             let rootsSnapshot = roots
             let snapshotsSnapshot = snapshots
             await MainActor.run {
-                guard !(self.externalLogWindow && self.externalLogSessionDisposed) else { return }
+                guard !Task.isCancelled,
+                      generation == self.multiRootLoadGeneration,
+                      self.projectPath.map(canonicalExternalLogPath) == requestedProjectPath,
+                      !(self.externalLogWindow && self.externalLogSessionDisposed) else { return }
+                self.multiRootLoadTask = nil
+                let needsRefresh = self.multiRootLoadNeedsRefresh
+                let completion = self.multiRootLoadCompletion
+                self.multiRootLoadNeedsRefresh = false
+                self.multiRootLoadCompletion = nil
+                if needsRefresh {
+                    self.loadMultiRoots(onCompleted: completion)
+                    return
+                }
                 let externalLogNeedsInitialLoad = self.externalLogWindow
                     && !self.externalLogAggregateLoadStarted
                     && !rootsSnapshot.isEmpty
@@ -14466,6 +14510,19 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             }
         } catch {
             await MainActor.run {
+                guard generation == self.multiRootLoadGeneration,
+                      self.projectPath.map(canonicalExternalLogPath) == requestedProjectPath else {
+                    return
+                }
+                self.multiRootLoadTask = nil
+                let needsRefresh = self.multiRootLoadNeedsRefresh
+                let completion = self.multiRootLoadCompletion
+                self.multiRootLoadNeedsRefresh = false
+                self.multiRootLoadCompletion = nil
+                if needsRefresh {
+                    self.loadMultiRoots(onCompleted: completion)
+                    return
+                }
                 self.multiRoots = []
                 self.multiRootBranchSnapshots = []
                 self.multiRootConflictGroups = []
@@ -14492,6 +14549,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             }
         }
     }
+    multiRootLoadTask = task
 }
 
 private func publishShelfSnapshot(

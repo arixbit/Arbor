@@ -2285,6 +2285,12 @@ struct ContentView: View {
     @State var isShowingCachedLogSnapshot = false
     /// REPO-001:多 root 发现与聚合结果
     @State var multiRoots: [GitRootInfo] = []
+    /// Keep root discovery cancellable so startup and filesystem events cannot
+    /// queue several repository-wide scans at once.
+    @State var multiRootLoadTask: Task<Void, Never>?
+    @State var multiRootLoadGeneration = 0
+    @State var multiRootLoadNeedsRefresh = false
+    @State var multiRootLoadCompletion: (() -> Void)?
     @State var multiRootBranchSnapshots: [GitRootBranchSnapshot] = []
     @State var multiRootResults: [RootOperationResult] = []
     @State var multiRootChangeGroups: [MultiRootChangeGroup] = []
@@ -4083,8 +4089,6 @@ struct ContentView: View {
         .background(Design.Colors.canvas)
         .onChange(of: toolWindowMode, initial: false) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: "arbor.toolWindowMode")
-            // A log-first launch deliberately skips the expensive worktree
-            // status scan. Start it when the user actually opens Commit.
             if mode == .commit {
                 refreshAll()
             } else if mode != .log {
