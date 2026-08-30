@@ -755,28 +755,84 @@ private func changeKind(rawValue: String) -> ChangeKind? {
 }
 
 private let persistedStatusCacheKeyPrefix = "arbor.vcs-status-cache.v1."
+private let persistedStatusCacheFilePrefix = "arbor-vcs-status-v1-"
+private let persistedStatusCacheMaximumBytes = 4 * 1024 * 1024
+private let persistedStatusCacheMaximumFiles = 20_000
+private let persistedStatusCacheWriteQueue = DispatchQueue(
+    label: "com.arbor.vcs-status-cache",
+    qos: .utility
+)
 
-private func persistedStatusCacheKey(rootPath: String) -> String {
+private func persistedStatusCacheFileURL(rootPath: String) -> URL? {
+    guard let cachesURL = FileManager.default.urls(
+        for: .cachesDirectory,
+        in: .userDomainMask
+    ).first else {
+        return nil
+    }
     let encoded = Data(canonicalExternalLogPath(rootPath).utf8)
         .base64EncodedString()
         .replacingOccurrences(of: "+", with: "-")
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: "=", with: "")
-    return persistedStatusCacheKeyPrefix + encoded
+    return cachesURL
+        .appendingPathComponent("Arbor/VCSStatus", isDirectory: true)
+        .appendingPathComponent(persistedStatusCacheFilePrefix + encoded)
+        .appendingPathExtension("json")
+}
+
+/// The status snapshot is display-only and can be discarded during migration.
+/// Keeping it in UserDefaults makes the entire preferences domain expensive to
+/// load when a large repository has many changed files.
+func migrateLegacyPersistedStatusCaches(defaults: UserDefaults = .standard) {
+    let legacyKeys = defaults.dictionaryRepresentation().keys.filter {
+        $0.hasPrefix(persistedStatusCacheKeyPrefix)
+    }
+    for key in legacyKeys {
+        defaults.removeObject(forKey: key)
+    }
 }
 
 private func loadPersistedStatusCache(rootPath: String) -> PersistedStatusCacheEntry? {
-    guard let data = UserDefaults.standard.data(
-        forKey: persistedStatusCacheKey(rootPath: rootPath)
-    ) else {
+    guard let url = persistedStatusCacheFileURL(rootPath: rootPath),
+          let resourceValues = try? url.resourceValues(forKeys: [.fileSizeKey]),
+          let fileSize = resourceValues.fileSize,
+          fileSize <= persistedStatusCacheMaximumBytes,
+          let data = try? Data(contentsOf: url) else {
         return nil
     }
     return try? JSONDecoder().decode(PersistedStatusCacheEntry.self, from: data)
 }
 
-private func savePersistedStatusCache(_ entry: PersistedStatusCacheEntry) {
-    guard let data = try? JSONEncoder().encode(entry) else { return }
-    UserDefaults.standard.set(data, forKey: persistedStatusCacheKey(rootPath: entry.rootPath))
+private func savePersistedStatusCache(
+    rootPath: String,
+    files: [FileEntry],
+    changeLists: [ChangeListInfo]
+) {
+    guard files.count <= persistedStatusCacheMaximumFiles else { return }
+    persistedStatusCacheWriteQueue.async {
+        let entry = PersistedStatusCacheEntry(
+            rootPath: rootPath,
+            files: files,
+            changeLists: changeLists
+        )
+        guard let url = persistedStatusCacheFileURL(rootPath: entry.rootPath),
+              let data = try? JSONEncoder().encode(entry),
+              data.count <= persistedStatusCacheMaximumBytes else {
+            // A repository with millions of changed files is not a useful
+            // startup snapshot. Avoid serializing it into any persistent store.
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            // A cache write must never make a Git operation fail.
+        }
+    }
 }
 
 struct PullLocalChangesPreservation: Codable, Equatable, Sendable {
@@ -3531,13 +3587,12 @@ func refreshAll(
                 self.entries = st
                 self.changeLists = cls
                 self.isShowingCachedStatusSnapshot = false
-                if let rootPath = repo.workdir() {
+                if incrementalStatusPaths == nil,
+                   let rootPath = repo.workdir() {
                     savePersistedStatusCache(
-                        PersistedStatusCacheEntry(
-                            rootPath: rootPath,
-                            files: st,
-                            changeLists: cls
-                        )
+                        rootPath: rootPath,
+                        files: st,
+                        changeLists: cls
                     )
                 }
                 self.fileContentRefreshToken &+= 1
@@ -4040,11 +4095,9 @@ func openProjectPath(_ projectPath: String) {
                         self.isShowingCachedStatusSnapshot = false
                         if let rootPath = r.workdir() {
                             savePersistedStatusCache(
-                                PersistedStatusCacheEntry(
-                                    rootPath: rootPath,
-                                    files: st,
-                                    changeLists: cls
-                                )
+                                rootPath: rootPath,
+                                files: st,
+                                changeLists: cls
                             )
                         }
                         self.mergeInProgress = mergePending
@@ -11213,15 +11266,6 @@ private func applyIncrementalStatus(_ updates: [FileEntry], paths: [String]) {
     entries.append(contentsOf: updates)
     entries.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     isShowingCachedStatusSnapshot = false
-    if let rootPath = repo?.workdir() {
-        savePersistedStatusCache(
-            PersistedStatusCacheEntry(
-                rootPath: rootPath,
-                files: entries,
-                changeLists: changeLists
-            )
-        )
-    }
     fileContentRefreshToken &+= 1
 }
 

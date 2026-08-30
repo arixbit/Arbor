@@ -1361,6 +1361,7 @@ struct ArborApp: App {
 
     init() {
         ArborAppIconController.install()
+        migrateLegacyPersistedStatusCaches()
         let savedPath = UserDefaults.standard.string(forKey: "arbor.git.executable") ?? ""
         if !savedPath.isEmpty {
             _ = try? setGitExecutable(path: savedPath)

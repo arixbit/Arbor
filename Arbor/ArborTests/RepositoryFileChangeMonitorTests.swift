@@ -1098,6 +1098,22 @@ final class RepositoryFileChangeMonitorTests: XCTestCase {
         )
     }
 
+    func testRepositoryFileSnapshotsRespectEntryLimit() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArborSnapshotLimit-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for index in 0..<4 {
+            try Data("\(index)\n".utf8).write(
+                to: root.appendingPathComponent("file-\(index).txt")
+            )
+        }
+
+        let snapshots = repositoryFileSnapshots(rootPath: root.path, maxEntries: 2)
+        XCTAssertEqual(snapshots.count, 2)
+    }
+
     func testIgnoreFileChangesInvalidateTheWholeWorktreeStatusScope() {
         let workdir = "/tmp/ArborRepositoryFileMonitor/worktree"
         let gitDir = "\(workdir)/.git"

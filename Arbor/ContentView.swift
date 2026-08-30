@@ -2911,30 +2911,6 @@ struct ContentView: View {
             )
         }
 
-        // An unborn repository is valid when explicitly opened, but it is a
-        // poor automatic launch target: Log has no rows and the top bar shows
-        // "no branch". Prefer the most recent repository with an actual HEAD,
-        // then fall back to any Git directory so a user with only a newly
-        // initialized repository is not locked out of it.
-        let configuredGit = gitExecutable()
-        for candidate in gitDirectories {
-            let process = Process()
-            // Use env so the default `git` name is resolved through PATH while
-            // absolute user-selected executable paths remain valid too.
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [configuredGit, "-C", candidate, "rev-parse", "--verify", "HEAD^{commit}"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
-                    return candidate
-                }
-            } catch {
-                continue
-            }
-        }
         return gitDirectories.first
     }
 

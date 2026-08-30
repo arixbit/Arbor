@@ -4252,6 +4252,23 @@ final class CompareSelectionTests: XCTestCase {
         XCTAssertNil(decoded.restoredSnapshot(rootPath: "/workspace/other"))
     }
 
+    func testLegacyStatusCacheMigrationRemovesOnlyStatusCacheKeys() {
+        let suiteName = "ArborStatusCacheMigration-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(Data([1, 2, 3]), forKey: "arbor.vcs-status-cache.v1.repository")
+        defaults.set("keep", forKey: "arbor.status-cache-migration.other")
+
+        migrateLegacyPersistedStatusCaches(defaults: defaults)
+
+        XCTAssertNil(defaults.data(forKey: "arbor.vcs-status-cache.v1.repository"))
+        XCTAssertEqual(
+            defaults.string(forKey: "arbor.status-cache-migration.other"),
+            "keep"
+        )
+    }
+
     func testLogRebaseOntoSelectedCommitRequiresBranchAndNonHeadSingleSelection() {
         let commit = logCommit(repositoryPath: "/workspace/repo")
         XCTAssertTrue(

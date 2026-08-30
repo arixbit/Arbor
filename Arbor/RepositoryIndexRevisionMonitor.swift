@@ -1398,7 +1398,8 @@ struct RepositoryFileSnapshot: Hashable, Sendable {
 /// FSEvents omits, without guessing from names or timestamps.
 func repositoryFileSnapshots(
     rootPath: String,
-    excludedRootPaths: [String] = []
+    excludedRootPaths: [String] = [],
+    maxEntries: Int? = nil
 ) -> [String: RepositoryFileSnapshot] {
     let root = URL(fileURLWithPath: rootPath).standardizedFileURL
     let excluded = excludedRootPaths.map {
@@ -1436,6 +1437,9 @@ func repositoryFileSnapshots(
             identity: "\(device):\(inode)",
             isDirectory: isDirectory
         )
+        if let maxEntries, snapshots.count >= maxEntries {
+            break
+        }
     }
     return snapshots
 }
@@ -1934,7 +1938,7 @@ final class RepositoryFileChangeWatcher {
     private var pendingDirtyPaths: [String: RepositoryDirtyPath] = [:]
     private var deliveryScheduled = false
     private var stopped = false
-    private var fileSnapshots: [String: RepositoryFileSnapshot]
+    private var fileSnapshots: [String: RepositoryFileSnapshot] = [:]
 
     init(
         workdir: String,
@@ -1949,10 +1953,6 @@ final class RepositoryFileChangeWatcher {
             URL(fileURLWithPath: $0).standardizedFileURL.path
         }
         self.onChange = onChange
-        self.fileSnapshots = repositoryFileSnapshots(
-            rootPath: self.workdir,
-            excludedRootPaths: self.excludedWorktreePaths
-        )
     }
 
     func start() {
@@ -2064,10 +2064,15 @@ final class RepositoryFileChangeWatcher {
                 return $0.kind.rawValue < $1.kind.rawValue
             }
             let dirtyPaths: [RepositoryDirtyPath]
-            if scopes.contains(.worktree) {
+            let needsRenamePairing = scopes.contains(.worktree)
+                && rawDirtyPaths.contains {
+                    $0.kind == .renamed && $0.oldPath == nil
+                }
+            if needsRenamePairing {
                 let currentSnapshots = repositoryFileSnapshots(
                     rootPath: self.workdir,
-                    excludedRootPaths: self.excludedWorktreePaths
+                    excludedRootPaths: self.excludedWorktreePaths,
+                    maxEntries: 20_000
                 )
                 dirtyPaths = repositoryPairRenameEvents(
                     dirtyPaths: rawDirtyPaths,
