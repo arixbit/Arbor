@@ -1448,6 +1448,14 @@ struct ArborApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1642, height: 1015)
+
+        Window("About Arbor", id: "about") {
+            AboutView()
+                .environment(\.locale, appLanguage.locale)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 430, height: 500)
+
         Settings {
             DiagnosticsSettingsView()
                 .environment(\.locale, appLanguage.locale)
@@ -3192,6 +3200,12 @@ struct ProjectCommands: Commands {
     @FocusedValue(\.arborVCSOperationContext) private var operationContext
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Arbor") {
+                openWindow(id: "about")
+            }
+        }
+
         CommandMenu("File") {
             Button("Open Project…") {
                 NotificationCenter.default.post(name: .arborOpenProjectPanel, object: nil)

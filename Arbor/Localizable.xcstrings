@@ -1,6 +1,126 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "About Arbor": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关于 Arbor"
+          }
+        }
+      }
+    },
+    "Architecture": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "架构"
+          }
+        }
+      }
+    },
+    "Arbor helps you review changes, manage branches, resolve conflicts, and work with Git remotes in a focused native macOS app.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbor 帮助你在专注的原生 macOS 应用中查看变更、管理分支、解决冲突并使用 Git 远程仓库。"
+          }
+        }
+      }
+    },
+    "Built with SwiftUI and Rust.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基于 SwiftUI 和 Rust 构建。"
+          }
+        }
+      }
+    },
+    "Development Build": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开发版本"
+          }
+        }
+      }
+    },
+    "GitHub Repository": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub 仓库"
+          }
+        }
+      }
+    },
+    "License": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "许可"
+          }
+        }
+      }
+    },
+    "Native macOS Git workbench": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原生 macOS Git 工作台"
+          }
+        }
+      }
+    },
+    "Platform": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平台"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本"
+          }
+        }
+      }
+    },
+    "Open the Arbor source repository on GitHub": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 GitHub 打开 Arbor 源代码仓库"
+          }
+        }
+      }
+    },
+    "Open source under the MIT License.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基于 MIT 许可协议开源。"
+          }
+        }
+      }
+    },
     "--rebase": {
       "extractionState": "stale",
       "localizations": {
