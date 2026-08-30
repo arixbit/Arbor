@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.17 - 2026-08-30
+
+V1 patch release: publish the About window that explains Arbor's Git
+workbench purpose and links to the open-source repository, with version,
+platform, architecture, and license details.
+
 ## 1.0.16 - 2026-08-30
 
 V1 patch release: add an About window that explains Arbor's Git workbench
