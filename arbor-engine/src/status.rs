@@ -5,6 +5,60 @@
 //! 两类 item，按 path 合并成一条。
 
 use crate::error::EngineError;
+use std::path::Path;
+
+// Keep ordinary ignored directories file-visible, but never recursively walk
+// a build product or IDE metadata directory during a status refresh.
+const MAX_IGNORED_DIRECTORY_ENTRIES: usize = 2_048;
+
+fn is_generated_directory_name(name: &str) -> bool {
+    name == ".build"
+        || name.starts_with(".build")
+        || matches!(
+            name,
+            ".gradle" | ".swiftpm" | "DerivedData" | "target" | "xcuserdata"
+        )
+}
+
+fn is_generated_status_path(path: &str) -> bool {
+    Path::new(path.trim_end_matches('/'))
+        .components()
+        .any(|component| {
+            component
+                .as_os_str()
+                .to_str()
+                .map(is_generated_directory_name)
+                .unwrap_or(false)
+        })
+}
+
+fn ignored_directory_is_small(workdir: &Path, relative_path: &str) -> bool {
+    let mut pending = vec![workdir.join(relative_path.trim_end_matches('/'))];
+    let mut count = 0;
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return false;
+        };
+        for entry in entries {
+            let Ok(entry) = entry else { return false };
+            count += 1;
+            if count > MAX_IGNORED_DIRECTORY_ENTRIES {
+                return false;
+            }
+            let Ok(file_type) = entry.file_type() else {
+                return false;
+            };
+            if file_type.is_dir() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if is_generated_directory_name(&name) {
+                    return false;
+                }
+                pending.push(entry.path());
+            }
+        }
+    }
+    true
+}
 
 /// 单个维度的变更种类（staged 或 unstaged）。
 #[derive(uniffi::Enum, Clone, Copy, PartialEq, Eq, Debug)]
@@ -79,7 +133,10 @@ fn compute_status_git(
     let mut command = crate::gitprocess::git_command_for_working_dir(workdir);
     command.args([
         "status",
-        "--ignored",
+        // Matching mode collapses ignored directories, avoiding an expensive
+        // recursive walk of build products. Ordinary small ignored directories
+        // are expanded below to preserve the existing UI contract.
+        "--ignored=matching",
         "--porcelain=v1",
         "-z",
         "--untracked-files=all",
@@ -105,9 +162,56 @@ fn compute_status_git(
             ),
         });
     }
+    let mut entries = parse_status_output(&output.stdout);
+    if paths.is_empty() {
+        let ignored_directories: Vec<String> = entries
+            .values()
+            .filter(|entry| {
+                entry.unstaged == ChangeKind::Ignored
+                    && entry.path.ends_with('/')
+                    && !is_generated_status_path(&entry.path)
+            })
+            .map(|entry| entry.path.clone())
+            .collect();
+        for directory in ignored_directories {
+            if !ignored_directory_is_small(workdir, &directory) {
+                continue;
+            }
+            let mut expansion = crate::gitprocess::git_command_for_working_dir(workdir);
+            expansion.args([
+                "status",
+                "--ignored",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all",
+                "--",
+                directory.as_str(),
+            ]);
+            let Ok(expanded) = expansion.current_dir(workdir).output() else {
+                continue;
+            };
+            if !expanded.status.success() {
+                continue;
+            }
+            let ignored_entries = parse_status_output(&expanded.stdout)
+                .into_values()
+                .filter(|entry| entry.unstaged == ChangeKind::Ignored)
+                .collect::<Vec<_>>();
+            if ignored_entries.is_empty() {
+                continue;
+            }
+            entries.remove(&directory);
+            for entry in ignored_entries {
+                entries.insert(entry.path.clone(), entry);
+            }
+        }
+    }
+    Ok(entries.into_values().collect())
+}
+
+fn parse_status_output(stdout: &[u8]) -> std::collections::BTreeMap<String, FileEntry> {
     let mut entries = std::collections::BTreeMap::<String, FileEntry>::new();
-    let records: Vec<&[u8]> = output
-        .stdout
+    let records: Vec<&[u8]> = stdout
         .split(|byte| *byte == 0)
         .filter(|record| !record.is_empty())
         .collect();
@@ -156,7 +260,7 @@ fn compute_status_git(
         }
         index += 1;
     }
-    Ok(entries.into_values().collect())
+    entries
 }
 
 fn map_porcelain_kind(code: u8) -> ChangeKind {
@@ -178,18 +282,15 @@ fn map_porcelain_kind(code: u8) -> ChangeKind {
 /// Return ignored paths using Git's stable porcelain format. This is a small
 /// compatibility bridge: gix exposes the normal status stream, but does not
 /// currently expose ignored entries in that stream.
-fn ignored_paths(repo: &gix::Repository) -> Result<Vec<String>, EngineError> {
-    let Some(workdir) = repo.workdir() else {
-        return Ok(Vec::new());
-    };
-
+fn ignored_paths(workdir: &Path) -> Result<Vec<String>, EngineError> {
     let output = crate::gitprocess::git_command_for_working_dir(workdir)
         .args([
             "status",
-            "--ignored",
+            "--ignored=matching",
             "--porcelain=v1",
             "-z",
-            "--untracked-files=all",
+            "--untracked-files=normal",
+            "--",
         ])
         .current_dir(workdir)
         .output()
@@ -221,13 +322,8 @@ fn ignored_paths(repo: &gix::Repository) -> Result<Vec<String>, EngineError> {
 
 /// 返回每个 ignored 路径命中的第一条规则，等价于 `git check-ignore -v`。
 /// 每条路径单独查询，避免 `-z` 输出在不同 Git 版本中的字段布局差异。
-pub(crate) fn ignored_rule_info(
-    repo: &gix::Repository,
-) -> Result<Vec<IgnoreRuleInfo>, EngineError> {
-    let Some(workdir) = repo.workdir() else {
-        return Ok(Vec::new());
-    };
-    let paths = ignored_paths(repo)?;
+pub(crate) fn ignored_rule_info(workdir: &Path) -> Result<Vec<IgnoreRuleInfo>, EngineError> {
+    let paths = ignored_paths(workdir)?;
     let mut result = Vec::new();
     for path in paths {
         let output = crate::gitprocess::git_command_for_working_dir(workdir)

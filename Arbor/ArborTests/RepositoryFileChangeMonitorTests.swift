@@ -1114,6 +1114,114 @@ final class RepositoryFileChangeMonitorTests: XCTestCase {
         XCTAssertEqual(snapshots.count, 2)
     }
 
+    func testGeneratedWorktreeDirectoriesAreExcludedFromMonitoring() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArborGeneratedDirectory-\(UUID().uuidString)")
+        let buildFile = root.appendingPathComponent(".build/DerivedData/file.txt")
+        let sourceFile = root.appendingPathComponent("Sources/file.txt")
+        try FileManager.default.createDirectory(
+            at: buildFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: sourceFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("build\n".utf8).write(to: buildFile)
+        try Data("source\n".utf8).write(to: sourceFile)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertTrue(
+            repositoryIsGeneratedWorktreePath(
+                buildFile.path,
+                rootPath: root.path
+            )
+        )
+        XCTAssertFalse(
+            repositoryIsGeneratedWorktreePath(
+                sourceFile.path,
+                rootPath: root.path
+            )
+        )
+        XCTAssertFalse(
+            repositoryIsGeneratedWorktreePath(
+                root.appendingPathComponent("Sources/build/file.txt").path,
+                rootPath: root.path
+            )
+        )
+        XCTAssertTrue(
+            repositoryIsGeneratedWorktreePath(
+                root.appendingPathComponent("arbor-engine/target/debug/file").path,
+                rootPath: root.path
+            )
+        )
+        let snapshots = repositoryFileSnapshots(rootPath: root.path)
+        XCTAssertNil(snapshots[buildFile.standardizedFileURL.path])
+        XCTAssertNotNil(snapshots[sourceFile.standardizedFileURL.path])
+    }
+
+    func testGeneratedDirectoryNamesDoNotFilterGitMetadataEvents() {
+        let gitDir = "/tmp/ArborRepository/target/.git"
+        let branchRef = "\(gitDir)/refs/heads/target"
+
+        XCTAssertTrue(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .worktree,
+                path: branchRef,
+                rootPath: gitDir
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .gitMetadata,
+                path: branchRef,
+                rootPath: gitDir
+            )
+        )
+    }
+
+    func testRenamesCrossingGeneratedDirectoriesRemainVisible() {
+        let root = "/tmp/ArborRepository"
+        let generated = "\(root)/.build/output.txt"
+        let source = "\(root)/Sources/output.txt"
+
+        XCTAssertFalse(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .worktree,
+                path: generated,
+                rootPath: root,
+                kind: .renamed,
+                oldPath: source
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .worktree,
+                path: source,
+                rootPath: root,
+                kind: .renamed,
+                oldPath: generated
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .worktree,
+                path: generated,
+                rootPath: root,
+                kind: .renamed
+            )
+        )
+        XCTAssertTrue(
+            repositoryShouldIgnoreGeneratedWorktreeEvent(
+                scope: .worktree,
+                path: generated,
+                rootPath: root,
+                kind: .renamed,
+                oldPath: "\(root)/.build/input.txt"
+            )
+        )
+    }
+
     func testIgnoreFileChangesInvalidateTheWholeWorktreeStatusScope() {
         let workdir = "/tmp/ArborRepositoryFileMonitor/worktree"
         let gitDir = "\(workdir)/.git"

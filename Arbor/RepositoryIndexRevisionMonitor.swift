@@ -1392,6 +1392,62 @@ struct RepositoryFileSnapshot: Hashable, Sendable {
     let isDirectory: Bool
 }
 
+/// Build products and IDE metadata can contain hundreds of thousands of
+/// files. They are not useful Git worktree events and must not trigger a
+/// repository-wide rename snapshot.
+private let repositoryGeneratedDirectoryNames: Set<String> = [
+    ".build",
+    ".gradle",
+    ".swiftpm",
+    "DerivedData",
+    "target",
+    "xcuserdata"
+]
+
+private func repositoryIsGeneratedWorktreePathLexically(
+    _ path: String,
+    rootPath: String
+) -> Bool {
+    let root = rootPath
+    let candidate = path
+    let prefix = root.hasSuffix("/") ? root : "\(root)/"
+    guard candidate.hasPrefix(prefix) else { return false }
+    let relative = String(candidate.dropFirst(prefix.count))
+    return relative
+        .split(separator: "/")
+        .contains { component in
+            let name = String(component)
+            return repositoryGeneratedDirectoryNames.contains(name)
+                || name.hasPrefix(".build")
+        }
+}
+
+func repositoryIsGeneratedWorktreePath(_ path: String, rootPath: String) -> Bool {
+    repositoryIsGeneratedWorktreePathLexically(
+        URL(fileURLWithPath: path).standardizedFileURL.path,
+        rootPath: URL(fileURLWithPath: rootPath).standardizedFileURL.path
+    )
+}
+
+func repositoryShouldIgnoreGeneratedWorktreeEvent(
+    scope: RepositoryChangeScope,
+    path: String,
+    rootPath: String,
+    kind: RepositoryDirtyChangeKind = .modified,
+    oldPath: String? = nil
+) -> Bool {
+    guard scope.contains(.worktree),
+          repositoryIsGeneratedWorktreePath(path, rootPath: rootPath) else {
+        return false
+    }
+    guard kind == .renamed else { return true }
+    guard let oldPath else {
+        // An unpaired rename may have originated outside the generated tree.
+        return false
+    }
+    return repositoryIsGeneratedWorktreePath(oldPath, rootPath: rootPath)
+}
+
 /// Captures stable filesystem identities without reading file contents. The
 /// device/inode pair survives an ordinary rename, while independently created
 /// files do not share it. This lets the watcher recover the old endpoint that
@@ -1414,14 +1470,19 @@ func repositoryFileSnapshots(
     var snapshots: [String: RepositoryFileSnapshot] = [:]
     for case let url as URL in enumerator {
         let path = url.standardizedFileURL.path
-        if url.lastPathComponent == ".git" {
+        let resourceValues = try? url.resourceValues(forKeys: [.isDirectoryKey])
+        let isDirectory = resourceValues?.isDirectory == true
+        if isDirectory && (
+            url.lastPathComponent == ".git"
+                || repositoryIsGeneratedWorktreePathLexically(path, rootPath: root.path)
+        ) {
             enumerator.skipDescendants()
             continue
         }
         if excluded.contains(where: { excludedPath in
             path == excludedPath || path.hasPrefix(excludedPath + "/")
         }) {
-            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            if isDirectory {
                 enumerator.skipDescendants()
             }
             continue
@@ -1432,7 +1493,6 @@ func repositoryFileSnapshots(
               let inode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value else {
             continue
         }
-        let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
         snapshots[path] = RepositoryFileSnapshot(
             identity: "\(device):\(inode)",
             isDirectory: isDirectory
@@ -2123,6 +2183,14 @@ private func repositoryFileChangeCallback(
         paths: paths,
         flags: flags
     ).filter { dirtyPath in
+        !repositoryShouldIgnoreGeneratedWorktreeEvent(
+            scope: context.scope,
+            path: dirtyPath.path,
+            rootPath: context.rootPath,
+            kind: dirtyPath.kind,
+            oldPath: dirtyPath.oldPath
+        )
+    }.filter { dirtyPath in
         !context.excludedRootPaths.contains { excludedPath in
             let prefix = excludedPath.hasSuffix("/") ? excludedPath : "\(excludedPath)/"
             return dirtyPath.path == excludedPath || dirtyPath.path.hasPrefix(prefix)

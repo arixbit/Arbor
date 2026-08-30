@@ -140,6 +140,16 @@ impl<T> RepositoryMutex<T> {
         *self.git_executable.write().map_err(|_| ())? = executable;
         Ok(())
     }
+
+    fn git_executable_scope(&self) -> Result<crate::gitprocess::GitExecutableScope, ()> {
+        let executable = self
+            .git_executable
+            .read()
+            .map_err(|_| ())?
+            .clone()
+            .unwrap_or_else(|| crate::gitprocess::git_executable_for_working_dir(None));
+        Ok(crate::gitprocess::begin_git_executable_scope(executable))
+    }
 }
 
 impl<T> Deref for RepositoryMutexGuard<'_, T> {
@@ -160,6 +170,12 @@ impl<T> DerefMut for RepositoryMutexGuard<'_, T> {
 pub struct Repository {
     inner: RepositoryMutex<gix::Repository>,
     permanent_log_graph: Mutex<Option<PermanentLogGraph>>,
+    /// Stable repository identity used by UI and filesystem monitors. These
+    /// values do not change when Git operations update refs, so they can be
+    /// read without contending with a long-running Git command.
+    workdir: Option<String>,
+    git_dir: String,
+    display_name: String,
 }
 
 /// Run an operation against the repository-wide graph, rebuilding it only
@@ -506,13 +522,24 @@ pub struct SshConnectionSettings {
 pub fn open_repository(path: String) -> Result<Arc<Repository>, EngineError> {
     ignore_sigpipe();
     let repo = gix::discover(&path)?;
-    if let Some(workdir) = repo.workdir() {
+    let workdir = repo.workdir().map(|path| path.to_path_buf());
+    if let Some(workdir) = workdir.as_deref() {
         crate::attributes::register_worktree(workdir);
     }
-    let git_executable = crate::gitprocess::project_git_executable_for_working_dir(repo.workdir());
+    let git_executable =
+        crate::gitprocess::project_git_executable_for_working_dir(workdir.as_deref());
+    let git_dir = repo.git_dir().display().to_string();
+    let display_name = workdir
+        .as_deref()
+        .and_then(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
     Ok(Arc::new(Repository {
         inner: RepositoryMutex::new(repo, git_executable),
         permanent_log_graph: Mutex::new(None),
+        workdir: workdir.map(|path| path.display().to_string()),
+        git_dir,
+        display_name,
     }))
 }
 
@@ -876,16 +903,21 @@ pub fn workspace_status(paths: Vec<String>) -> Result<Vec<WorkspaceEntry>, Engin
     let mut out = Vec::new();
     for path in paths {
         let repo = gix::discover(&path)?;
-        let name = repo
-            .workdir()
+        let workdir = repo.workdir().map(|path| path.to_path_buf());
+        let name = workdir
+            .as_deref()
             .and_then(|w| w.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.clone());
         let git_executable =
-            crate::gitprocess::project_git_executable_for_working_dir(repo.workdir());
+            crate::gitprocess::project_git_executable_for_working_dir(workdir.as_deref());
+        let git_dir = repo.git_dir().display().to_string();
         let r = Repository {
             inner: RepositoryMutex::new(repo, git_executable),
             permanent_log_graph: Mutex::new(None),
+            workdir: workdir.map(|path| path.display().to_string()),
+            git_dir,
+            display_name: name.clone(),
         };
         for entry in r.status()? {
             out.push(WorkspaceEntry {
@@ -5711,9 +5743,11 @@ impl Repository {
     /// setting is kept per worktree so multiple open roots cannot change one
     /// another while auxiliary multi-root operations are running.
     pub fn set_external_conversion_enabled(&self, enabled: bool) -> Result<(), EngineError> {
-        let repo = self.inner.lock().expect("repo mutex poisoned");
-        if let Some(workdir) = repo.workdir() {
-            crate::attributes::set_worktree_external_conversion_enabled(workdir, enabled);
+        if let Some(workdir) = self.workdir.as_deref() {
+            crate::attributes::set_worktree_external_conversion_enabled(
+                std::path::Path::new(workdir),
+                enabled,
+            );
         }
         Ok(())
     }
@@ -5743,8 +5777,7 @@ impl Repository {
 
     /// 仓库的工作区根目录（裸仓库为 None）。
     pub fn workdir(&self) -> Option<String> {
-        let repo = self.inner.lock().expect("repo mutex poisoned");
-        repo.workdir().map(|p| p.display().to_string())
+        self.workdir.clone()
     }
 
     /// 仓库实际使用的 Git 管理目录。
@@ -5753,17 +5786,12 @@ impl Repository {
     /// `.git/worktrees/<name>` 管理目录。UI 文件监视器必须监听这个真实
     /// 路径，不能把 `.git` 文件误当成目录。
     pub fn git_dir(&self) -> String {
-        let repo = self.inner.lock().expect("repo mutex poisoned");
-        repo.git_dir().display().to_string()
+        self.git_dir.clone()
     }
 
     /// 仓库显示名（工作区根目录的 basename，如 "arbor-engine"）；多仓库 UI 标签用。
     pub fn display_name(&self) -> String {
-        let repo = self.inner.lock().expect("repo mutex poisoned");
-        repo.workdir()
-            .and_then(|w| w.file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default()
+        self.display_name.clone()
     }
 
     /// 按需列出工作区中的一个目录。根目录使用空字符串；.git 永远不返回。
@@ -6401,8 +6429,14 @@ impl Repository {
 
     /// 返回 ignored 路径及其命中的规则来源，供 Changes/文件树解释为什么隐藏。
     pub fn ignored_rules(&self) -> Result<Vec<crate::status::IgnoreRuleInfo>, EngineError> {
-        let repo = self.inner.lock().expect("repo mutex poisoned");
-        crate::status::ignored_rule_info(&repo)
+        let Some(workdir) = self.workdir.as_deref() else {
+            return Ok(Vec::new());
+        };
+        let _git_scope = self
+            .inner
+            .git_executable_scope()
+            .expect("repo git executable lock poisoned");
+        crate::status::ignored_rule_info(std::path::Path::new(workdir))
     }
 
     /// 暂存单个路径（等价 `git add <path>`，含删除场景）。

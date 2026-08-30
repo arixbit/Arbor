@@ -122,6 +122,38 @@ fn ignored_file_is_reported_separately() {
 }
 
 #[test]
+fn generated_ignored_directories_are_excluded_without_hiding_tracked_files() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "v1", "init");
+
+    r.write("target/tracked.txt", "tracked");
+    r.git(&["add", "target/tracked.txt"]);
+    common::commit(
+        &r.path,
+        "target/tracked.txt",
+        "tracked",
+        "tracked target file",
+    );
+    r.write(".gitignore", ".build/\ntarget/\n");
+    r.write(".build/DerivedData/large-output.bin", "generated");
+    r.write("target/tracked.txt", "changed");
+    let entries = r.open().status().unwrap();
+
+    assert!(
+        entries
+            .iter()
+            .all(|entry| !entry.path.starts_with(".build/") || entry.path == ".build/"),
+        "generated directory contents should remain collapsed: {entries:?}"
+    );
+    assert!(
+        entries.iter().any(|entry| {
+            entry.path == "target/tracked.txt" && entry.unstaged == ChangeKind::Modified
+        }),
+        "tracked files under generated directory names must remain visible: {entries:?}"
+    );
+}
+
+#[test]
 fn explicitly_staging_an_ignored_file_adds_its_contents_to_the_index() {
     let r = TestRepo::new();
     common::commit(&r.path, "a.txt", "v1", "init");
