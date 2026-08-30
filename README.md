@@ -4,6 +4,8 @@ Arbor is a native macOS Git workbench. It combines a SwiftUI interface with a
 Rust Git engine for status, staging, history graphs, branch
 operations, conflict resolution, rebase, remotes, and hosting integrations.
 
+![Arbor Git workbench](docs/images/arbor-workbench.png)
+
 ## Download and install
 
 Download the latest packages from the repository's
