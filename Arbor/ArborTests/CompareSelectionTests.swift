@@ -5,6 +5,14 @@ import UserNotifications
 @testable import Arbor
 
 final class CompareSelectionTests: XCTestCase {
+    func testAppLanguageDefaultsToEnglishAndPreservesExplicitSelection() {
+        XCTAssertEqual(AppLanguage.defaultLanguage, .english)
+        XCTAssertEqual(AppLanguage.resolve(nil), .english)
+        XCTAssertEqual(AppLanguage.resolve("invalid"), .english)
+        XCTAssertEqual(AppLanguage.resolve("system"), .system)
+        XCTAssertEqual(AppLanguage.resolve("zh-Hans"), .simplifiedChinese)
+    }
+
     func testSearchEverywhereReferencesPreserveKindsAndRootIdentity() {
         let rootA = SearchEverywhereGitRoot(
             rootPath: "/tmp/project/app",

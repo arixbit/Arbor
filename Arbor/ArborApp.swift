@@ -1296,9 +1296,9 @@ final class ArborAppDelegate: NSObject, NSApplicationDelegate {
             return FileManager.default.fileExists(atPath: argument, isDirectory: &isDirectory)
                 && isDirectory.boolValue
         }
-        let languageRawValue = UserDefaults.standard.string(forKey: "arbor.appLanguage")
-            ?? AppLanguage.system.rawValue
-        let language = AppLanguage(rawValue: languageRawValue) ?? .system
+        let language = AppLanguage.resolve(
+            UserDefaults.standard.string(forKey: "arbor.appLanguage")
+        )
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1642, height: 1015),
@@ -1357,7 +1357,7 @@ final class ArborAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ArborApp: App {
     @NSApplicationDelegateAdaptor(ArborAppDelegate.self) private var appDelegate
-    @AppStorage("arbor.appLanguage") private var appLanguageRawValue = AppLanguage.system.rawValue
+    @AppStorage("arbor.appLanguage") private var appLanguageRawValue = AppLanguage.defaultLanguage.rawValue
 
     init() {
         ArborAppIconController.install()
@@ -1369,7 +1369,7 @@ struct ArborApp: App {
     }
 
     private var appLanguage: AppLanguage {
-        AppLanguage(rawValue: appLanguageRawValue) ?? .system
+        AppLanguage.resolve(appLanguageRawValue)
     }
 
     /// A value-based WindowGroup is useful for opening additional projects,

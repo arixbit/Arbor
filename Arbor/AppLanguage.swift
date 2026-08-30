@@ -7,6 +7,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case simplifiedChinese = "zh-Hans"
     case english = "en"
 
+    static let defaultLanguage: AppLanguage = .english
+
+    static func resolve(_ rawValue: String?) -> AppLanguage {
+        guard let rawValue, let language = AppLanguage(rawValue: rawValue) else {
+            return defaultLanguage
+        }
+        return language
+    }
+
     var id: String { rawValue }
 
     var locale: Locale {
@@ -33,10 +42,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 struct AppLanguageMenu: View {
-    @AppStorage("arbor.appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
+    @AppStorage("arbor.appLanguage") private var selectedLanguage = AppLanguage.defaultLanguage.rawValue
 
     private var currentLanguage: AppLanguage {
-        AppLanguage(rawValue: selectedLanguage) ?? .system
+        AppLanguage.resolve(selectedLanguage)
     }
 
     var body: some View {
@@ -72,7 +81,7 @@ struct AppLanguageMenu: View {
 }
 
 struct AppLanguageSettingsSection: View {
-    @AppStorage("arbor.appLanguage") private var selectedLanguage = AppLanguage.system.rawValue
+    @AppStorage("arbor.appLanguage") private var selectedLanguage = AppLanguage.defaultLanguage.rawValue
 
     var body: some View {
         Section("Language") {
