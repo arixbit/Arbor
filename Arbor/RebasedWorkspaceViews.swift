@@ -2319,7 +2319,7 @@ struct RebasedCommitWorkspace: View {
             .padding(.vertical, 10)
 
             HStack {
-                Text("变更")
+                Text("Changes")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 Text("\(visibleChangedCount) files")
@@ -2349,7 +2349,7 @@ struct RebasedCommitWorkspace: View {
                             entries: standaloneUnversionedEntries,
                             changeListName: visibleChangeLists.first(where: { $0.isDefault })?.name ?? "Default",
                             changeLists: visibleChangeLists,
-                            emptyLabel: "没有文件",
+                            emptyLabel: "No files",
                             statusKind: { $0.unstaged },
                             isChecked: { _ in false },
                             onToggle: { entry, checked in
@@ -2412,7 +2412,7 @@ struct RebasedCommitWorkspace: View {
                     .toggleStyle(.checkbox)
                     .font(.caption)
                     .disabled(operationState != nil && !canAmendPausedRebase)
-                Text("最近一次提交")
+                Text("Last commit")
                     .font(.caption)
                     .foregroundStyle(.blue)
                 if canAmendPausedRebase {
@@ -2423,7 +2423,7 @@ struct RebasedCommitWorkspace: View {
                 }
                 Menu {
                     if recentMessages.isEmpty {
-                        Text("暂无最近提交信息")
+                        Text("No recent commit messages")
                     } else {
                         ForEach(recentMessages, id: \.self) { message in
                             Button(message) { commitMessage = message }
@@ -2447,7 +2447,7 @@ struct RebasedCommitWorkspace: View {
                 .background(Design.Colors.chromeInset, in: RoundedRectangle(cornerRadius: 6))
                 .overlay(alignment: .topLeading) {
                     if commitMessage.isEmpty {
-                        Text("提交信息")
+                        Text("Commit message")
                             .foregroundStyle(.secondary)
                             .padding(.leading, 16)
                             .padding(.top, 16)
@@ -2458,17 +2458,17 @@ struct RebasedCommitWorkspace: View {
                 .padding(.top, 8)
 
             HStack(spacing: 8) {
-                Button("模板", action: onTemplate)
+                Button("Template", action: onTemplate)
                 Menu {
-                    Button("模板") { onTemplate() }
-                    Button("提交前检查") { onBeforeCommitSettings() }
+                    Button("Template") { onTemplate() }
+                    Button("Before Commit Checks") { onBeforeCommitSettings() }
                 } label: {
                     Image(systemName: "gearshape")
                 }
                 .menuStyle(.borderlessButton)
                 Spacer()
                 Toggle(
-                    "跳过 hooks",
+                    "Skip hooks",
                     isOn: Binding(
                         get: { skipHooks || alwaysSkipCommitHooks },
                         set: { skipHooks = $0 }
@@ -2477,7 +2477,7 @@ struct RebasedCommitWorkspace: View {
                     .toggleStyle(.checkbox)
                     .font(.caption)
                     .disabled(alwaysSkipCommitHooks)
-                Button(amendMode ? "Amend" : "提交", action: onCommit)
+                Button(amendMode ? "Amend" : "Commit", action: onCommit)
                     .buttonStyle(.bordered)
                     .disabled(
                         repo == nil
@@ -2497,7 +2497,7 @@ struct RebasedCommitWorkspace: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Button("提交并推送…", action: onCommitAndPush)
+                Button("Commit and Push…", action: onCommitAndPush)
                     .buttonStyle(.bordered)
                     .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -2538,7 +2538,7 @@ struct RebasedCommitWorkspace: View {
                 stagedChangeGroup(for: list, entries: listStaged)
             }
             if listUnstaged.isEmpty && listStaged.isEmpty {
-                Text("没有文件")
+                Text("No files")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 22)
@@ -2552,7 +2552,7 @@ struct RebasedCommitWorkspace: View {
             entries: entries,
             changeListName: list.name,
             changeLists: visibleChangeLists,
-            emptyLabel: "没有文件",
+            emptyLabel: "No files",
             statusKind: { $0.unstaged },
             // This checkbox stages the currently unstaged side of the file.
             // A partially staged file can appear in both groups, so this must
@@ -2600,7 +2600,7 @@ struct RebasedCommitWorkspace: View {
             entries: entries,
             changeListName: list.name,
             changeLists: visibleChangeLists,
-            emptyLabel: "没有文件",
+            emptyLabel: "No files",
             statusKind: { $0.staged },
             isChecked: { _ in true },
             onToggle: { entry, checked in
@@ -4186,7 +4186,7 @@ private struct RebasedConflictGroup: View {
             .foregroundStyle(.primary)
 
             if entries.isEmpty {
-                Text("没有文件")
+                Text("No files")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 22)
@@ -4411,7 +4411,7 @@ private struct RebasedChangeGroup: View {
     let entries: [FileEntry]
     let changeListName: String
     let changeLists: [ChangeListInfo]
-    var emptyLabel: String = "没有文件"
+    var emptyLabel: LocalizedStringKey = "No files"
     let statusKind: (FileEntry) -> ChangeKind
     let isChecked: (FileEntry) -> Bool
     let onToggle: (FileEntry, Bool) -> Void
@@ -4938,7 +4938,7 @@ private struct StagingDiffPreviewView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle")
                         .foregroundStyle(.secondary)
-                    Text("逐行暂存 · \(path)")
+                    Text("Stage line by line · \(path)")
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -5346,7 +5346,7 @@ struct RebasedStatusBar: View {
                 .font(.caption)
                 .foregroundStyle(.green)
             Button(action: onOperationLog) {
-                Label("操作", systemImage: "list.bullet.rectangle")
+                Label("Operation Log", systemImage: "list.bullet.rectangle")
                     .font(.caption)
             }
             .buttonStyle(.plain)

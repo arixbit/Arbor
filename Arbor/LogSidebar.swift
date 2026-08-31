@@ -2483,12 +2483,12 @@ private struct LogChangesBrowserView: View {
         standaloneDiffRecord = record
     }
 
-    private func changeKindText(_ kind: TreeChangeKind) -> String {
+    private func changeKindText(_ kind: TreeChangeKind) -> LocalizedStringKey {
         switch kind {
-        case .added: return "新增"
-        case .modified: return "修改"
-        case .deleted: return "删除"
-        case .renamed: return "重命名"
+        case .added: return "Added"
+        case .modified: return "Modified"
+        case .deleted: return "Deleted"
+        case .renamed: return "Renamed"
         }
     }
 

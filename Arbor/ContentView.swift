@@ -24,9 +24,9 @@ enum ToolWindowMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .commit: "提交"
-        case .log: "日志"
-        case .operations: "操作"
+        case .commit: "Commit"
+        case .log: "Log"
+        case .operations: "Operation Log"
         }
     }
     var systemImage: String {
