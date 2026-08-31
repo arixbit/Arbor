@@ -49,17 +49,18 @@ browser or dragging the app from a DMG. Until the separate `homebrew-arbor`
 tap is published, use the Arbor repository as the tap remote:
 
 ```sh
-brew tap arixbit/arbor https://github.com/arixbit/Arbor.git && brew install --cask arbor
+brew tap arixbit/arbor https://github.com/arixbit/Arbor.git && brew trust --tap arixbit/arbor && brew install --cask arbor
 ```
 
 After a dedicated tap repository is published, the command becomes:
 
 ```sh
-brew tap arixbit/arbor && brew install --cask arbor
+brew tap arixbit/arbor && brew trust --tap arixbit/arbor && brew install --cask arbor
 ```
 
-Homebrew does not remove Apple's trust requirement. The first launch may still
-need **Open/Open Anyway**, or the app-specific `xattr` command above after the
+`brew trust` confirms the tap source, not the app's Apple signature. Homebrew
+does not remove Apple's trust requirement. The first launch may still need
+**Open/Open Anyway**, or the app-specific `xattr` command above after the
 download checksum has been verified.
 
 ## Quick start

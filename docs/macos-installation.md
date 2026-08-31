@@ -48,17 +48,18 @@ dedicated `homebrew-arbor` repository is published, use the source repository
 as a custom tap remote:
 
 ```sh
-brew tap arixbit/arbor https://github.com/arixbit/Arbor.git && brew install --cask arbor
+brew tap arixbit/arbor https://github.com/arixbit/Arbor.git && brew trust --tap arixbit/arbor && brew install --cask arbor
 ```
 
 With a dedicated tap, the command is:
 
 ```sh
-brew tap arixbit/arbor && brew install --cask arbor
+brew tap arixbit/arbor && brew trust --tap arixbit/arbor && brew install --cask arbor
 ```
 
-Homebrew does not sign or notarize the app. The first launch may still require
-Finder's **Open/Open Anyway**, or the app-specific quarantine command above.
+`brew trust` confirms the tap source, not the app's Apple signature. Homebrew
+does not sign or notarize the app. The first launch may still require Finder's
+**Open/Open Anyway**, or the app-specific quarantine command above.
 
 ## Optional Apple-trusted package
 
