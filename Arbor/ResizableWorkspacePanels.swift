@@ -193,6 +193,8 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
         weak var mainHost: NSHostingView<MainContent>?
         var isApplyingExternalPosition = false
         var rootUpdateScheduled = false
+        var lastAppliedSidebarWidth: Double?
+        var lastAppliedAvailableWidth: CGFloat?
 
         init(parent: NativeWorkspaceColumns) {
             self.parent = parent
@@ -234,6 +236,15 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
             guard let splitView,
                   splitView.subviews.count >= 2 else { return }
             let availableWidth = max(0, splitView.bounds.width - splitView.dividerThickness)
+            let widthChanged = lastAppliedSidebarWidth.map {
+                abs($0 - parent.sidebarWidth) > 0.5
+            } ?? true
+            let containerChanged = lastAppliedAvailableWidth.map {
+                abs($0 - availableWidth) > 0.5
+            } ?? true
+            guard widthChanged || containerChanged else { return }
+            lastAppliedSidebarWidth = parent.sidebarWidth
+            lastAppliedAvailableWidth = availableWidth
             let maximumSidebarWidth = max(0, availableWidth - parent.minimumMainWidth)
             let minimumSidebarWidth = min(parent.minimumSidebarWidth, maximumSidebarWidth)
             let target = min(

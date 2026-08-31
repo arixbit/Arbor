@@ -2088,19 +2088,18 @@ struct ContentView: View {
     /// selected commit's repository path decides which root owns the remote.
     func hostedRemotesForCommit(_ commit: CommitInfo) -> [RemoteInfo] {
         guard let repository = logRepository(for: commit) else { return [] }
-        return (try? repository.remoteList())?.filter { remote in
+        return logRemotes(for: commit).filter { remote in
             repository.permalink(remoteUrl: remote.url, commitId: commit.id) != nil
-        } ?? []
+        }
     }
 
     /// The Log "Open Pull Requests" action is a hosted reference action too,
     /// but it targets the provider's PR list rather than a commit permalink.
     /// Keep its remote candidates root-qualified and filter unsupported hosts.
     func pullRequestRemotesForCommit(_ commit: CommitInfo) -> [RemoteInfo] {
-        guard let repository = logRepository(for: commit) else { return [] }
-        return (try? repository.remoteList())?.filter { remote in
+        return logRemotes(for: commit).filter { remote in
             HostingProvider.parse(remoteURL: remote.url) != nil
-        } ?? []
+        }
     }
 
     func commentRemotesForCommit(_ commit: CommitInfo) -> [RemoteInfo] {
@@ -2114,8 +2113,40 @@ struct ContentView: View {
     }
 
     func currentLogBranchName(for commit: CommitInfo) -> String? {
-        guard let repository = logRepository(for: commit) else { return nil }
-        return (try? repository.branchList())?.first(where: \.isCurrent)?.name
+        // Context menus are built for every visible Log row. Reading the
+        // current branch from Repository here performs a synchronous Git
+        // operation during SwiftUI layout and can block the main thread while
+        // the history task owns the repository mutex. Branch snapshots are
+        // already kept in view state, so use them instead.
+        if let repositoryPath = commit.repositoryPath,
+           !repositoryPath.isEmpty {
+            if let snapshot = multiRootBranchSnapshots.first(where: {
+                $0.rootPath == repositoryPath
+            }) {
+                return snapshot.branches.first(where: \.isCurrent)?.name
+            }
+            if repositoryPath == logActiveRootPath {
+                return logActiveBranches.first(where: \.isCurrent)?.name
+            }
+            return nil
+        }
+        return activeLogBranches.first(where: \.isCurrent)?.name
+    }
+
+    func logRemotes(for commit: CommitInfo) -> [RemoteInfo] {
+        if let repositoryPath = commit.repositoryPath,
+           !repositoryPath.isEmpty {
+            if let snapshot = multiRootBranchSnapshots.first(where: {
+                $0.rootPath == repositoryPath
+            }) {
+                return snapshot.remotes
+            }
+            if repositoryPath == logActiveRootPath {
+                return logActiveRemotes
+            }
+            return []
+        }
+        return activeLogRemotes
     }
 
     var activeLogBranches: [BranchInfo] {

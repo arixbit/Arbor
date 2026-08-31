@@ -841,6 +841,7 @@ private var logInspector: some View {
             LogCommitInspectorView(
                 repo: activeCompareRepo ?? repo,
                 repositoryForCommit: logRepository(for:),
+                remotesForCommit: logRemotes(for:),
                 commits: selectedBranchComparisonCommit.map { [$0] } ?? [],
                 onReverted: { loadBranchComparison() },
                 onCherryPicked: { loadBranchComparison(); refreshAll(showFeedback: false) },
@@ -873,6 +874,7 @@ private var logInspector: some View {
             LogCommitInspectorView(
                 repo: logRepository,
                 repositoryForCommit: logRepository(for:),
+                remotesForCommit: logRemotes(for:),
                 commits: selectedReflogCommits,
                 onReverted: { reloadLogView() },
                 onCherryPicked: { reloadLogView(); refreshAll(showFeedback: false) },
@@ -903,6 +905,7 @@ private var logInspector: some View {
             LogCommitInspectorView(
                 repo: logRepository,
                 repositoryForCommit: logRepository(for:),
+                remotesForCommit: logRemotes(for:),
                 commits: selectedLogCommits,
                 onReverted: { loadLog() },
                 onCherryPicked: { loadLog(); refreshAll(showFeedback: false) },
@@ -947,6 +950,7 @@ private var logInspector: some View {
 private struct LogCommitInspectorView: View {
     let repo: Repository?
     let repositoryForCommit: (CommitInfo) -> Repository?
+    let remotesForCommit: (CommitInfo) -> [RemoteInfo]
     let commits: [CommitInfo]
     let onReverted: () -> Void
     let onCherryPicked: () -> Void
@@ -991,6 +995,7 @@ private struct LogCommitInspectorView: View {
                             CommitDetailsMetadataView(
                                 commit: commits[0],
                                 repositoryForCommit: repositoryForCommit,
+                                remotes: remotesForCommit(commits[0]),
                                 onReverted: onReverted,
                                 onCherryPicked: onCherryPicked,
                                 onRevertRequested: onRevertRequested,
@@ -1009,6 +1014,7 @@ private struct LogCommitInspectorView: View {
                     LogChangesBrowserView(
                         repo: repo,
                         repositoryForCommit: repositoryForCommit,
+                        remotesForCommit: remotesForCommit,
                         commits: commits,
                         showsDiffPreview: showsDiffPreview,
                         diffPreviewVertical: diffPreviewVertical,
@@ -1035,6 +1041,7 @@ private struct LogCommitInspectorView: View {
                 LogChangesBrowserView(
                     repo: repo,
                     repositoryForCommit: repositoryForCommit,
+                    remotesForCommit: remotesForCommit,
                     commits: commits,
                     showsDiffPreview: showsDiffPreview,
                     diffPreviewVertical: diffPreviewVertical,
@@ -1334,6 +1341,7 @@ private struct BranchCommitComparisonView: View {
 private struct CommitDetailsMetadataView: View {
     let commit: CommitInfo?
     let repositoryForCommit: (CommitInfo) -> Repository?
+    let remotes: [RemoteInfo]
     let onReverted: () -> Void
     let onCherryPicked: () -> Void
     let onRevertRequested: (CommitInfo) -> Void
@@ -1345,16 +1353,11 @@ private struct CommitDetailsMetadataView: View {
         return repositoryForCommit(commit)
     }
 
-    private var selectedRemotes: [RemoteInfo] {
-        guard let selectedRepository else { return [] }
-        return (try? selectedRepository.remoteList()) ?? []
-    }
-
     var body: some View {
         CommitDetailView(
             repo: selectedRepository,
             commit: commit,
-            remotes: selectedRemotes,
+            remotes: remotes,
             onReverted: onReverted,
             onCherryPicked: onCherryPicked,
             onCreateBranch: onCreateBranch,
@@ -1485,6 +1488,7 @@ private struct LogChangesBrowserView: View {
 
     let repo: Repository?
     let repositoryForCommit: (CommitInfo) -> Repository?
+    let remotesForCommit: (CommitInfo) -> [RemoteInfo]
     let commits: [CommitInfo]
     let showsDiffPreview: Bool
     let diffPreviewVertical: Bool
@@ -1578,13 +1582,13 @@ private struct LogChangesBrowserView: View {
     private func hostedFileRemotes(for record: LogChangeRecord) -> [RemoteInfo] {
         guard let repository = repositoryForCommit(record.commit) else { return [] }
         let target = hostedFileRevisionTarget(for: record)
-        return (try? repository.remoteList())?.filter { remote in
+        return remotesForCommit(record.commit).filter { remote in
             repository.permalinkForPath(
                 remoteUrl: remote.url,
                 commitId: target.commitID,
                 path: target.path
             ) != nil
-        } ?? []
+        }
     }
 
     private var canEditSelectedChanges: Bool {
