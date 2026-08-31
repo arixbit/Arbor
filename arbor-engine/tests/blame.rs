@@ -148,3 +148,20 @@ fn worktree_blame_options_match_git_annotation_semantics() {
         .expect("blame with whitespace ignored");
     assert_eq!(with_whitespace_ignored.len(), 2);
 }
+
+#[test]
+fn previous_revision_blame_uses_first_parent_and_rename_path() {
+    let repo = TestRepo::new();
+    let initial = commit(&repo.path, "old.txt", "kept\n", "initial");
+    repo.git(&["mv", "old.txt", "new.txt"]);
+    repo.git(&["commit", "-q", "-m", "rename"]);
+    let rename_commit = git(&repo.path, &["rev-parse", "HEAD"]);
+
+    let lines = repo
+        .open()
+        .blame_previous_revision("new.txt".into(), rename_commit, BlameOptions::default())
+        .expect("previous revision blame");
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].commit_id, initial);
+    assert_eq!(lines[0].text, "kept");
+}

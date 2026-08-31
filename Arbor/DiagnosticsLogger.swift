@@ -11,10 +11,12 @@ enum GitAnnotationSettings {
     static let ignoreWhitespacesKey = "arbor.git.annotation.ignoreWhitespaces.v1"
     static let movementKey = "arbor.git.annotation.movement.v1"
     static let preferCommitDateKey = "arbor.git.annotation.preferCommitDate.v1"
+    static let hideAuthorKey = "arbor.git.annotation.hideAuthor.v1"
 
     static let defaultIgnoreWhitespaces = true
     static let defaultMovement = BlameMovement.none
     static let defaultPreferCommitDate = false
+    static let defaultHideAuthor = false
 
     static func options(from defaults: UserDefaults = .standard) -> BlameOptions {
         let movement: BlameMovement

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.18 - 2026-08-31
+
+V1 patch release: align the Git workbench with the JetBrains Git workflow
+audit, including hosting review details, conflict actions, changelists, Shelf
+storage, blame actions, and multi-root recovery. The local launcher now falls
+back to an unsigned Debug build when no signing identity is configured.
+
 ## 1.0.17 - 2026-08-30
 
 V1 patch release: publish the About window that explains Arbor's Git

@@ -132,6 +132,7 @@ struct FileContentView: View {
     @State private var blameLines: [BlameLine] = []
     @State private var blameError: String?
     @State private var blameLoading = false
+    @State private var blameRevision: String?
     @State private var lineChanges: [Int: CodeLineChange] = [:]
     @State private var loadGeneration = 0
     @State private var blameGeneration = 0
@@ -167,6 +168,16 @@ struct FileContentView: View {
                     if showBlame {
                         GitAnnotationOptionsMenu {
                             loadBlame(path)
+                        }
+                        if let blameRevision {
+                            Text("Annotation \(String(blameRevision.prefix(7)))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Working Tree") {
+                                self.blameRevision = nil
+                                loadBlame(path)
+                            }
+                            .buttonStyle(.borderless)
                         }
                     }
                     if let historyPath = projectFileTreeHistoryPath(path, isDirectory: false) {
@@ -211,7 +222,14 @@ struct FileContentView: View {
                 } else if let blameError {
                     messageView(systemImage: "exclamationmark.triangle", text: blameError, color: Design.Colors.error)
                 } else if !blameLines.isEmpty {
-                    BlameCodeLinesView(lines: blameLines, onCommit: openCommitDetail)
+                    BlameCodeLinesView(
+                        lines: blameLines,
+                        onCommit: openCommitDetail,
+                        onPreviousRevision: { line in
+                            guard let path else { return }
+                            loadBlame(path, previousRevision: line.commitId)
+                        }
+                    )
                 } else {
                     messageView(systemImage: "person.2", text: "Blame", color: .secondary)
                 }
@@ -251,6 +269,7 @@ struct FileContentView: View {
             showBlame = false
             blameLines = []
             blameError = nil
+            blameRevision = nil
             lineChanges = [:]
             return
         }
@@ -309,7 +328,7 @@ struct FileContentView: View {
         }
     }
 
-    private func loadBlame(_ path: String) {
+    private func loadBlame(_ path: String, previousRevision: String? = nil) {
         guard version == .local, let repo else { return }
         blameGeneration &+= 1
         let generation = blameGeneration
@@ -319,15 +338,25 @@ struct FileContentView: View {
         blameError = nil
         Task.detached(priority: .userInitiated) {
             do {
-                let lines = try repo.blameWorktreeWithOptions(
-                    path: path,
-                    options: GitAnnotationSettings.options()
-                )
+                let lines: [BlameLine]
+                if let previousRevision {
+                    lines = try repo.blamePreviousRevision(
+                        path: path,
+                        commitId: previousRevision,
+                        options: GitAnnotationSettings.options()
+                    )
+                } else {
+                    lines = try repo.blameWorktreeWithOptions(
+                        path: path,
+                        options: GitAnnotationSettings.options()
+                    )
+                }
                 await MainActor.run {
                     guard self.blameGeneration == generation,
                           self.path == path,
                           self.version == requestedVersion else { return }
                     self.blameLines = lines
+                    self.blameRevision = previousRevision
                     self.blameLoading = false
                 }
             } catch {
@@ -368,6 +397,8 @@ struct GitAnnotationOptionsMenu: View {
 
     @AppStorage(GitAnnotationSettings.ignoreWhitespacesKey)
     private var ignoreWhitespaces = GitAnnotationSettings.defaultIgnoreWhitespaces
+    @AppStorage(GitAnnotationSettings.hideAuthorKey)
+    private var hideAuthor = GitAnnotationSettings.defaultHideAuthor
     @AppStorage(GitAnnotationSettings.movementKey)
     private var movementRaw = "none"
     @AppStorage(GitAnnotationSettings.preferCommitDateKey)
@@ -376,6 +407,7 @@ struct GitAnnotationOptionsMenu: View {
     var body: some View {
         Menu("Blame Options") {
             Toggle("Ignore Whitespaces", isOn: $ignoreWhitespaces)
+            Toggle("Hide Author", isOn: $hideAuthor)
             Divider()
             Toggle(
                 "Detect Movements Within File",
@@ -394,6 +426,7 @@ struct GitAnnotationOptionsMenu: View {
             Toggle("Prefer Commit Date", isOn: $preferCommitDate)
         }
         .onChange(of: ignoreWhitespaces) { _, _ in onChanged() }
+        .onChange(of: hideAuthor) { _, _ in onChanged() }
         .onChange(of: movementRaw) { _, _ in onChanged() }
         .onChange(of: preferCommitDate) { _, _ in onChanged() }
     }
@@ -402,6 +435,10 @@ struct GitAnnotationOptionsMenu: View {
 private struct BlameCodeLinesView: View {
     let lines: [BlameLine]
     let onCommit: (String) -> Void
+    let onPreviousRevision: (BlameLine) -> Void
+
+    @AppStorage(GitAnnotationSettings.hideAuthorKey)
+    private var hideAuthor = GitAnnotationSettings.defaultHideAuthor
 
     private let lineNumberWidth: CGFloat = 52 + Design.Spacing.md
 
@@ -419,12 +456,14 @@ private struct BlameCodeLinesView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(lines, id: \.line) { line in
                         HStack(alignment: .top, spacing: 0) {
-                            Text(line.author.isEmpty ? "—" : line.author)
-                                .font(.system(.caption, design: .default))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .frame(width: 120, alignment: .leading)
-                                .help(line.summary)
+                            if !hideAuthor {
+                                Text(line.author.isEmpty ? "—" : line.author)
+                                    .font(.system(.caption, design: .default))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(width: 120, alignment: .leading)
+                                    .help(line.summary)
+                            }
                             Text(line.shortId)
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(blameColor(line.shortId))
@@ -452,9 +491,15 @@ private struct BlameCodeLinesView: View {
                             guard canOpenCommit(line.commitId) else { return }
                             onCommit(line.commitId)
                         }
+                        .contextMenu {
+                            Button("Annotate Previous Revision") {
+                                onPreviousRevision(line)
+                            }
+                            .disabled(!canOpenCommit(line.commitId))
+                        }
                     }
                 }
-                .frame(width: max(proxy.size.width, lineNumberWidth + 304 + maxLineWidth), alignment: .topLeading)
+                .frame(width: max(proxy.size.width, lineNumberWidth + (hideAuthor ? 184 : 304) + maxLineWidth), alignment: .topLeading)
                 .frame(minHeight: proxy.size.height, alignment: .topLeading)
                 .padding(.vertical, Design.Spacing.sm)
             }

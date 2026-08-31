@@ -77,6 +77,25 @@ pub(crate) fn blame_worktree(
     run_git_blame(repo, path, None, options)
 }
 
+/// 计算指定 revision 中的文件 blame。调用方用于从 annotation 行回溯到
+/// 该提交的 first parent；revision 和 path 都在 Git argv 中独立传递。
+pub(crate) fn blame_revision(
+    repo: &gix::Repository,
+    path: &str,
+    revision: &str,
+    options: BlameOptions,
+) -> Result<Vec<BlameLine>, EngineError> {
+    if revision.trim().is_empty()
+        || revision.starts_with('-')
+        || revision.chars().any(|character| character.is_whitespace())
+    {
+        return Err(EngineError::GitOperation {
+            message: "blame revision is invalid".into(),
+        });
+    }
+    run_git_blame(repo, path, Some(revision), options)
+}
+
 fn run_git_blame(
     repo: &gix::Repository,
     path: &str,

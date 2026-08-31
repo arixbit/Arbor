@@ -10,7 +10,8 @@ use crate::error::EngineError;
 
 pub(crate) const DEFAULT_CHANGE_LIST_NAME: &str = "Default";
 const CHANGE_LISTS_FILE: &str = "arbor-changelists";
-const CHANGE_LISTS_MAGIC: &str = "ARBOR_CHANGELISTS_V1";
+const CHANGE_LISTS_MAGIC_V1: &str = "ARBOR_CHANGELISTS_V1";
+const CHANGE_LISTS_MAGIC_V2: &str = "ARBOR_CHANGELISTS_V2";
 
 /// 一个本地 Changelist。paths 只包含当前仍存在于 Git Changes Browser 的
 /// 变更；空列表仍会保留，便于用户先创建列表再拖入文件。
@@ -22,10 +23,26 @@ pub struct ChangeListInfo {
     pub is_active: bool,
 }
 
+/// Changelist metadata that is not part of the Changes Browser path
+/// projection. Keeping this separate preserves the existing lightweight
+/// `ChangeListInfo` ABI while exposing IntelliJ-style description/context
+/// settings to the settings and create dialogs.
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct ChangeListMetadata {
+    pub name: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub track_context: bool,
+    pub task_identity: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StoredChangeList {
     pub name: String,
     pub is_default: bool,
+    pub description: Option<String>,
+    pub track_context: bool,
+    pub task_identity: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +51,10 @@ pub(crate) struct ChangeLists {
     pub active: String,
     /// Vec 顺序同时是各列表的成员顺序；未出现的路径隐式属于默认列表。
     pub assignments: Vec<(String, String)>,
+    /// Snapshot observation state used to assign only paths that first appear
+    /// after the initial load to the active list.
+    pub observed: bool,
+    pub seen_paths: Vec<String>,
 }
 
 pub(crate) fn change_lists_file(repo: &gix::Repository) -> std::path::PathBuf {
@@ -113,9 +134,14 @@ pub(crate) fn empty_change_lists() -> ChangeLists {
         lists: vec![StoredChangeList {
             name: DEFAULT_CHANGE_LIST_NAME.into(),
             is_default: true,
+            description: None,
+            track_context: false,
+            task_identity: None,
         }],
         active: DEFAULT_CHANGE_LIST_NAME.into(),
         assignments: Vec::new(),
+        observed: false,
+        seen_paths: Vec::new(),
     }
 }
 
@@ -130,7 +156,20 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
     };
 
     let mut lines = contents.lines();
-    if lines.next() != Some(CHANGE_LISTS_MAGIC) {
+    let version = match lines.next() {
+        Some(CHANGE_LISTS_MAGIC_V1) => 1,
+        Some(CHANGE_LISTS_MAGIC_V2) => 2,
+        _ => {
+            return Err(EngineError::GitOperation {
+                message: "changelist: unsupported metadata format".into(),
+            })
+        }
+    };
+    let mut observed = false;
+    let mut seen_paths = Vec::new();
+    let mut seen_observed_paths = HashSet::new();
+
+    if version != 1 && version != 2 {
         return Err(EngineError::GitOperation {
             message: "changelist: unsupported metadata format".into(),
         });
@@ -140,7 +179,7 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
     let mut active = None;
     let mut assignments = Vec::new();
     let mut seen_names = HashSet::new();
-    let mut seen_paths = HashSet::new();
+    let mut seen_assignment_paths = HashSet::new();
 
     for line in lines {
         if line.is_empty() {
@@ -151,9 +190,6 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
             Some("L") => {
                 let encoded_name = fields.next().ok_or_else(|| metadata_error())?;
                 let default_marker = fields.next().ok_or_else(|| metadata_error())?;
-                if fields.next().is_some() {
-                    return Err(metadata_error());
-                }
                 let name = decode_hex(encoded_name)?;
                 validate_change_list_name(&name)?;
                 if !seen_names.insert(name.clone()) {
@@ -165,7 +201,33 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
                 if default_marker != "0" && !is_default {
                     return Err(metadata_error());
                 }
-                lists.push(StoredChangeList { name, is_default });
+                let (description, track_context, task_identity) = if version >= 2 {
+                    let encoded_description = fields.next().ok_or_else(|| metadata_error())?;
+                    let track_marker = fields.next().ok_or_else(|| metadata_error())?;
+                    let encoded_task = fields.next().ok_or_else(|| metadata_error())?;
+                    if fields.next().is_some() || (track_marker != "0" && track_marker != "1") {
+                        return Err(metadata_error());
+                    }
+                    let description = decode_hex(encoded_description)?;
+                    let task_identity = decode_hex(encoded_task)?;
+                    (
+                        (!description.is_empty()).then_some(description),
+                        track_marker == "1",
+                        (!task_identity.is_empty()).then_some(task_identity),
+                    )
+                } else {
+                    if fields.next().is_some() {
+                        return Err(metadata_error());
+                    }
+                    (None, false, None)
+                };
+                lists.push(StoredChangeList {
+                    name,
+                    is_default,
+                    description,
+                    track_context,
+                    task_identity,
+                });
             }
             Some("A") => {
                 if active.is_some() {
@@ -189,12 +251,33 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
                 let name = decode_hex(encoded_name)?;
                 validate_change_path(&path)?;
                 validate_change_list_name(&name)?;
-                if !seen_paths.insert(path.clone()) {
+                if !seen_assignment_paths.insert(path.clone()) {
                     return Err(EngineError::GitOperation {
                         message: format!("changelist: duplicate path '{path}'"),
                     });
                 }
                 assignments.push((path, name));
+            }
+            Some("O") if version >= 2 => {
+                let marker = fields.next().ok_or_else(|| metadata_error())?;
+                if fields.next().is_some() || (marker != "0" && marker != "1") {
+                    return Err(metadata_error());
+                }
+                observed = marker == "1";
+            }
+            Some("S") if version >= 2 => {
+                let encoded_path = fields.next().ok_or_else(|| metadata_error())?;
+                if fields.next().is_some() {
+                    return Err(metadata_error());
+                }
+                let path = decode_hex(encoded_path)?;
+                validate_change_path(&path)?;
+                if !seen_observed_paths.insert(path.clone()) {
+                    return Err(EngineError::GitOperation {
+                        message: format!("changelist: duplicate observed path '{path}'"),
+                    });
+                }
+                seen_paths.push(path);
             }
             _ => return Err(metadata_error()),
         }
@@ -235,6 +318,8 @@ pub(crate) fn load_change_lists(repo: &gix::Repository) -> Result<ChangeLists, E
         lists,
         active,
         assignments,
+        observed,
+        seen_paths,
     })
 }
 
@@ -267,19 +352,44 @@ pub(crate) fn save_change_lists(
             });
         }
     }
+    let mut seen_observed_paths = HashSet::new();
+    for path in &state.seen_paths {
+        validate_change_path(path)?;
+        if !seen_observed_paths.insert(path) {
+            return Err(EngineError::GitOperation {
+                message: format!("changelist: duplicate observed path '{path}'"),
+            });
+        }
+    }
 
-    let mut output = String::from(CHANGE_LISTS_MAGIC);
+    let mut output = String::from(CHANGE_LISTS_MAGIC_V2);
     output.push('\n');
     for list in &state.lists {
         output.push_str("L\t");
         output.push_str(&encode_hex(&list.name));
         output.push('\t');
         output.push(if list.is_default { '1' } else { '0' });
+        output.push('\t');
+        output.push_str(&encode_hex(list.description.as_deref().unwrap_or_default()));
+        output.push('\t');
+        output.push(if list.track_context { '1' } else { '0' });
+        output.push('\t');
+        output.push_str(&encode_hex(
+            list.task_identity.as_deref().unwrap_or_default(),
+        ));
         output.push('\n');
     }
     output.push_str("A\t");
     output.push_str(&encode_hex(&state.active));
     output.push('\n');
+    output.push_str("O\t");
+    output.push(if state.observed { '1' } else { '0' });
+    output.push('\n');
+    for path in &state.seen_paths {
+        output.push_str("S\t");
+        output.push_str(&encode_hex(path));
+        output.push('\n');
+    }
     for (path, name) in &state.assignments {
         output.push_str("P\t");
         output.push_str(&encode_hex(path));
@@ -314,6 +424,86 @@ pub(crate) fn list_for_path(state: &ChangeLists, path: &str) -> String {
         .find(|(candidate, _)| candidate == path)
         .map(|(_, name)| name.clone())
         .unwrap_or_else(|| default_name(state))
+}
+
+/// Observe one status snapshot. The first snapshot seeds the ledger without
+/// moving existing changes; subsequent newly seen paths are assigned to the
+/// active list, matching IntelliJ's active Changelist semantics.
+pub(crate) fn observe_paths(state: &mut ChangeLists, current_paths: &[String]) -> bool {
+    let current: HashSet<&str> = current_paths.iter().map(String::as_str).collect();
+    let mut changed = false;
+    if !state.observed {
+        state.observed = true;
+        state.seen_paths = current_paths.to_vec();
+        return true;
+    }
+
+    let previous: HashSet<&str> = state.seen_paths.iter().map(String::as_str).collect();
+    let default_name = default_name(state);
+    // A path that disappeared from the status snapshot must not keep a stale
+    // assignment. If it is created again later it is a new change and should
+    // be routed through the active-list rule below.
+    let before_assignments = state.assignments.len();
+    state
+        .assignments
+        .retain(|(path, _)| current.contains(path.as_str()));
+    changed |= state.assignments.len() != before_assignments;
+    for path in current_paths {
+        if !previous.contains(path.as_str()) && state.active != default_name {
+            state.assignments.retain(|(candidate, _)| candidate != path);
+            state.assignments.push((path.clone(), state.active.clone()));
+            changed = true;
+        }
+    }
+    let next_seen = current_paths.to_vec();
+    if state.seen_paths != next_seen {
+        state.seen_paths = next_seen;
+        changed = true;
+    }
+    // A deleted path is removed from the observed ledger. If it is recreated,
+    // it will be treated as a genuinely new change on the next snapshot.
+    state
+        .seen_paths
+        .retain(|path| current.contains(path.as_str()));
+    changed
+}
+
+pub(crate) fn metadata(state: &ChangeLists) -> Vec<ChangeListMetadata> {
+    state
+        .lists
+        .iter()
+        .map(|list| ChangeListMetadata {
+            name: list.name.clone(),
+            description: list.description.clone(),
+            is_active: state.active == list.name,
+            track_context: list.track_context,
+            task_identity: list.task_identity.clone(),
+        })
+        .collect()
+}
+
+pub(crate) fn set_metadata(
+    state: &mut ChangeLists,
+    name: &str,
+    description: Option<String>,
+    track_context: bool,
+    task_identity: Option<String>,
+) -> Result<(), EngineError> {
+    let Some(list) = state.lists.iter_mut().find(|list| list.name == name) else {
+        return Err(EngineError::GitOperation {
+            message: format!("changelist: list '{name}' not found"),
+        });
+    };
+    let normalize = |value: Option<String>| {
+        value.and_then(|value| {
+            let value = value.trim().to_string();
+            (!value.is_empty()).then_some(value)
+        })
+    };
+    list.description = normalize(description);
+    list.track_context = track_context;
+    list.task_identity = normalize(task_identity);
+    Ok(())
 }
 
 pub(crate) fn to_info(state: &ChangeLists, current_paths: &[String]) -> Vec<ChangeListInfo> {

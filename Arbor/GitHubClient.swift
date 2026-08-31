@@ -157,6 +157,193 @@ struct GitHubClient {
         )
     }
 
+    func loadGitHubChangeRequestDetail(
+        for repository: HostingRepository,
+        number: Int
+    ) async throws -> HostingChangeRequestDetail {
+        let pullRequest: GitHubPullRequest = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number)],
+            method: "GET",
+            bodyData: nil
+        )
+        let commits: [GitHubPullRequestCommit] = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "commits"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )
+        let files: [GitHubPullRequestFile] = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "files"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )
+        let comments: [GitHubReviewComment] = (try? await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "comments"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )) ?? []
+        let issueComments: [GitHubReviewComment] = (try? await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "issues", String(number), "comments"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )) ?? []
+        let reviews: [GitHubReviewSummary] = (try? await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "reviews"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )) ?? []
+        // Issue events contain assignment, label, branch and lifecycle changes
+        // that review comments alone cannot represent. The endpoint is
+        // optional for older GitHub Enterprise installations, so a failure
+        // leaves the detail workspace usable with the data already loaded.
+        let events: [GitHubIssueTimelineEvent] = (try? await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "issues", String(number), "events"],
+            query: [URLQueryItem(name: "per_page", value: "100")],
+            method: "GET",
+            bodyData: nil
+        )) ?? []
+        var timeline = comments.enumerated().map { index, comment in
+            HostingTimelineEvent(
+                id: "comment-\(comment.apiID ?? 0)-\(index)",
+                kind: "comment",
+                body: comment.body,
+                author: comment.user?.hostingUser,
+                createdAt: comment.createdAt,
+                path: comment.path,
+                line: comment.line ?? comment.originalLine,
+                commitID: comment.commitID
+            )
+        }
+        timeline.append(contentsOf: issueComments.enumerated().map { index, comment in
+            HostingTimelineEvent(
+                id: "issue-comment-\(comment.apiID ?? 0)-\(index)",
+                kind: "comment",
+                body: comment.body,
+                author: comment.user?.hostingUser,
+                createdAt: comment.createdAt
+            )
+        })
+        timeline.append(contentsOf: reviews.enumerated().map { index, review in
+            HostingTimelineEvent(
+                id: "review-\(review.id ?? 0)-\(index)",
+                kind: review.state?.lowercased() ?? "review",
+                body: review.body,
+                author: review.user?.hostingUser,
+                createdAt: review.submittedAt
+            )
+        })
+        timeline.append(contentsOf: events.enumerated().map { index, event in
+            HostingTimelineEvent(
+                id: "event-\(event.id ?? 0)-\(index)",
+                kind: event.event ?? "event",
+                body: event.body,
+                author: event.actor?.hostingUser,
+                createdAt: event.createdAt
+            )
+        })
+        timeline.sort { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
+        let mappedCommits = commits.map {
+            HostingChangeRequestCommit(
+                id: $0.sha ?? "",
+                message: $0.commit?.message,
+                author: $0.author?.hostingUser,
+                authoredAt: $0.commit?.author?.date
+            )
+        }.filter { !$0.id.isEmpty }
+        let mappedFiles = files.compactMap(\.hostingFile)
+        return HostingChangeRequestDetail(
+            pullRequest: pullRequest.hostingPullRequest,
+            commits: mappedCommits,
+            files: mappedFiles,
+            timeline: timeline,
+            mergeable: pullRequest.mergeable,
+            additions: pullRequest.additions,
+            deletions: pullRequest.deletions,
+            changedFiles: pullRequest.changedFiles,
+            capabilities: HostingChangeRequestCapabilities(
+                canComment: true,
+                canApprove: true,
+                canRequestChanges: true,
+                canMerge: true,
+                canClose: true,
+                canRevokeApproval: false,
+                mergeMethods: ["merge", "squash", "rebase"]
+            ),
+            baseRevision: pullRequest.base?.sha,
+            startRevision: pullRequest.base?.sha,
+            headRevision: pullRequest.head?.sha
+        )
+    }
+
+    func loadGitHubCommitFiles(
+        for repository: HostingRepository,
+        commitID: String
+    ) async throws -> [HostingChangeRequestFile] {
+        let commit: GitHubCommitDetail = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "commits", commitID],
+            method: "GET",
+            bodyData: nil
+        )
+        return (commit.files ?? []).compactMap(\.hostingFile)
+    }
+
+    func submitGitHubReview(
+        for repository: HostingRepository,
+        number: Int,
+        outcome: HostingReviewOutcome,
+        body: String?
+    ) async throws {
+        let event: String
+        switch outcome {
+        case .comment: event = "COMMENT"
+        case .approve: event = "APPROVE"
+        case .requestChanges: event = "REQUEST_CHANGES"
+        }
+        _ = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "reviews"],
+            method: "POST",
+            bodyData: try JSONEncoder().encode(GitHubSubmitReviewRequest(event: event, body: body))
+        ) as GitHubReviewResponse
+    }
+
+    func mergeGitHubPullRequest(
+        for repository: HostingRepository,
+        number: Int,
+        method: String
+    ) async throws {
+        _ = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number), "merge"],
+            method: "PUT",
+            bodyData: try JSONEncoder().encode(GitHubMergePullRequestRequest(mergeMethod: method))
+        ) as GitHubMergeResponse
+    }
+
+    func closeGitHubPullRequest(
+        for repository: HostingRepository,
+        number: Int
+    ) async throws {
+        _ = try await request(
+            repository: repository,
+            path: ["repos", repository.owner, repository.name, "pulls", String(number)],
+            method: "PATCH",
+            bodyData: try JSONEncoder().encode(GitHubClosePullRequestRequest(state: "closed"))
+        ) as GitHubPullRequest
+    }
+
     func listGitHubProtectedBranchPatterns(
         for repository: HostingRepository
     ) async throws -> [String] {
@@ -340,3 +527,96 @@ struct GitHubClient {
         let message: String?
     }
 }
+
+private struct GitHubPullRequestCommit: Decodable {
+    let sha: String?
+    let commit: GitHubCommitPayload?
+    let author: GitHubUser?
+}
+
+private struct GitHubReviewSummary: Decodable {
+    let id: Int?
+    let body: String?
+    let state: String?
+    let user: GitHubUser?
+    let submittedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, body, state, user
+        case submittedAt = "submitted_at"
+    }
+}
+
+private struct GitHubIssueTimelineEvent: Decodable {
+    let id: Int?
+    let event: String?
+    let body: String?
+    let actor: GitHubUser?
+    let createdAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, event, body, actor
+        case createdAt = "created_at"
+    }
+}
+
+private struct GitHubCommitPayload: Decodable {
+    let message: String?
+    let author: GitHubCommitAuthor?
+}
+
+private struct GitHubCommitAuthor: Decodable {
+    let date: String?
+}
+
+private struct GitHubPullRequestFile: Decodable {
+    let filename: String?
+    let previousFilename: String?
+    let status: String?
+    let additions: Int?
+    let deletions: Int?
+    let patch: String?
+
+    enum CodingKeys: String, CodingKey {
+        case filename, status, additions, deletions, patch
+        case previousFilename = "previous_filename"
+    }
+}
+
+private extension GitHubPullRequestFile {
+    var hostingFile: HostingChangeRequestFile? {
+        guard let filename, !filename.isEmpty else { return nil }
+        return HostingChangeRequestFile(
+            path: filename,
+            oldPath: previousFilename,
+            status: status,
+            additions: additions,
+            deletions: deletions,
+            patch: patch
+        )
+    }
+}
+
+private struct GitHubCommitDetail: Decodable {
+    let files: [GitHubPullRequestFile]?
+}
+
+private struct GitHubSubmitReviewRequest: Encodable {
+    let event: String
+    let body: String?
+}
+
+private struct GitHubMergePullRequestRequest: Encodable {
+    let mergeMethod: String
+
+    enum CodingKeys: String, CodingKey {
+        case mergeMethod = "merge_method"
+    }
+}
+
+private struct GitHubClosePullRequestRequest: Encodable {
+    let state: String
+}
+
+private struct GitHubReviewResponse: Decodable {}
+private struct GitHubMergeResponse: Decodable {}

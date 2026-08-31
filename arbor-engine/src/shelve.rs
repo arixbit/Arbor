@@ -18,6 +18,7 @@ const TEMPORARY_INDEX_SNAPSHOT_TMP_FILE: &str = "arbor-shelve-index-restore.tmp"
 const TEMPORARY_INDEX_SNAPSHOT_MAGIC: &str = "ARBOUR_SHELVE_INDEX_RESTORE_V1";
 const SHELF_PATCH_DIR: &str = "arbor-shelf-patches";
 const DELETED_SHELF_PATCH_DIR: &str = "arbor-shelf-patches-deleted";
+const SHELF_LOCATION_FILE: &str = "arbor-shelf-location";
 
 struct ShelveApplyProgress {
     generation: u64,
@@ -253,23 +254,202 @@ struct TemporaryIndexSnapshot {
 }
 
 pub(crate) fn shelves_file(repo: &gix::Repository) -> std::path::PathBuf {
-    repo.git_dir().join("arbor-shelves")
+    shelf_storage_root(repo).join("arbor-shelves")
 }
 
 pub(crate) fn deleted_shelves_file(repo: &gix::Repository) -> std::path::PathBuf {
-    repo.git_dir().join("arbor-shelves-deleted")
+    shelf_storage_root(repo).join("arbor-shelves-deleted")
 }
 
 pub(crate) fn shelf_metadata_file(repo: &gix::Repository) -> std::path::PathBuf {
-    repo.git_dir().join("arbor-shelves-meta")
+    shelf_storage_root(repo).join("arbor-shelves-meta")
 }
 
 fn shelf_patch_dir(repo: &gix::Repository, is_deleted: bool) -> std::path::PathBuf {
-    repo.git_dir().join(if is_deleted {
+    shelf_storage_root(repo).join(if is_deleted {
         DELETED_SHELF_PATCH_DIR
     } else {
         SHELF_PATCH_DIR
     })
+}
+
+/// The location marker remains in `.git` so changing a Shelf directory never
+/// changes Git refs or operation recovery state. An invalid marker fails back
+/// to the legacy in-repository directory; the public setter validates and
+/// writes only absolute, canonical paths.
+fn shelf_storage_root(repo: &gix::Repository) -> std::path::PathBuf {
+    let legacy = repo.git_dir().to_path_buf();
+    let marker = legacy.join(SHELF_LOCATION_FILE);
+    let Ok(raw) = std::fs::read_to_string(marker) else {
+        return legacy;
+    };
+    let candidate = std::path::PathBuf::from(raw.trim());
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        legacy
+    }
+}
+
+pub(crate) fn shelf_location(repo: &gix::Repository) -> std::path::PathBuf {
+    shelf_storage_root(repo)
+}
+
+fn copy_shelf_artifact(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), EngineError> {
+    if !source.exists() {
+        return Ok(());
+    }
+    if source.is_dir() {
+        std::fs::create_dir_all(destination).map_err(EngineError::from_gix)?;
+        for entry in std::fs::read_dir(source).map_err(EngineError::from_gix)? {
+            let entry = entry.map_err(EngineError::from_gix)?;
+            copy_shelf_artifact(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+    } else {
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent).map_err(EngineError::from_gix)?;
+        }
+        std::fs::copy(source, destination).map_err(EngineError::from_gix)?;
+    }
+    Ok(())
+}
+
+fn verify_shelf_artifact(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<(), EngineError> {
+    let source_metadata = std::fs::symlink_metadata(source).map_err(EngineError::from_gix)?;
+    let destination_metadata =
+        std::fs::symlink_metadata(destination).map_err(EngineError::from_gix)?;
+    if source_metadata.file_type().is_dir() != destination_metadata.file_type().is_dir() {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "shelve: migrated artifact type mismatch for {}",
+                source.display()
+            ),
+        });
+    }
+    if source_metadata.file_type().is_dir() {
+        let source_entries = std::fs::read_dir(source)
+            .map_err(EngineError::from_gix)?
+            .map(|entry| {
+                entry
+                    .map(|entry| entry.file_name())
+                    .map_err(EngineError::from_gix)
+            })
+            .collect::<Result<std::collections::HashSet<_>, _>>()?;
+        let destination_entries = std::fs::read_dir(destination)
+            .map_err(EngineError::from_gix)?
+            .map(|entry| {
+                entry
+                    .map(|entry| entry.file_name())
+                    .map_err(EngineError::from_gix)
+            })
+            .collect::<Result<std::collections::HashSet<_>, _>>()?;
+        if source_entries != destination_entries {
+            return Err(EngineError::GitOperation {
+                message: format!(
+                    "shelve: migrated artifact entries differ for {}",
+                    source.display()
+                ),
+            });
+        }
+        for name in source_entries {
+            verify_shelf_artifact(&source.join(&name), &destination.join(&name))?;
+        }
+    } else if std::fs::read(source).map_err(EngineError::from_gix)?
+        != std::fs::read(destination).map_err(EngineError::from_gix)?
+    {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "shelve: migrated artifact contents differ for {}",
+                source.display()
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Change the on-disk Shelf directory. The copy is assembled in a temporary
+/// sibling and the location marker is written last; a failed copy therefore
+/// leaves the old Shelf fully usable and can be retried safely.
+pub(crate) fn set_shelf_location(
+    repo: &gix::Repository,
+    requested: &std::path::Path,
+    migrate_existing: bool,
+) -> Result<std::path::PathBuf, EngineError> {
+    if !requested.is_absolute() {
+        return Err(EngineError::GitOperation {
+            message: "shelve: location must be an absolute path".into(),
+        });
+    }
+    let legacy = repo.git_dir().to_path_buf();
+    let current = shelf_storage_root(repo);
+    let target = if requested.exists() {
+        requested.canonicalize().map_err(EngineError::from_gix)?
+    } else {
+        requested.to_path_buf()
+    };
+    if target == current {
+        return Ok(target);
+    }
+    let artifacts = [
+        "arbor-shelves",
+        "arbor-shelves-deleted",
+        "arbor-shelves-meta",
+        SHELF_PATCH_DIR,
+        DELETED_SHELF_PATCH_DIR,
+    ];
+    let has_artifacts = artifacts.iter().any(|name| current.join(name).exists());
+    if !migrate_existing {
+        if has_artifacts {
+            return Err(EngineError::GitOperation {
+                message: "shelve: existing Shelves require migration before changing location"
+                    .into(),
+            });
+        }
+        std::fs::create_dir_all(&target).map_err(EngineError::from_gix)?;
+    } else {
+        if has_artifacts {
+            if target.exists() {
+                let mut entries = std::fs::read_dir(&target).map_err(EngineError::from_gix)?;
+                if entries.next().is_some() {
+                    return Err(EngineError::GitOperation {
+                        message: "shelve: migration target must be empty".into(),
+                    });
+                }
+                std::fs::remove_dir(&target).map_err(EngineError::from_gix)?;
+            } else if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(EngineError::from_gix)?;
+            }
+            let tmp = target.with_extension(format!("arbor-shelf-migrate-{}", std::process::id()));
+            if tmp.exists() {
+                std::fs::remove_dir_all(&tmp).map_err(EngineError::from_gix)?;
+            }
+            std::fs::create_dir_all(&tmp).map_err(EngineError::from_gix)?;
+            for name in artifacts {
+                copy_shelf_artifact(&current.join(name), &tmp.join(name))?;
+                if current.join(name).exists() {
+                    verify_shelf_artifact(&current.join(name), &tmp.join(name))?;
+                }
+            }
+            std::fs::rename(&tmp, &target).map_err(EngineError::from_gix)?;
+        } else {
+            std::fs::create_dir_all(&target).map_err(EngineError::from_gix)?;
+        }
+    }
+    let marker = legacy.join(SHELF_LOCATION_FILE);
+    let tmp_marker = marker.with_extension("tmp");
+    std::fs::write(&tmp_marker, format!("{}\n", target.display()))
+        .map_err(EngineError::from_gix)?;
+    if let Err(error) = std::fs::rename(&tmp_marker, &marker) {
+        let _ = std::fs::remove_file(&tmp_marker);
+        return Err(EngineError::from_gix(error));
+    }
+    Ok(target)
 }
 
 pub(crate) fn shelf_patch_file(

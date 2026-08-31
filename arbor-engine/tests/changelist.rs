@@ -151,3 +151,60 @@ fn changelist_list_for_paths_projects_from_an_existing_status_snapshot() {
     assert_eq!(lists[1].name, "Review");
     assert_eq!(lists[1].paths, vec!["b.txt"]);
 }
+
+#[test]
+fn changelist_metadata_round_trips_and_active_assigns_only_new_paths() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "a1\n", "init");
+    let repo = r.open();
+    r.write("a.txt", "a2\n");
+    // The first snapshot seeds the observation ledger and must not move an
+    // existing change into a newly selected active list.
+    repo.changelist_list().unwrap();
+    repo.changelist_create("Review".into()).unwrap();
+    repo.changelist_activate("Review".into()).unwrap();
+    repo.changelist_set_metadata(
+        "Review".into(),
+        Some("Ready for review".into()),
+        true,
+        Some("task-42".into()),
+    )
+    .unwrap();
+
+    common::commit(&r.path, "b.txt", "b1\n", "add b");
+    r.write("b.txt", "b2\n");
+    let lists = repo.changelist_list().unwrap();
+    assert_eq!(lists[0].paths, vec!["a.txt"]);
+    assert_eq!(lists[1].paths, vec!["b.txt"]);
+
+    let metadata = repo.changelist_metadata().unwrap();
+    let review = metadata.iter().find(|item| item.name == "Review").unwrap();
+    assert_eq!(review.description.as_deref(), Some("Ready for review"));
+    assert!(review.track_context);
+    assert_eq!(review.task_identity.as_deref(), Some("task-42"));
+    assert!(review.is_active);
+
+    let reopened = r.open();
+    let reopened_metadata = reopened.changelist_metadata().unwrap();
+    assert_eq!(reopened_metadata, metadata);
+}
+
+#[test]
+fn changelist_v1_metadata_migrates_without_losing_members() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "a1\n", "init");
+    r.write("a.txt", "a2\n");
+    let repo = r.open();
+    let metadata = r.path.join(".git").join("arbor-changelists");
+    std::fs::write(
+        &metadata,
+        b"ARBOR_CHANGELISTS_V1\nL\t44656661756c74\t1\nL\t5549\t0\nA\t5549\nP\t612e747874\t5549\n",
+    )
+    .unwrap();
+    let lists = repo.changelist_list().unwrap();
+    assert_eq!(lists[1].name, "UI");
+    assert_eq!(lists[1].paths, vec!["a.txt"]);
+    assert!(std::fs::read_to_string(metadata)
+        .unwrap()
+        .starts_with("ARBOR_CHANGELISTS_V2\n"));
+}

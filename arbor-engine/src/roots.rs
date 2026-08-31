@@ -335,6 +335,15 @@ pub struct RootProtectedBranchPatterns {
     pub patterns: Vec<String>,
 }
 
+/// Push target selected for one Git root. The source is always that root's
+/// current branch; the remote and target branch are independently editable.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct MultiRootPushTarget {
+    pub root_path: String,
+    pub remote: String,
+    pub target_branch: String,
+}
+
 /// The fetch-only first phase of Update Project. IntelliJ fetches all update
 /// roots before deciding whether a rebase would replay a non-empty merge
 /// commit; keeping the fetched paths lets the integration phase reuse those
@@ -2461,6 +2470,7 @@ pub fn run_multi_root_push_with_options(
     run_multi_root_push_with_force_options_internal(
         scan_root,
         selected_root_paths,
+        None,
         tag_mode,
         skip_hooks,
         false,
@@ -2489,6 +2499,42 @@ pub fn run_multi_root_push_with_force_options(
     run_multi_root_push_with_force_options_internal(
         scan_root,
         selected_root_paths,
+        None,
+        tag_mode,
+        skip_hooks,
+        force,
+        force_with_lease,
+        protected_branch_patterns,
+        broker,
+        cancel,
+    )
+}
+
+/// Execute project-level Push with one explicit remote/target per root.
+/// Targets are root-qualified so equal branch names in independent
+/// repositories cannot accidentally share a destination.
+#[uniffi::export]
+pub fn run_multi_root_push_with_targets(
+    scan_root: String,
+    targets: Vec<MultiRootPushTarget>,
+    tag_mode: Option<crate::remote::PushTagMode>,
+    skip_hooks: bool,
+    force: bool,
+    force_with_lease: bool,
+    protected_branch_patterns: Vec<RootProtectedBranchPatterns>,
+    broker: Arc<crate::auth::CredentialBroker>,
+    cancel: Arc<crate::gitprocess::GitCancelHandle>,
+) -> Result<Vec<RootOperationResult>, EngineError> {
+    let selected_root_paths = Some(
+        targets
+            .iter()
+            .map(|target| target.root_path.clone())
+            .collect(),
+    );
+    run_multi_root_push_with_force_options_internal(
+        scan_root,
+        selected_root_paths,
+        Some(&targets),
         tag_mode,
         skip_hooks,
         force,
@@ -2502,6 +2548,7 @@ pub fn run_multi_root_push_with_force_options(
 fn run_multi_root_push_with_force_options_internal(
     scan_root: String,
     selected_root_paths: Option<Vec<String>>,
+    explicit_targets: Option<&[MultiRootPushTarget]>,
     tag_mode: Option<crate::remote::PushTagMode>,
     skip_hooks: bool,
     force: bool,
@@ -2531,6 +2578,12 @@ fn run_multi_root_push_with_force_options_internal(
             skip_hooks,
             force,
             force_with_lease,
+            explicit_targets.and_then(|targets| {
+                targets.iter().find(|target| {
+                    target.root_path == root.path
+                        || canonical_root_path(&target.root_path) == canonical_root_path(&root.path)
+                })
+            }),
             root_protected_branch_patterns(root.path.as_str(), &protected_branch_patterns),
             &broker,
             &cancel,
@@ -2567,6 +2620,13 @@ fn root_protected_branch_patterns<'a>(
         .unwrap_or(&[])
 }
 
+fn canonical_root_path(path: &str) -> String {
+    std::fs::canonicalize(path)
+        .unwrap_or_else(|_| PathBuf::from(path))
+        .to_string_lossy()
+        .into_owned()
+}
+
 fn run_single_multi_root_push(
     root: &GitRootInfo,
     roots: &[GitRootInfo],
@@ -2575,6 +2635,7 @@ fn run_single_multi_root_push(
     skip_hooks: bool,
     force: bool,
     force_with_lease: bool,
+    explicit_target: Option<&MultiRootPushTarget>,
     protected_branch_patterns: &[String],
     broker: &Arc<crate::auth::CredentialBroker>,
     cancel: &Arc<crate::gitprocess::GitCancelHandle>,
@@ -2600,31 +2661,60 @@ fn run_single_multi_root_push(
     let Some(current_branch) = current_branch else {
         return root_skipped_result(root, "detached HEAD");
     };
-    if force && protected_branch_matches(&current_branch, protected_branch_patterns) {
-        return root_failure_result(
-            root,
-            format!("force push blocked: {current_branch} is protected by Git settings"),
-        );
-    }
-    match repo.remote_list() {
+    let remotes = match repo.remote_list() {
         Ok(remotes) if remotes.is_empty() => {
             return root_skipped_result(root, "no configured remote")
         }
-        Ok(_) => {}
+        Ok(remotes) => remotes,
         Err(error) => return root_failure_result(root, error.to_string()),
+    };
+    let (remote_name, target_branch) = if let Some(target) = explicit_target {
+        let remote = target.remote.trim();
+        let branch = target.target_branch.trim();
+        if remote.is_empty() || branch.is_empty() {
+            return root_failure_result(
+                root,
+                "push target remote and branch must not be empty".to_string(),
+            );
+        }
+        if !remotes.iter().any(|configured| configured.name == remote) {
+            return root_failure_result(root, format!("remote does not exist: {remote}"));
+        }
+        (Some(remote.to_string()), branch.to_string())
+    } else {
+        (None, current_branch.clone())
+    };
+    if force && protected_branch_matches(&target_branch, protected_branch_patterns) {
+        return root_failure_result(
+            root,
+            format!("force push blocked: {target_branch} is protected by Git settings"),
+        );
     }
-
-    match repo.push_with_options_and_auth_and_cancel(
-        None,
-        current_branch,
-        force,
-        force && force_with_lease,
-        false,
-        tag_mode,
-        skip_hooks,
-        Arc::clone(broker),
-        Arc::clone(cancel),
-    ) {
+    let push_result = if explicit_target.is_some() && target_branch != current_branch {
+        repo.push_refspec_with_options_and_auth_and_cancel(
+            remote_name.unwrap_or_default(),
+            format!("{current_branch}:refs/heads/{target_branch}"),
+            force,
+            force && force_with_lease,
+            tag_mode,
+            skip_hooks,
+            Arc::clone(broker),
+            Arc::clone(cancel),
+        )
+    } else {
+        repo.push_with_options_and_auth_and_cancel(
+            remote_name,
+            current_branch,
+            force,
+            force && force_with_lease,
+            false,
+            tag_mode,
+            skip_hooks,
+            Arc::clone(broker),
+            Arc::clone(cancel),
+        )
+    };
+    match push_result {
         Ok(()) => root_success_result(root, format!("pushed {}", root.display_name)),
         Err(EngineError::Cancelled) => root_skipped_result(root, "cancelled during push"),
         Err(error) => root_failure_result(root, error.to_string()),

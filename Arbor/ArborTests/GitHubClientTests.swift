@@ -108,6 +108,57 @@ final class GitHubClientTests: XCTestCase {
         XCTAssertEqual(comment.id, 99)
     }
 
+    func testDetailLoadsTimelineRevisionsAndCommitScopedFiles() async throws {
+        let repository = HostingProvider.parse(remoteURL: "https://github.com/acme/arbor.git")!
+        let store = KeychainStore(service: "com.arbor.tests.\(UUID().uuidString)")
+        try store.setToken("detail-token", forOwner: repository.owner)
+        defer { try? store.deleteToken(forOwner: repository.owner) }
+
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            ))
+            switch path {
+            case "/repos/acme/arbor/pulls/7":
+                return (response, Data("""
+                {"number":7,"title":"Feature","state":"open","head":{"ref":"feature","sha":"headsha"},"base":{"ref":"main","sha":"basesha"},"assignees":[{"login":"owner"}],"requested_reviewers":[{"login":"reviewer"}],"labels":[{"name":"ready"}]}
+                """.utf8))
+            case "/repos/acme/arbor/pulls/7/commits":
+                return (response, Data("""
+                [{"sha":"commitsha","commit":{"message":"Change","author":{"date":"2026-08-30T00:00:00Z"}}}]
+                """.utf8))
+            case "/repos/acme/arbor/pulls/7/files":
+                return (response, Data("[{\"filename\":\"all.swift\",\"status\":\"modified\"}]".utf8))
+            case "/repos/acme/arbor/pulls/7/comments":
+                return (response, Data("[{\"id\":1,\"body\":\"inline\",\"path\":\"Sources/App.swift\",\"line\":12,\"commit_id\":\"headsha\",\"user\":{\"login\":\"reviewer\"}}]".utf8))
+            case "/repos/acme/arbor/issues/7/comments":
+                return (response, Data("[{\"id\":2,\"body\":\"general\",\"user\":{\"login\":\"author\"}}]".utf8))
+            case "/repos/acme/arbor/pulls/7/reviews", "/repos/acme/arbor/issues/7/events":
+                return (response, Data("[]".utf8))
+            case "/repos/acme/arbor/commits/commitsha":
+                return (response, Data("{\"files\":[{\"filename\":\"commit.swift\",\"status\":\"added\"}]}".utf8))
+            default:
+                throw NSError(domain: "GitHubClientTests", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "Unexpected path \(path)"
+                ])
+            }
+        }
+
+        let client = GitHubClient(session: makeMockSession(), keychain: store)
+        let detail = try await client.loadGitHubChangeRequestDetail(for: repository, number: 7)
+        XCTAssertEqual(detail.baseRevision, "basesha")
+        XCTAssertEqual(detail.headRevision, "headsha")
+        XCTAssertEqual(detail.pullRequest.assignees?.compactMap(\.login), ["owner"])
+        XCTAssertEqual(detail.pullRequest.reviewers?.compactMap(\.login), ["reviewer"])
+        XCTAssertEqual(detail.pullRequest.labels, ["ready"])
+        XCTAssertEqual(detail.timeline.count, 2)
+        XCTAssertTrue(detail.timeline.contains { $0.path == "Sources/App.swift" && $0.line == 12 })
+
+        let commitFiles = try await client.loadGitHubCommitFiles(for: repository, commitID: "commitsha")
+        XCTAssertEqual(commitFiles.map(\.path), ["commit.swift"])
+    }
+
     func testUnauthorizedResponseIsTyped() async throws {
         let repository = HostingProvider.parse(remoteURL: "https://github.com/acme/arbor.git")!
         let store = KeychainStore(service: "com.arbor.tests.\(UUID().uuidString)")

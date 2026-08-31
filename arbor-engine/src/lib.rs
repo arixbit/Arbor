@@ -41,12 +41,15 @@ pub use branch::{
     BranchCompare, BranchCompareEntry, BranchDeleteCommit, BranchDeletePreview, BranchInfo,
     RemoteBranchInfo, RemoteTagInfo, SyncStatus, TagInfo, TagKind,
 };
-pub use changelist::ChangeListInfo;
+pub use changelist::{ChangeListInfo, ChangeListMetadata};
 pub use checks::{
     CheckOutcome, CommitCheckKind, CommitCheckResult, CredentialHelperInfo, SigningConfig,
     SshAgentDiagnostics, SshAgentState,
 };
-pub use conflict::{ConflictWorkspace, ConflictWorkspaceFile, FilePick};
+pub use conflict::{
+    ConflictBatchAction, ConflictBatchPreview, ConflictBatchResult, ConflictWorkspace,
+    ConflictWorkspaceFile, FilePick,
+};
 pub use diff::{DiffHunk, DiffLine, DiffLineKind, DiffMode, DiffSettings, FileDiff, WordSpan};
 pub use error::{EngineError, PushFailureKind};
 pub use gitprocess::{
@@ -71,15 +74,15 @@ pub use remote::{
     RebasePauseReason, RemoteInfo,
 };
 pub use repo::{
-    clone_repository, initialize_repository, open_repository, workspace_status,
-    CherryPickEmptyPolicy, DirEntry, ExternalMergeToolResult, ExternalMergeToolSettings,
-    FileContent, ForcePushedBranchUpdateOutcome, GitCommandResult, GitContentTransformMode,
-    GitIdentity, LocalChangesRestoreInfo, LocalChangesSavePolicy, PatchApplyMemberResult,
-    PatchApplyResult, PatchApplyStatus, Repository, ResetMode, ResetRecoveryInfo,
-    ResetRecoveryTarget, RevertMainline, RevisionEntry, SshAuthMethod, SshConnectionSettings,
-    SshHostKeyPolicy, StagingFileVersions, StagingVersionContent, SubmoduleAddUndoTarget,
-    SubmoduleChange, SubmoduleInfo, SubmoduleRemoveUndoTarget, SubmoduleState, WorkspaceEntry,
-    WorktreeInfo,
+    clone_repository, clone_repository_with_auth_options, clone_repository_with_options,
+    initialize_repository, open_repository, workspace_status, CherryPickEmptyPolicy, DirEntry,
+    ExternalMergeToolResult, ExternalMergeToolSettings, FileContent,
+    ForcePushedBranchUpdateOutcome, GitCommandResult, GitContentTransformMode, GitIdentity,
+    LocalChangesRestoreInfo, LocalChangesSavePolicy, PatchApplyMemberResult, PatchApplyResult,
+    PatchApplyStatus, Repository, ResetMode, ResetRecoveryInfo, ResetRecoveryTarget,
+    RevertMainline, RevisionEntry, SshAuthMethod, SshConnectionSettings, SshHostKeyPolicy,
+    StagingFileVersions, StagingVersionContent, SubmoduleAddUndoTarget, SubmoduleChange,
+    SubmoduleInfo, SubmoduleRemoveUndoTarget, SubmoduleState, WorkspaceEntry, WorktreeInfo,
 };
 pub use roots::{
     discover_git_roots, keep_multi_root_reset_recovery, list_multi_root_branches,
@@ -96,8 +99,8 @@ pub use roots::{
     run_multi_root_push, run_multi_root_push_recovery, run_multi_root_push_recovery_with_options,
     run_multi_root_push_recovery_with_options_and_fetch_tags,
     run_multi_root_push_with_force_options, run_multi_root_push_with_options,
-    run_multi_root_rebase, run_multi_root_rebase_with_cancel, run_multi_root_reset_with_policy,
-    run_multi_root_reset_with_targets, run_multi_root_update,
+    run_multi_root_push_with_targets, run_multi_root_rebase, run_multi_root_rebase_with_cancel,
+    run_multi_root_reset_with_policy, run_multi_root_reset_with_targets, run_multi_root_update,
     run_multi_root_update_selected_with_policy,
     run_multi_root_update_selected_with_policy_and_options, run_multi_root_update_with_policy,
     run_multi_root_update_with_policy_and_options, run_root_update_for_current_branch_with_options,
@@ -106,8 +109,9 @@ pub use roots::{
     MultiRootBranchCreateTarget, MultiRootBranchResult, MultiRootBranchTarget,
     MultiRootCheckoutMode, MultiRootCommitCheck, MultiRootCommitOptions, MultiRootCommitSelection,
     MultiRootForcePushedBranchUpdateResult, MultiRootMergeResult, MultiRootOperation,
-    MultiRootRebaseResult, MultiRootRebaseSpec, MultiRootResetResult, MultiRootResetRollbackTarget,
-    MultiRootResetTarget, RootOperationResult, RootProtectedBranchPatterns,
+    MultiRootPushTarget, MultiRootRebaseResult, MultiRootRebaseSpec, MultiRootResetResult,
+    MultiRootResetRollbackTarget, MultiRootResetTarget, RootOperationResult,
+    RootProtectedBranchPatterns,
 };
 pub use shelve::{
     ShelveInfo, ShelvePatchSelection, ShelveRestoreHunkResolution, ShelveRestoreInfo,

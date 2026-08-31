@@ -427,6 +427,52 @@ final class HostingProviderTests: XCTestCase {
         XCTAssertEqual(comment.path, "Sources/App.swift")
     }
 
+    func testGitLabDetailLoadsApprovalStateAndCommitScopedFiles() async throws {
+        let repository = try XCTUnwrap(
+            HostingProvider.parse(remoteURL: "https://gitlab.com/acme/arbor.git")
+        )
+        let store = KeychainStore(service: "com.arbor.tests.\(UUID().uuidString)")
+        try store.setToken("gitlab-token", for: repository)
+        defer { try? store.deleteToken(for: repository) }
+
+        HostingMockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            ))
+            switch path {
+            case "/api/v4/projects/acme/arbor/merge_requests/7":
+                return (response, Data("""
+                {"iid":7,"title":"Feature","state":"opened","source_branch":"feature","target_branch":"main","diff_refs":{"base_sha":"base","start_sha":"start","head_sha":"head"}}
+                """.utf8))
+            case "/api/v4/projects/acme/arbor/merge_requests/7/commits":
+                return (response, Data("[{\"id\":\"commitsha\",\"title\":\"Change\"}]".utf8))
+            case "/api/v4/projects/acme/arbor/merge_requests/7/changes":
+                return (response, Data("{\"changes\":[{\"new_path\":\"all.swift\",\"diff\":\"patch\"}]}".utf8))
+            case "/api/v4/projects/acme/arbor/merge_requests/7/discussions":
+                return (response, Data("[]".utf8))
+            case "/api/v4/projects/acme/arbor/merge_requests/7/approvals":
+                return (response, Data("{\"approved\":true}".utf8))
+            case "/api/v4/projects/acme/arbor/repository/commits/commitsha/diff":
+                return (response, Data("[{\"new_path\":\"commit.swift\",\"new_file\":true,\"diff\":\"commit patch\"}]".utf8))
+            default:
+                throw NSError(domain: "HostingProviderTests", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "Unexpected GitLab path \(path)"
+                ])
+            }
+        }
+
+        let client = GitLabClient(session: makeHostingMockSession(), keychain: store)
+        let detail = try await client.loadGitLabChangeRequestDetail(for: repository, iid: 7)
+        XCTAssertEqual(detail.baseRevision, "base")
+        XCTAssertEqual(detail.headRevision, "head")
+        XCTAssertFalse(detail.capabilities.canApprove)
+        XCTAssertTrue(detail.capabilities.canRevokeApproval)
+
+        let files = try await client.loadGitLabCommitFiles(for: repository, commitID: "commitsha")
+        XCTAssertEqual(files.map(\.path), ["commit.swift"])
+    }
+
     func testBitbucketClientUsesBasicAuthAndDecodesPage() async throws {
         let repository = try XCTUnwrap(
             HostingProvider.parse(remoteURL: "https://bitbucket.org/acme/arbor.git")

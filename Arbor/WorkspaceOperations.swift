@@ -3817,22 +3817,36 @@ func cloneRepositoryFromDialog() {
             : lastComponent
     }
     guard !url.isEmpty, !parent.isEmpty, !directoryName.isEmpty else { return }
+    let requestedDepth: UInt32?
+    if cloneShallow {
+        guard let parsedDepth = UInt32(cloneDepth.trimmingCharacters(in: .whitespacesAndNewlines)),
+              parsedDepth > 0 else {
+            feedbackCenter.error("Clone Git repository failed", detail: "Shallow clone depth must be a positive integer.", nextStep: "Enter a depth greater than zero and retry.")
+            return
+        }
+        requestedDepth = parsedDepth
+    } else {
+        requestedDepth = nil
+    }
     let destination = URL(fileURLWithPath: parent).appendingPathComponent(directoryName).path
     let recursive = cloneRecursiveSubmodules
     let broker = credentialAuth.broker
     beginFeedbackOperation("Clone Git repository")
     Task.detached(priority: .userInitiated) {
         do {
-            let clonedPath = try cloneRepositoryWithAuth(
+            let clonedPath = try cloneRepositoryWithAuthOptions(
                 url: url,
                 destination: destination,
                 recursiveSubmodules: recursive,
-                broker: broker
+                broker: broker,
+                depth: requestedDepth
             )
             await MainActor.run {
                 self.showCloneDialog = false
                 self.cloneURL = ""
                 self.cloneDirectoryName = ""
+                self.cloneShallow = false
+                self.cloneDepth = "1"
                 self.feedbackCenter.success("Git repository cloned", detail: clonedPath)
                 self.path = clonedPath
             }
@@ -14655,6 +14669,95 @@ func setShelfRoot(_ rootPath: String) {
     }
 }
 
+/// Load the active repository's Shelf location before presenting the settings
+/// sheet. The location is repository-scoped, so a secondary Git root must be
+/// resolved through the same context used by every other Shelf mutation.
+func presentShelfLocationSettings() {
+    guard let rootPath = activeShelfRootPath,
+          let shelfRepo = activeShelfRepository,
+          canMutateShelfMetadata else { return }
+    do {
+        let location = try shelfRepo.shelveLocation()
+        shelfLocationCurrent = location
+        shelfLocationValue = location
+        shelfLocationMigrateExisting = true
+        showShelfLocationDialog = true
+    } catch {
+        feedbackCenter.error(
+            "Load Shelf location failed",
+            detail: errorMessage(error),
+            notificationID: shelfMetadataNotificationID(operation: "location", rootPath: rootPath)
+        )
+    }
+}
+
+/// Switch the active repository to a custom Shelf directory. The Rust engine
+/// performs copy-then-marker migration and leaves Git refs in place; this
+/// method only refreshes the root snapshot after that transaction succeeds.
+func setShelfLocation(
+    _ location: String,
+    migrateExisting: Bool,
+    rootPath: String?
+) {
+    guard let context = shelfMutationContext(
+        rootPath: rootPath,
+        activeRootPath: activeShelfRootPath,
+        primaryRootPath: primaryShelfRootPath,
+        primaryRepository: repo,
+        secondaryRepository: shelfRootRepository
+    ) else { return }
+    let shelfRepo = context.repository
+    let resolvedRootPath = context.rootPath
+    let requested = location.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !requested.isEmpty else { return }
+    beginFeedbackOperation("Change Shelf location")
+    Task.detached(priority: .userInitiated) {
+        do {
+            let resolved = try shelfRepo.shelveSetLocation(
+                location: requested,
+                migrateExisting: migrateExisting
+            )
+            let nextShelves = try shelfRepo.shelveList()
+            let nextDeletedShelves = (try? shelfRepo.shelveDeletedList()) ?? []
+            let nextChangeLists = (try? shelfRepo.changelistList()) ?? []
+            await MainActor.run {
+                guard shelfActionRootMatchesCurrentRoot(
+                    requestedRootPath: resolvedRootPath,
+                    currentRootPath: self.activeShelfRootPath
+                ) else { return }
+                self.shelfLocationCurrent = resolved
+                self.shelfLocationValue = resolved
+                self.publishShelfSnapshot(
+                    rootPath: resolvedRootPath,
+                    shelves: nextShelves,
+                    deletedShelves: nextDeletedShelves,
+                    changeLists: nextChangeLists
+                )
+                self.feedbackCenter.success(
+                    "Shelf location changed",
+                    detail: resolved,
+                    notificationID: self.shelfMetadataNotificationID(
+                        operation: "location",
+                        rootPath: resolvedRootPath
+                    )
+                )
+            }
+        } catch {
+            await MainActor.run {
+                self.feedbackCenter.error(
+                    "Change Shelf location failed",
+                    detail: errorMessage(error),
+                    nextStep: "Choose an empty directory or retry the migration after checking its permissions.",
+                    notificationID: self.shelfMetadataNotificationID(
+                        operation: "location",
+                        rootPath: resolvedRootPath
+                    )
+                )
+            }
+        }
+    }
+}
+
 /// Change the root scope of an external Git Log window. Root selection is a
 /// query scope, so changing it deliberately clears branch/range filters from
 /// another Log action instead of silently combining incompatible scopes.
@@ -17868,6 +17971,7 @@ func beginMultiRootCommitPush(rootPaths: [String]) {
 
 func runMultiRootPush(
     selectedRootPaths: [String]?,
+    explicitTargets: [MultiRootPushTargetSelection]? = nil,
     tagMode: PushDialogTagMode?,
     skipHooks: Bool,
     force: Bool = false,
@@ -17919,22 +18023,43 @@ func runMultiRootPush(
     )
     Task.detached(priority: .userInitiated) { () async -> Void in
         let result: Result<[RootOperationResult], Error> = Result { () throws -> [RootOperationResult] in
-            try runMultiRootPushWithForceOptions(
-                scanRoot: projectPath,
-                selectedRootPaths: selectedRootPaths,
-                tagMode: tagMode.map { mode in
-                    switch mode {
-                    case .all: PushTagMode.all
-                    case .currentBranch: PushTagMode.follow
-                    }
-                },
-                skipHooks: skipHooks,
-                force: force,
-                forceWithLease: forceWithLease,
-                protectedBranchPatterns: protectedPatternsByRoot,
-                broker: broker,
-                cancel: cancel
-            )
+            let engineTagMode = tagMode.map { mode in
+                switch mode {
+                case .all: PushTagMode.all
+                case .currentBranch: PushTagMode.follow
+                }
+            }
+            if let explicitTargets, !explicitTargets.isEmpty {
+                return try runMultiRootPushWithTargets(
+                    scanRoot: projectPath,
+                    targets: explicitTargets.map {
+                        MultiRootPushTarget(
+                            rootPath: $0.rootPath,
+                            remote: $0.remote,
+                            targetBranch: $0.targetBranch
+                        )
+                    },
+                    tagMode: engineTagMode,
+                    skipHooks: skipHooks,
+                    force: force,
+                    forceWithLease: forceWithLease,
+                    protectedBranchPatterns: protectedPatternsByRoot,
+                    broker: broker,
+                    cancel: cancel
+                )
+            } else {
+                return try runMultiRootPushWithForceOptions(
+                    scanRoot: projectPath,
+                    selectedRootPaths: selectedRootPaths,
+                    tagMode: engineTagMode,
+                    skipHooks: skipHooks,
+                    force: force,
+                    forceWithLease: forceWithLease,
+                    protectedBranchPatterns: protectedPatternsByRoot,
+                    broker: broker,
+                    cancel: cancel
+                )
+            }
         }
         await MainActor.run {
             switch result {
@@ -17948,6 +18073,7 @@ func runMultiRootPush(
                     pendingPushRevisionRanges: pendingPushRevisionRanges,
                     priorViewCommitRanges: priorViewCommitRanges,
                     priorResultRows: priorResultRows,
+                    explicitTargets: explicitTargets,
                     notificationID: notificationID
                 )
             case let .failure(error):
@@ -18006,6 +18132,7 @@ private func finishMultiRootPush(
     pendingPushRevisionRanges: [PersistedLogRevisionRange],
     priorViewCommitRanges: [PersistedLogRevisionRange],
     priorResultRows: [FeedbackResultRow],
+    explicitTargets: [MultiRootPushTargetSelection]?,
     notificationID: String?
 ) {
     if !priorResultRows.isEmpty {
@@ -18059,7 +18186,8 @@ private func finishMultiRootPush(
             force: retryForce,
             forceWithLease: retryForceWithLease,
             viewCommitRanges: viewCommitRanges,
-            resultRows: resultRows
+            resultRows: resultRows,
+            targetSelections: explicitTargets?.filter { retryPaths.contains($0.rootPath) } ?? []
         )
     let nonFastForwardPaths = effectiveResults.filter { result in
         !retryForce && !result.success && pushResultNeedsUpdate(result)
@@ -18499,6 +18627,7 @@ func retryMultiRootPushFailedRoots(
     let resolvedSkipHooks = skipHooks ?? context?.skipHooks ?? false
     let resolvedForce = force ?? context?.force ?? false
     let resolvedForceWithLease = forceWithLease ?? context?.forceWithLease ?? false
+    let resolvedTargets = context?.targetSelections.filter { retryPaths.contains($0.rootPath) } ?? []
     let resolvedViewCommitRanges = priorViewCommitRanges ?? context?.viewCommitRanges ?? []
     let resolvedResultRows = priorResultRows ?? context?.resultRows ?? []
     if let recoveryRebase = resolvedRebase {
@@ -18514,6 +18643,7 @@ func retryMultiRootPushFailedRoots(
     } else {
         runMultiRootPush(
             selectedRootPaths: retryPaths,
+            explicitTargets: resolvedTargets.isEmpty ? nil : resolvedTargets,
             tagMode: resolvedTagMode,
             skipHooks: resolvedSkipHooks,
             force: resolvedForce,
@@ -27885,6 +28015,7 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
             await MainActor.run {
                 self.multiRootPushContext = MultiRootPushContext(
                     rootPath: rootPath,
+                    repo: rootRepo,
                     remotes: remotes,
                     branches: branches,
                     commits: commits,
@@ -31423,18 +31554,48 @@ func createChangeList() {
     let alert = NSAlert()
     alert.messageText = "New Changelist"
     alert.informativeText = "Create an empty local Changes Browser list."
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-    alert.accessoryView = field
+    let nameField = NSTextField(frame: .zero)
+    nameField.placeholderString = "Name"
+    let descriptionField = NSTextField(frame: .zero)
+    descriptionField.placeholderString = "Description (optional)"
+    let activeButton = NSButton(checkboxWithTitle: "Set active", target: nil, action: nil)
+    activeButton.state = .off
+    let contextLabel = NSTextField(labelWithString: "Track Context is unavailable without a task provider.")
+    contextLabel.textColor = .secondaryLabelColor
+    contextLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+    let stack = NSStackView(views: [nameField, descriptionField, activeButton, contextLabel])
+    stack.orientation = .vertical
+    stack.alignment = .leading
+    stack.spacing = 8
+    stack.setCustomSpacing(2, after: descriptionField)
+    nameField.translatesAutoresizingMaskIntoConstraints = false
+    descriptionField.translatesAutoresizingMaskIntoConstraints = false
+    nameField.widthAnchor.constraint(equalToConstant: 320).isActive = true
+    descriptionField.widthAnchor.constraint(equalToConstant: 320).isActive = true
+    alert.accessoryView = stack
     alert.addButton(withTitle: "Create")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else { return }
-    let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else { return }
+    let description = descriptionField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    let shouldActivate = activeButton.state == .on
 
     beginFeedbackOperation("Create changelist")
     Task.detached(priority: .userInitiated) {
         do {
             try repo.changelistCreate(name: name)
+            if !description.isEmpty {
+                try repo.changelistSetMetadata(
+                    name: name,
+                    description: description,
+                    trackContext: false,
+                    taskIdentity: nil
+                )
+            }
+            if shouldActivate {
+                try repo.changelistActivate(name: name)
+            }
             let lists = try repo.changelistList()
             await MainActor.run {
                 guard self.projectRepo === repo else { return }
@@ -31529,9 +31690,33 @@ func activateChangeList(_ name: String) {
 
 func movePathsToChangeList(_ paths: [String], _ targetName: String) {
     guard let repo, !paths.isEmpty else { return }
+    let commentField = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+    commentField.placeholderString = "Comment (optional)"
+    let alert = NSAlert()
+    alert.messageText = "Move to Changelist"
+    alert.informativeText = "Move \(paths.count) change(s) to \"\(targetName)\"."
+    alert.accessoryView = commentField
+    alert.addButton(withTitle: "Move")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    let comment = commentField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
     Task.detached(priority: .userInitiated) {
         do {
             try repo.changelistMovePaths(paths: paths, targetName: targetName)
+            if !comment.isEmpty {
+                let metadata = try repo.changelistMetadata()
+                    .first(where: { $0.name == targetName })
+                let existing = metadata?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let description = existing.isEmpty
+                    ? comment
+                    : (existing == comment ? existing : "\(existing)\n\n\(comment)")
+                try repo.changelistSetMetadata(
+                    name: targetName,
+                    description: description,
+                    trackContext: metadata?.trackContext ?? false,
+                    taskIdentity: metadata?.taskIdentity
+                )
+            }
             let lists = try repo.changelistList()
             await MainActor.run {
                 guard self.projectRepo === repo else { return }
@@ -31993,6 +32178,52 @@ nonisolated private func automaticUnshelveTarget(
     guard !name.isEmpty else { return nil }
     try repo.changelistEnsure(name: name)
     return name
+}
+
+/// Keep the comment entered in the Unshelve dialog with the destination
+/// Changelist. Changelist metadata has no separate comment column, so append
+/// the note to its description while preserving existing context/task flags.
+func recordUnshelveComment(
+    targetName: String,
+    comment: String,
+    rootPath: String?
+) {
+    let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedComment.isEmpty,
+          let context = shelfMutationContext(
+              rootPath: rootPath,
+              activeRootPath: activeShelfRootPath,
+              primaryRootPath: primaryShelfRootPath,
+              primaryRepository: repo,
+              secondaryRepository: shelfRootRepository
+          ) else { return }
+    let shelfRepo = context.repository
+    let resolvedTarget = targetName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !resolvedTarget.isEmpty else { return }
+    Task.detached(priority: .utility) {
+        do {
+            let metadata = try shelfRepo.changelistMetadata()
+                .first(where: { $0.name == resolvedTarget })
+            let existing = metadata?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let description = existing.isEmpty
+                ? normalizedComment
+                : (existing == normalizedComment ? existing : "\(existing)\n\n\(normalizedComment)")
+            try shelfRepo.changelistSetMetadata(
+                name: resolvedTarget,
+                description: description,
+                trackContext: metadata?.trackContext ?? false,
+                taskIdentity: metadata?.taskIdentity
+            )
+        } catch {
+            await MainActor.run {
+                self.feedbackCenter.warning(
+                    "Save Unshelve comment failed",
+                    detail: errorMessage(error),
+                    nextStep: "The Shelf apply itself is preserved; retry after refreshing the Changelist."
+                )
+            }
+        }
+    }
 }
 
 nonisolated private func assignUnshelvedPaths(

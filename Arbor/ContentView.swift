@@ -779,6 +779,7 @@ struct LogRootRevisionRange: Equatable, Hashable, Sendable {
 struct MultiRootPushContext: Identifiable {
     let id = UUID()
     let rootPath: String
+    let repo: Repository
     let remotes: [RemoteInfo]
     let branches: [BranchInfo]
     let commits: [CommitInfo]
@@ -807,6 +808,7 @@ struct MultiRootPushRetryContext {
     let forceWithLease: Bool
     let viewCommitRanges: [PersistedLogRevisionRange]
     let resultRows: [FeedbackResultRow]
+    let targetSelections: [MultiRootPushTargetSelection]
 
     init(
         rootPaths: [String],
@@ -817,7 +819,8 @@ struct MultiRootPushRetryContext {
         force: Bool = false,
         forceWithLease: Bool = false,
         viewCommitRanges: [PersistedLogRevisionRange] = [],
-        resultRows: [FeedbackResultRow] = []
+        resultRows: [FeedbackResultRow] = [],
+        targetSelections: [MultiRootPushTargetSelection] = []
     ) {
         self.rootPaths = rootPaths
         self.recoveryRebase = recoveryRebase
@@ -828,6 +831,7 @@ struct MultiRootPushRetryContext {
         self.forceWithLease = forceWithLease
         self.viewCommitRanges = viewCommitRanges
         self.resultRows = resultRows
+        self.targetSelections = targetSelections
     }
 }
 
@@ -2218,6 +2222,8 @@ struct ContentView: View {
     @State var cloneURL = ""
     @State var cloneParentDirectory = FileManager.default.homeDirectoryForCurrentUser.path
     @State var cloneDirectoryName = ""
+    @State var cloneShallow = false
+    @State var cloneDepth = "1"
     // IntelliJ's git.clone.recurse.submodules advanced setting defaults to
     // true; persist the same preference instead of resetting it per dialog.
     @AppStorage(GitCloneSettings.recurseSubmodulesKey)
@@ -2755,6 +2761,7 @@ struct ContentView: View {
     @State var pendingPullStashMessage: String?
     @State var pendingPullShelfName: String?
     @State var showHostingSettings = false
+    @State var showHostingHub = false
     @State var showHostingAuthPrompt = false
     @State var reviewCommentCommit: CommitInfo?
     @State var reviewCommentRepository: HostingRepository?
@@ -2787,6 +2794,10 @@ struct ContentView: View {
     @State var showRemoteTagsDialog = false
     @State var showMultiRootRemoteTagsDialog = false
     @State var showShelveDialog = false
+    @State var showShelfLocationDialog = false
+    @State var shelfLocationValue = ""
+    @State var shelfLocationCurrent = ""
+    @State var shelfLocationMigrateExisting = true
     @State var pendingApplyPatch: RebasedApplyPatchRequest?
     @State var patchExportRequest: PatchExportRequest?
     @State var pendingIgnoreFileCreation: IgnoreFileCreationRequest?
@@ -3994,6 +4005,7 @@ struct ContentView: View {
                 },
                 onPush: { beginPushDialog() },
                 onFetch: { doFetch(nil) },
+                onHosting: { showHostingHub = true },
                 isShallowRepository: isShallowRepository,
                 hasCurrentBranch: branches.contains { $0.isCurrent },
                 hasConflicts: entries.contains {
@@ -4137,6 +4149,46 @@ struct ContentView: View {
                     .padding(24)
             }
         }
+        .sheet(isPresented: $showHostingHub) {
+            HostingHubView(
+                remoteURL: remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil })?.url,
+                showSettings: $showHostingSettings,
+                onCheckoutIncomingBranch: { detail in
+                    guard let projectPath,
+                          let branch = detail.pullRequest.headBranch,
+                          !branch.isEmpty,
+                          let remote = remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil }) else {
+                        feedbackCenter.error(
+                            "Checkout incoming branch failed",
+                            detail: "The hosting change request is not connected to an available Git root or remote."
+                        )
+                        return
+                    }
+                    showHostingHub = false
+                    checkoutBranchInRoot(
+                        rootPath: projectPath,
+                        reference: "\(remote.name)/\(branch)",
+                        isRemote: true
+                    )
+                },
+                onShowInGitLog: { detail in
+                    guard let projectPath,
+                          let revision = detail.headRevision,
+                          !revision.isEmpty else {
+                        feedbackCenter.error(
+                            "Open in Git Log failed",
+                            detail: "The hosting provider did not return a head revision."
+                        )
+                        return
+                    }
+                    showHostingHub = false
+                    toolWindowMode = .log
+                    toolWindowExpanded = true
+                    navigateLogToRevision(rootPath: projectPath, revision: revision)
+                }
+            )
+            .frame(minWidth: 980, minHeight: 620)
+        }
         .sheet(isPresented: $showReviewComment) {
             if let commit = reviewCommentCommit,
                let repository = reviewCommentRepository ?? hostingRepository {
@@ -4160,12 +4212,16 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showMultiRootPushOptions) {
             MultiRootPushOptionsDialog(
+                snapshots: multiRootBranchSnapshots.filter { snapshot in
+                    guard let selected = multiRootPushOptionsRootPaths else { return true }
+                    return selected.contains(snapshot.rootPath)
+                },
                 onCancel: {
                     showMultiRootPushOptions = false
                     multiRootPushOptionsRootPaths = nil
                     multiRootPushOptionsFromCommit = false
                 },
-                onPush: { tagMode, skipHooks, force, forceWithLease in
+                onPush: { targets, tagMode, skipHooks, force, forceWithLease in
                     let rootPaths = multiRootPushOptionsRootPaths
                     let fromCommit = multiRootPushOptionsFromCommit
                     showMultiRootPushOptions = false
@@ -4173,6 +4229,7 @@ struct ContentView: View {
                     multiRootPushOptionsFromCommit = false
                     runMultiRootPush(
                         selectedRootPaths: rootPaths,
+                        explicitTargets: targets,
                         tagMode: tagMode,
                         skipHooks: skipHooks,
                         force: force,
@@ -4198,6 +4255,7 @@ struct ContentView: View {
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
                 defaultRefspec: pushDialogRefspec,
                 defaultPushTagMode: GitPushTagSettings.projectTagMode(for: projectPath),
+                defaultRunHooks: true,
                 onCancel: {
                     showPushDialog = false
                     pushDialogRefspec = nil
@@ -4239,7 +4297,8 @@ struct ContentView: View {
                 onConfigureSSH: {
                     showPushDialog = false
                     loadGitSSHSettings()
-                }
+                },
+                repo: repo
             )
         }
         .sheet(item: $multiRootPushContext) { context in
@@ -4254,6 +4313,7 @@ struct ContentView: View {
                 protectedBranchPatterns: context.protectedBranchPatterns,
                 defaultRefspec: nil,
                 defaultPushTagMode: context.defaultPushTagMode,
+                defaultRunHooks: true,
                 onCancel: {
                     multiRootPushContext = nil
                 },
@@ -4279,7 +4339,8 @@ struct ContentView: View {
                 },
                 onConfigureSSH: {},
                 showsConfigurationActions: true,
-                showsSSHConfigurationAction: false
+                showsSSHConfigurationAction: false,
+                repo: context.repo
             )
         }
         .sheet(item: $multiRootRemoteConfigContext) { context in
@@ -4949,6 +5010,8 @@ struct ContentView: View {
                 parentDirectory: $cloneParentDirectory,
                 directoryName: $cloneDirectoryName,
                 recursiveSubmodules: $cloneRecursiveSubmodules,
+                shallowClone: $cloneShallow,
+                depth: $cloneDepth,
                 onChooseParent: chooseCloneParentDirectory,
                 onClone: cloneRepositoryFromDialog,
                 onCancel: { showCloneDialog = false }
@@ -4976,12 +5039,29 @@ struct ContentView: View {
         .sheet(isPresented: $showShelveDialog) {
             RebasedShelveDialog(
                 name: $shelveName,
+                repo: repo,
                 entries: entries,
                 onShelve: { paths in
                     showShelveDialog = false
                     doShelve(paths: paths)
                 },
                 onCancel: { showShelveDialog = false }
+            )
+        }
+        .sheet(isPresented: $showShelfLocationDialog) {
+            RebasedShelfLocationDialog(
+                location: $shelfLocationValue,
+                migrateExisting: $shelfLocationMigrateExisting,
+                currentLocation: shelfLocationCurrent,
+                onSave: {
+                    showShelfLocationDialog = false
+                    setShelfLocation(
+                        shelfLocationValue,
+                        migrateExisting: shelfLocationMigrateExisting,
+                        rootPath: activeShelfRootPath
+                    )
+                },
+                onCancel: { showShelfLocationDialog = false }
             )
         }
         .sheet(item: $pendingApplyPatch) { request in
@@ -4994,7 +5074,7 @@ struct ContentView: View {
                     repo: repo,
                     patchText: request.patch,
                     removeAppliedFilesFromShelf: .constant(false),
-                    onUnshelve: { _, _, _, _, _, _ in },
+                    onUnshelve: { _, _, _, _, _, _, _ in },
                     onApplyPatch: { paths, selections, targetName, basePath, pathStrip in
                         pendingApplyPatch = nil
                         applyImportedPatch(
@@ -5346,6 +5426,7 @@ struct ContentView: View {
                 onOperationAbort: doOperationAbort,
                 onOpenConflictResolver: openActiveOperationConflictResolver,
                 onShelve: { showShelveDialog = true },
+                onShelfSettings: presentShelfLocationSettings,
                 onShelvePaths: shelveDraggedPaths,
                 onImportShelve: { rootPath in
                     importShelvePatches(rootPath: rootPath)
@@ -5523,6 +5604,13 @@ struct ContentView: View {
                         removeApplied: removeApplied,
                         basePath: basePath,
                         pathStrip: pathStrip,
+                        rootPath: activeShelfRootPath
+                    )
+                },
+                onRecordUnshelveComment: { targetName, comment in
+                    recordUnshelveComment(
+                        targetName: targetName,
+                        comment: comment,
                         rootPath: activeShelfRootPath
                     )
                 },
@@ -8112,6 +8200,7 @@ struct ConflictDetailView: View {
     }
 
     @State private var conflict: ConflictFile?
+    @State private var conflictBatchPreview: ConflictBatchPreview?
     @State private var conflictIsBinary = false
     @State private var conflictError: String?
     @State private var feedback: String?
@@ -8326,6 +8415,19 @@ struct ConflictDetailView: View {
             HStack(spacing: 8) {
                 Button("全部接受本地") { acceptAllBlocks(.ours) }
                 Button("全部接受远程") { acceptAllBlocks(.theirs) }
+                Button("Resolve Simple") { applyConflictBatch(.resolveSimple) }
+                    .help("Resolve all conflict blocks whose two sides are identical")
+                    .disabled(saving || bridge.blocks.isEmpty)
+                Button("Apply Left Non-conflicts") {
+                    applyConflictBatch(.applyOursNonConflicting)
+                }
+                    .help("Apply only non-conflicting changes from the local side")
+                    .disabled(saving || bridge.blocks.isEmpty)
+                Button("Apply Right Non-conflicts") {
+                    applyConflictBatch(.applyTheirsNonConflicting)
+                }
+                    .help("Apply only non-conflicting changes from the remote side")
+                    .disabled(saving || bridge.blocks.isEmpty)
                 Spacer()
                 Button("↑") { navigateBlock(-1) }
                     .help("上一个冲突块")
@@ -8337,6 +8439,14 @@ struct ConflictDetailView: View {
                     .disabled(bridge.blocks.isEmpty)
             }
             .padding(6)
+            if let preview = conflictBatchPreview,
+               preview.simpleBlocks + preview.oursOnlyBlocks + preview.theirsOnlyBlocks + preview.trueConflictBlocks > 0 {
+                Text("Safe blocks: \(preview.simpleBlocks) simple · \(preview.oursOnlyBlocks) local-only · \(preview.theirsOnlyBlocks) remote-only · \(preview.trueConflictBlocks) overlapping")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+            }
             if !bridge.blocks.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -8492,6 +8602,30 @@ struct ConflictDetailView: View {
         }
         bridge.acceptAll(side)
         feedback = side == .ours ? "已全部接受本地" : "已全部接受远程"
+    }
+
+    private func applyConflictBatch(_ action: ConflictBatchAction) {
+        guard let repo, !saving else { return }
+        let path = self.path
+        saving = true
+        Task.detached(priority: .userInitiated) {
+            do {
+                let result = try repo.conflictApplyBatch(path: path, action: action)
+                await MainActor.run {
+                    self.saving = false
+                    self.feedback = result.fullyResolved
+                        ? "All eligible conflicts resolved"
+                        : "Applied \(result.appliedBlocks) safe block(s); \(result.remainingBlocks) remain"
+                    self.onChanged()
+                    self.load()
+                }
+            } catch {
+                await MainActor.run {
+                    self.saving = false
+                    self.feedback = "\(error)"
+                }
+            }
+        }
     }
 
     private func resolveBlock(_ index: Int, _ side: AcceptSide) {
@@ -8872,6 +9006,7 @@ struct ConflictDetailView: View {
                     await MainActor.run {
                         self.conflict = nil
                         self.conflictIsBinary = false
+                        self.conflictBatchPreview = nil
                         self.conflictError = "冲突文件已解决或不再存在：\(path)"
                         self.patchHunks = []
                         self.selectedPatchHunkID = nil
@@ -8879,6 +9014,9 @@ struct ConflictDetailView: View {
                     return
                 }
                 let cf = workspaceFile.file
+                let batchPreview = directPatchText == nil
+                    ? try? repo.conflictBatchPreview(path: path)
+                    : nil
                 await MainActor.run {
                     var restoredHunks = directPatchText.map {
                         ApplyPatchConflictHunkModel.parse(
@@ -8897,6 +9035,7 @@ struct ConflictDetailView: View {
                     }
                     self.conflict = cf
                     self.conflictIsBinary = workspaceFile.binary
+                    self.conflictBatchPreview = batchPreview
                     self.conflictError = nil
                     self.selectedBlock = 0
                     self.patchHunks = restoredHunks
@@ -8909,6 +9048,7 @@ struct ConflictDetailView: View {
                 await MainActor.run {
                     self.conflict = nil
                     self.conflictIsBinary = false
+                    self.conflictBatchPreview = nil
                     self.conflictError = "\(error)"
                     self.patchHunks = []
                     self.selectedPatchHunkID = nil

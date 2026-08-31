@@ -12,6 +12,8 @@ APP_BUNDLE="$DERIVED_DATA_DIR/Build/Products/Debug/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 SIGNING_IDENTITY="${ARBOR_CODE_SIGN_IDENTITY:-}"
 SIGNING_TEAM="${ARBOR_DEVELOPMENT_TEAM:-}"
+REQUIRE_SIGNING="${ARBOR_REQUIRE_SIGNING:-0}"
+FORCE_UNSIGNED="${ARBOR_UNSIGNED:-0}"
 
 # Keep Rust's native objects aligned with the Xcode target. Without this,
 # clang-backed Rust dependencies can silently use the current SDK's minimum
@@ -84,23 +86,49 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
   fi
 fi
 
-if [[ -z "$SIGNING_IDENTITY" ]]; then
-  cat >&2 <<'EOF'
+SIGNING_ENABLED=true
+
+if [[ "$REQUIRE_SIGNING" == "1" ]]; then
+  if [[ -z "$SIGNING_IDENTITY" ]]; then
+    cat >&2 <<'EOF'
 No valid macOS code-signing identity was found.
-The Debug app cannot be launched ad hoc on this macOS version.
-Open Arbor.xcodeproj in Xcode, add your Apple Account in Xcode Settings > Accounts,
-then choose an Apple Development Team under Arbor > Signing & Capabilities.
+Set up an Apple Development identity in Xcode, or omit ARBOR_REQUIRE_SIGNING
+to use the unsigned local Debug fallback.
 EOF
-  exit 2
+    exit 2
+  fi
+
+  if [[ -z "$SIGNING_TEAM" ]]; then
+    cat >&2 <<'EOF'
+No development team is configured for Arbor.
+Set ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>, or omit
+ARBOR_REQUIRE_SIGNING to use the unsigned local Debug fallback.
+EOF
+    exit 2
+  fi
+elif [[ "$FORCE_UNSIGNED" == "1" || -z "$SIGNING_IDENTITY" || -z "$SIGNING_TEAM" ]]; then
+  SIGNING_ENABLED=false
+  cat >&2 <<'EOF'
+No usable signing setup was found; building an unsigned local Debug app.
+This mode is suitable for local development only. Use ARBOR_REQUIRE_SIGNING=1
+when a signed build is required.
+EOF
 fi
 
-if [[ -z "$SIGNING_TEAM" ]]; then
-  cat >&2 <<'EOF'
-No development team is configured for Arbor.
-Open Arbor.xcodeproj in Xcode, select the Arbor target, and choose a Team under
-Signing & Capabilities. Or rerun with ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>.
-EOF
-  exit 2
+XCODEBUILD_SIGNING_ARGS=()
+if [[ "$SIGNING_ENABLED" == true ]]; then
+  XCODEBUILD_SIGNING_ARGS=(
+    CODE_SIGNING_ALLOWED=YES
+    CODE_SIGNING_REQUIRED=YES
+    CODE_SIGN_STYLE=Automatic
+    "CODE_SIGN_IDENTITY=$SIGNING_IDENTITY"
+    "DEVELOPMENT_TEAM=$SIGNING_TEAM"
+  )
+else
+  XCODEBUILD_SIGNING_ARGS=(
+    CODE_SIGNING_ALLOWED=NO
+    CODE_SIGNING_REQUIRED=NO
+  )
 fi
 
 # The Rust cdylib embeds UniFFI metadata and the checked-in Swift binding
@@ -120,11 +148,7 @@ xcodebuild \
   -configuration Debug \
   -sdk macosx \
   -derivedDataPath "$DERIVED_DATA_DIR" \
-  CODE_SIGNING_ALLOWED=YES \
-  CODE_SIGNING_REQUIRED=YES \
-  CODE_SIGN_STYLE=Automatic \
-  CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-  DEVELOPMENT_TEAM="$SIGNING_TEAM" \
+  "${XCODEBUILD_SIGNING_ARGS[@]}" \
   build
 
 open_app() {

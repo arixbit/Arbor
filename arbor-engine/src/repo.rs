@@ -585,7 +585,22 @@ pub fn clone_repository(
     destination: String,
     recursive_submodules: bool,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, None)
+    clone_inner(url, destination, recursive_submodules, None, None)
+}
+
+/// 克隆远程仓库并可选限制初始历史深度。
+///
+/// 保留 `clone_repository` 的三参数入口以避免破坏已有 FFI/插件调用；新
+/// UI 应使用这个带选项的入口来实现 Shallow Clone。`Some(0)` 被拒绝，
+/// 防止在启动 Git 前把无效深度交给命令行。
+#[uniffi::export]
+pub fn clone_repository_with_options(
+    url: String,
+    destination: String,
+    recursive_submodules: bool,
+    depth: Option<u32>,
+) -> Result<String, EngineError> {
+    clone_inner(url, destination, recursive_submodules, None, depth)
 }
 
 /// 带认证代理的克隆：HTTPS/SSH 首次提示走 Swift 的 handler（AUTH-001）。
@@ -597,7 +612,19 @@ pub fn clone_repository_with_auth(
     recursive_submodules: bool,
     broker: std::sync::Arc<crate::auth::CredentialBroker>,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, Some(&broker))
+    clone_inner(url, destination, recursive_submodules, Some(&broker), None)
+}
+
+/// 带认证代理和可选 shallow depth 的克隆入口。
+#[uniffi::export]
+pub fn clone_repository_with_auth_options(
+    url: String,
+    destination: String,
+    recursive_submodules: bool,
+    broker: std::sync::Arc<crate::auth::CredentialBroker>,
+    depth: Option<u32>,
+) -> Result<String, EngineError> {
+    clone_inner(url, destination, recursive_submodules, Some(&broker), depth)
 }
 
 fn clone_inner(
@@ -605,6 +632,7 @@ fn clone_inner(
     destination: String,
     recursive_submodules: bool,
     broker: Option<&crate::auth::CredentialBroker>,
+    depth: Option<u32>,
 ) -> Result<String, EngineError> {
     ignore_sigpipe();
     let url = url.trim();
@@ -619,6 +647,11 @@ fn clone_inner(
             message: "clone destination must be a new path".into(),
         });
     }
+    if depth == Some(0) {
+        return Err(EngineError::GitOperation {
+            message: "git clone depth must be greater than zero".into(),
+        });
+    }
     let parent = destination
         .parent()
         .ok_or_else(|| EngineError::GitOperation {
@@ -629,11 +662,13 @@ fn clone_inner(
             message: "clone destination parent is not a directory".into(),
         });
     }
+    let depth_arg = depth.map(|value| value.to_string());
     let spec = crate::gitprocess::GitCommandSpec::new(
         crate::gitprocess::GitCommandCategory::Clone,
         "clone",
     )
     .flag_if("--recurse-submodules", recursive_submodules)
+    .opt_arg("--depth", depth_arg.as_deref())
     .url_arg(url)
     .arg(destination.to_string_lossy().into_owned());
     let outcome = match broker {
@@ -6106,9 +6141,12 @@ impl Repository {
     /// Browser 的归属，不改变 Git index 或 worktree。
     pub fn changelist_list(&self) -> Result<Vec<crate::changelist::ChangeListInfo>, EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        let state = crate::changelist::load_change_lists(&repo)?;
+        let mut state = crate::changelist::load_change_lists(&repo)?;
         let status = crate::status::compute_status(&repo)?;
         let current_paths: Vec<String> = status.into_iter().map(|entry| entry.path).collect();
+        if crate::changelist::observe_paths(&mut state, &current_paths) {
+            crate::changelist::save_change_lists(&repo, &state)?;
+        }
         Ok(crate::changelist::to_info(&state, &current_paths))
     }
 
@@ -6121,8 +6159,43 @@ impl Repository {
         current_paths: Vec<String>,
     ) -> Result<Vec<crate::changelist::ChangeListInfo>, EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        let state = crate::changelist::load_change_lists(&repo)?;
+        let mut state = crate::changelist::load_change_lists(&repo)?;
+        if crate::changelist::observe_paths(&mut state, &current_paths) {
+            crate::changelist::save_change_lists(&repo, &state)?;
+        }
         Ok(crate::changelist::to_info(&state, &current_paths))
+    }
+
+    /// Return Changelist descriptions, active/context flags, and optional task
+    /// identity without changing the path projection used by Changes Browser.
+    pub fn changelist_metadata(
+        &self,
+    ) -> Result<Vec<crate::changelist::ChangeListMetadata>, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let state = crate::changelist::load_change_lists(&repo)?;
+        Ok(crate::changelist::metadata(&state))
+    }
+
+    /// Persist the metadata attached to one Changelist. Track Context is
+    /// stored explicitly even when no task provider is configured, so the UI
+    /// can represent an unavailable context instead of silently dropping it.
+    pub fn changelist_set_metadata(
+        &self,
+        name: String,
+        description: Option<String>,
+        track_context: bool,
+        task_identity: Option<String>,
+    ) -> Result<(), EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let mut state = crate::changelist::load_change_lists(&repo)?;
+        crate::changelist::set_metadata(
+            &mut state,
+            name.trim(),
+            description,
+            track_context,
+            task_identity,
+        )?;
+        crate::changelist::save_change_lists(&repo, &state)
     }
 
     /// 创建一个空的 Changelist。新列表不会隐式修改当前活动列表或 Git 状态。
@@ -6139,6 +6212,9 @@ impl Repository {
         state.lists.push(crate::changelist::StoredChangeList {
             name,
             is_default: false,
+            description: None,
+            track_context: false,
+            task_identity: None,
         });
         crate::changelist::save_change_lists(&repo, &state)
     }
@@ -6157,6 +6233,9 @@ impl Repository {
         state.lists.push(crate::changelist::StoredChangeList {
             name,
             is_default: false,
+            description: None,
+            track_context: false,
+            task_identity: None,
         });
         crate::changelist::save_change_lists(&repo, &state)
     }
@@ -13243,6 +13322,28 @@ impl Repository {
         crate::conflict::build_workspace(&repo)
     }
 
+    /// Preview which unresolved blocks are safe for the regular conflict
+    /// viewer's batch actions. Binary files return an empty preview.
+    pub fn conflict_batch_preview(
+        &self,
+        path: String,
+    ) -> Result<crate::conflict::ConflictBatchPreview, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        crate::conflict::preview_batch(&repo, &path)
+    }
+
+    /// Apply only simple/non-conflicting marker blocks. Unresolved markers and
+    /// any user edits outside those blocks remain untouched; when no markers
+    /// remain the normal resolved ledger/index path is used.
+    pub fn conflict_apply_batch(
+        &self,
+        path: String,
+        action: crate::conflict::ConflictBatchAction,
+    ) -> Result<crate::conflict::ConflictBatchResult, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        crate::conflict::apply_batch(&repo, &path, action)
+    }
+
     /// 文件级接受方向（IntelliJ Accept Yours/Theirs/Both）：写工作区 + 清
     /// stages + 索引 stage 0；二进制安全。解决后该文件从工作台列表移除。
     pub fn accept_conflict(
@@ -13781,6 +13882,32 @@ impl Repository {
     }
 
     // MARK: shelve（JetBrains 本地补丁抽象）
+
+    /// Return the directory currently used for Shelf manifests, metadata and
+    /// raw patch files. Git refs under `refs/shelved/` remain in this repository.
+    pub fn shelve_location(&self) -> Result<String, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        Ok(crate::shelve::shelf_location(&repo)
+            .to_string_lossy()
+            .into_owned())
+    }
+
+    /// Change the Shelf directory. When `migrate_existing` is true all Shelf
+    /// artifacts are copied and verified before the location marker switches;
+    /// the old directory is retained so a failed operation is recoverable.
+    pub fn shelve_set_location(
+        &self,
+        location: String,
+        migrate_existing: bool,
+    ) -> Result<String, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let path = crate::shelve::set_shelf_location(
+            &repo,
+            std::path::Path::new(location.trim()),
+            migrate_existing,
+        )?;
+        Ok(path.to_string_lossy().into_owned())
+    }
 
     /// 保存指定路径的变更为命名补丁，并把工作区/索引重置回 HEAD。
     pub fn shelve(&self, name: String, paths: Vec<String>) -> Result<(), EngineError> {
@@ -20893,6 +21020,79 @@ impl Repository {
         let repo = self.inner.lock().expect("repo mutex poisoned");
         crate::blame::blame_worktree(&repo, &path, options)
     }
+
+    /// 从 annotation 行回溯到该提交的 first parent，并在 parent revision
+    /// 上重新执行 blame。rename 时优先使用 Git 的 rename-aware diff 找到
+    /// parent 中的旧路径；无法解析时 fail-closed，不回退到当前同名文件。
+    pub fn blame_previous_revision(
+        &self,
+        path: String,
+        commit_id: String,
+        options: BlameOptions,
+    ) -> Result<Vec<BlameLine>, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let commit = repo
+            .rev_parse_single(BStr::new(commit_id.trim().as_bytes()))
+            .map_err(EngineError::from_gix)?
+            .object()
+            .map_err(EngineError::from_gix)?
+            .try_into_commit()
+            .map_err(EngineError::from_gix)?;
+        let parent = commit
+            .parent_ids()
+            .next()
+            .ok_or_else(|| EngineError::GitOperation {
+                message: "blame previous revision is unavailable for the root commit".into(),
+            })?;
+        let path = crate::repo::worktree_relative_path(&path)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let parent_id = parent.to_hex().to_string();
+        let commit_id = commit.id().to_hex().to_string();
+        let parent_path = previous_blame_path(&repo, &parent_id, &commit_id, &path)?;
+        crate::blame::blame_revision(&repo, &parent_path, &parent_id, options)
+    }
+}
+
+fn previous_blame_path(
+    repo: &gix::Repository,
+    parent: &str,
+    commit: &str,
+    current_path: &str,
+) -> Result<String, EngineError> {
+    let Some(workdir) = repo.workdir() else {
+        return Err(EngineError::GitOperation {
+            message: "blame requires a non-bare worktree".into(),
+        });
+    };
+    let spec = crate::gitprocess::GitCommandSpec::new(
+        crate::gitprocess::GitCommandCategory::Log,
+        "diff-tree",
+    )
+    .args([
+        "--no-commit-id".to_string(),
+        "--name-status".to_string(),
+        "-M".to_string(),
+        "-r".to_string(),
+        parent.to_string(),
+        commit.to_string(),
+        "--".to_string(),
+    ])
+    .working_dir(workdir);
+    let outcome = crate::gitprocess::run_to_completion(&spec)?;
+    if outcome.success() {
+        for line in outcome.stdout.lines() {
+            let fields: Vec<&str> = line.split('\t').collect();
+            if fields.first().is_some_and(|status| status.starts_with('R'))
+                && fields.get(2).copied() == Some(current_path)
+            {
+                if let Some(old_path) = fields.get(1) {
+                    return Ok((*old_path).to_string());
+                }
+            }
+        }
+    }
+    Ok(current_path.to_string())
 }
 
 fn normalize_commit_sequence(

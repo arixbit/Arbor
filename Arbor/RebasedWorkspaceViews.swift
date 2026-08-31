@@ -928,6 +928,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
     let onCommit: () -> Void
     let onPush: () -> Void
     let onFetch: () -> Void
+    let onHosting: () -> Void
     let isShallowRepository: Bool
     let hasCurrentBranch: Bool
     let hasConflicts: Bool
@@ -957,6 +958,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
         onCommit: @escaping () -> Void,
         onPush: @escaping () -> Void,
         onFetch: @escaping () -> Void,
+        onHosting: @escaping () -> Void = {},
         isShallowRepository: Bool = false,
         hasCurrentBranch: Bool = false,
         hasConflicts: Bool = false,
@@ -985,6 +987,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
         self.onCommit = onCommit
         self.onPush = onPush
         self.onFetch = onFetch
+        self.onHosting = onHosting
         self.isShallowRepository = isShallowRepository
         self.hasCurrentBranch = hasCurrentBranch
         self.hasConflicts = hasConflicts
@@ -1063,6 +1066,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
                 Divider()
                 Button("Show Log") { onQuickAction(.showLog) }
                 Button("Operation Log") { onQuickAction(.showOperations) }
+                Button("Pull Requests & Reviews") { onHosting() }
                 Button("Git Roots") { onQuickAction(.showGitRoots) }
                 Button("Git Console") { onQuickAction(.showGitConsole) }
                 Divider()
@@ -1649,6 +1653,8 @@ struct RebasedCommitWorkspace: View {
     let onOperationAbort: () -> Void
     let onOpenConflictResolver: () -> Void
     let onShelve: () -> Void
+    /// Opens the repository-scoped Shelf storage settings.
+    var onShelfSettings: () -> Void = {}
     let onShelvePaths: ([String]) -> Void
     let onImportShelve: (String?) -> Void
     let onPreview: () -> Void
@@ -1692,6 +1698,9 @@ struct RebasedCommitWorkspace: View {
     var onUnshelveSelectionsIntoChangeList: (String, [ShelvePatchSelection], String, Bool) -> Void = { _, _, _, _ in }
     var onUnshelveIntoChangeListWithBase: (String, [String]?, String, Bool, String, UInt32) -> Void = { _, _, _, _, _, _ in }
     var onUnshelveSelectionsIntoChangeListWithBase: (String, [ShelvePatchSelection], String, Bool, String, UInt32) -> Void = { _, _, _, _, _, _ in }
+    /// Persists an optional Unshelve comment on the explicit target
+    /// Changelist after the apply operation has been dispatched.
+    var onRecordUnshelveComment: (String, String) -> Void = { _, _ in }
     let onCleanRecycledShelves: () -> Void
     let onDropShelve: (String) -> Void
     var onDropShelves: ([String]) -> Void = { _ in }
@@ -1919,6 +1928,8 @@ struct RebasedCommitWorkspace: View {
                     Button("Stash…") { onStash() }
                     Button("Shelve…") { onShelve() }
                         .disabled(isShelfRootReadOnly || isShelfRootLoading)
+                    Button("Shelf Location…") { onShelfSettings() }
+                        .disabled(!canMutateShelfMetadata || isShelfRootLoading)
                     Divider()
                     Button("Clear Already Unshelved", role: .destructive) {
                         onCleanRecycledShelves()
@@ -2025,7 +2036,7 @@ struct RebasedCommitWorkspace: View {
                 changeLists: visibleShelfChangeLists,
                 repo: shelfRepo,
                 removeAppliedFilesFromShelf: $removeAppliedFilesFromShelf,
-                onUnshelve: { selectedPaths, selections, targetName, removeApplied, basePath, pathStrip in
+                onUnshelve: { selectedPaths, selections, targetName, removeApplied, basePath, pathStrip, comment in
                     guard shelfActionRootMatchesCurrentRoot(
                         requestedRootPath: request.rootPath,
                         currentRootPath: selectedShelfRootPath
@@ -2034,6 +2045,9 @@ struct RebasedCommitWorkspace: View {
                         return
                     }
                     pendingUnshelve = nil
+                    if let targetName, let comment, !comment.isEmpty {
+                        onRecordUnshelveComment(targetName, comment)
+                    }
                     let hasMapping = (basePath?.isEmpty == false) || pathStrip != 1
                     if let targetName {
                         if !selections.isEmpty {

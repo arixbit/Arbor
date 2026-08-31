@@ -99,6 +99,16 @@ final class HostingWorkspaceModel: ObservableObject {
     @Published var lastError: String?
     @Published var showAuthenticationPrompt = false
     @Published var isLoading = false
+    @Published var selectedPullRequestID: Int?
+    @Published var detail: HostingChangeRequestDetail?
+    @Published var detailTab: HostingDetailTab = .overview
+    @Published var selectedCommitID: String?
+    @Published var selectedFilePath: String?
+    @Published var detailFiles: [HostingChangeRequestFile] = []
+    @Published var isCommitFilesLoading = false
+    @Published var isDetailLoading = false
+    @Published var detailError: String?
+    private var commitFilesLoadGeneration = 0
 
     init(repository: HostingRepository?) {
         self.repository = repository
@@ -171,6 +181,141 @@ final class HostingWorkspaceModel: ObservableObject {
         }
     }
 
+    func loadDetail(for pullRequest: HostingPullRequest) async {
+        guard let repository else { return }
+        selectedPullRequestID = pullRequest.id
+        detail = nil
+        detailError = nil
+        selectedCommitID = nil
+        selectedFilePath = nil
+        detailFiles = []
+        isDetailLoading = true
+        do {
+            let loaded = try await client.hostingPullRequestDetail(
+                for: repository,
+                pullRequestID: pullRequest.id
+            )
+            guard selectedPullRequestID == pullRequest.id else { return }
+            detail = loaded
+            selectedCommitID = loaded.commits.first?.id
+            detailFiles = loaded.files
+            selectedFilePath = loaded.files.first?.path
+        } catch {
+            guard selectedPullRequestID == pullRequest.id else { return }
+            detailError = error.localizedDescription
+            record(error)
+        }
+        isDetailLoading = false
+    }
+
+    func loadFilesForSelectedCommit() async {
+        guard let repository,
+              let pullRequestID = selectedPullRequestID,
+              let commitID = selectedCommitID,
+              !commitID.isEmpty else { return }
+        commitFilesLoadGeneration &+= 1
+        let generation = commitFilesLoadGeneration
+        isCommitFilesLoading = true
+        defer {
+            if commitFilesLoadGeneration == generation {
+                isCommitFilesLoading = false
+            }
+        }
+        do {
+            let files = try await client.hostingPullRequestFiles(
+                for: repository,
+                pullRequestID: pullRequestID,
+                commitID: commitID
+            )
+            guard commitFilesLoadGeneration == generation,
+                  selectedPullRequestID == pullRequestID,
+                  selectedCommitID == commitID else { return }
+            detailFiles = files
+            if let selectedFilePath,
+               files.contains(where: { $0.path == selectedFilePath }) {
+                self.selectedFilePath = selectedFilePath
+            } else {
+                self.selectedFilePath = files.first?.path
+            }
+        } catch {
+            guard commitFilesLoadGeneration == generation,
+                  selectedPullRequestID == pullRequestID,
+                  selectedCommitID == commitID else { return }
+            detailError = error.localizedDescription
+        }
+    }
+
+    func submitReview(outcome: HostingReviewOutcome, body: String?) async -> Bool {
+        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        do {
+            try await client.submitHostingReview(
+                for: repository,
+                pullRequestID: pullRequestID,
+                outcome: outcome,
+                body: body
+            )
+            await reloadSelectedDetail()
+            return true
+        } catch {
+            record(error)
+            detailError = error.localizedDescription
+            return false
+        }
+    }
+
+    func mergeSelected(method: String) async -> Bool {
+        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        do {
+            try await client.mergeHostingPullRequest(
+                for: repository,
+                pullRequestID: pullRequestID,
+                method: method
+            )
+            await reloadSelectedDetail()
+            await loadPullRequests()
+            return true
+        } catch {
+            record(error)
+            detailError = error.localizedDescription
+            return false
+        }
+    }
+
+    func closeSelected() async -> Bool {
+        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        do {
+            try await client.closeHostingPullRequest(for: repository, pullRequestID: pullRequestID)
+            await reloadSelectedDetail()
+            await loadPullRequests()
+            return true
+        } catch {
+            record(error)
+            detailError = error.localizedDescription
+            return false
+        }
+    }
+
+    func revokeApproval() async -> Bool {
+        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        do {
+            try await client.revokeHostingApproval(for: repository, pullRequestID: pullRequestID)
+            await reloadSelectedDetail()
+            return true
+        } catch {
+            record(error)
+            detailError = error.localizedDescription
+            return false
+        }
+    }
+
+    private func reloadSelectedDetail() async {
+        guard let selectedPullRequestID,
+              let pullRequest = pullRequests.first(where: { $0.id == selectedPullRequestID }) else {
+            return
+        }
+        await loadDetail(for: pullRequest)
+    }
+
     private func record(_ error: Error) {
         lastError = error.localizedDescription
         if let githubError = error as? GitHubAPIError {
@@ -179,6 +324,15 @@ final class HostingWorkspaceModel: ObservableObject {
             showAuthenticationPrompt = hostingError.isAuthenticationFailure
         }
     }
+}
+
+enum HostingDetailTab: String, CaseIterable, Identifiable {
+    case overview
+    case timeline
+    case commits
+    case files
+
+    var id: String { rawValue }
 }
 
 enum HostingSection: String, CaseIterable, Identifiable {
@@ -223,17 +377,27 @@ struct HostingSidebarView: View {
 struct HostingHubView: View {
     let repository: HostingRepository?
     @Binding var showSettings: Bool
+    let onCheckoutIncomingBranch: (HostingChangeRequestDetail) -> Void
+    let onShowInGitLog: (HostingChangeRequestDetail) -> Void
     @StateObject private var model: HostingWorkspaceModel
     @State private var section: HostingSection = .pullRequests
     @State private var pullRequestState = "open"
     @State private var issueState = "open"
     @State private var showCreatePullRequest = false
     @State private var showCreateIssue = false
+    @State private var filterText = ""
 
-    init(remoteURL: String?, showSettings: Binding<Bool>) {
+    init(
+        remoteURL: String?,
+        showSettings: Binding<Bool>,
+        onCheckoutIncomingBranch: @escaping (HostingChangeRequestDetail) -> Void = { _ in },
+        onShowInGitLog: @escaping (HostingChangeRequestDetail) -> Void = { _ in }
+    ) {
         let repository = remoteURL.flatMap { HostingProvider.parse(remoteURL: $0) }
         self.repository = repository
         self._showSettings = showSettings
+        self.onCheckoutIncomingBranch = onCheckoutIncomingBranch
+        self.onShowInGitLog = onShowInGitLog
         self._model = StateObject(wrappedValue: HostingWorkspaceModel(repository: repository))
     }
 
@@ -301,7 +465,8 @@ struct HostingHubView: View {
     }
 
     private var pullRequestsPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HSplitView {
+            VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Picker("State", selection: $pullRequestState) {
                     Text("Open").tag("open")
@@ -312,6 +477,9 @@ struct HostingHubView: View {
                 .onChange(of: pullRequestState) { _, state in
                     Task { await model.loadPullRequests(state: state) }
                 }
+                TextField("Filter title, author, assignee, reviewer, label, branch", text: $filterText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 220)
                 Spacer()
                 Button("Refresh") { Task { await model.loadPullRequests(state: pullRequestState) } }
                 Button("New Pull Request") { showCreatePullRequest = true }
@@ -326,11 +494,43 @@ struct HostingHubView: View {
             if model.pullRequests.isEmpty && !model.isLoading {
                 ContentUnavailableView("No pull requests", systemImage: "arrow.triangle.pull")
             } else {
-                List(model.pullRequests) { pullRequest in
+                List(filteredPullRequests, selection: $model.selectedPullRequestID) { pullRequest in
                     PullRequestRow(pullRequest: pullRequest)
+                        .tag(pullRequest.id)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            Task { await model.loadDetail(for: pullRequest) }
+                        }
                 }
                 .listStyle(.inset)
             }
+            }
+            .frame(minWidth: 340, idealWidth: 420, maxWidth: 520)
+            HostingChangeRequestDetailView(
+                model: model,
+                onCheckoutIncomingBranch: onCheckoutIncomingBranch,
+                onShowInGitLog: onShowInGitLog
+            )
+                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var filteredPullRequests: [HostingPullRequest] {
+        let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return model.pullRequests }
+        return model.pullRequests.filter { pullRequest in
+            [
+                pullRequest.title,
+                pullRequest.author?.login,
+                pullRequest.headBranch,
+                pullRequest.baseBranch,
+                pullRequest.state,
+                pullRequest.assignees?.compactMap(\.login).joined(separator: " "),
+                pullRequest.reviewers?.compactMap(\.login).joined(separator: " "),
+                pullRequest.labels?.joined(separator: " "),
+            ]
+            .compactMap { $0?.lowercased() }
+            .contains { $0.contains(query) }
         }
     }
 
@@ -359,6 +559,344 @@ struct HostingHubView: View {
                 }
                 .listStyle(.inset)
             }
+        }
+    }
+}
+
+struct HostingChangeRequestDetailView: View {
+    @ObservedObject var model: HostingWorkspaceModel
+    let onCheckoutIncomingBranch: (HostingChangeRequestDetail) -> Void
+    let onShowInGitLog: (HostingChangeRequestDetail) -> Void
+    @State private var reviewOutcome: HostingReviewOutcome = .comment
+    @State private var reviewBody = ""
+    @State private var mergeMethod = "merge"
+    @State private var isWorking = false
+
+    init(
+        model: HostingWorkspaceModel,
+        onCheckoutIncomingBranch: @escaping (HostingChangeRequestDetail) -> Void = { _ in },
+        onShowInGitLog: @escaping (HostingChangeRequestDetail) -> Void = { _ in }
+    ) {
+        self.model = model
+        self.onCheckoutIncomingBranch = onCheckoutIncomingBranch
+        self.onShowInGitLog = onShowInGitLog
+    }
+
+    var body: some View {
+        Group {
+            if model.isDetailLoading {
+                ProgressView("Loading change request…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let detail = model.detail {
+                detailWorkspace(detail)
+            } else if let detailError = model.detailError {
+                ContentUnavailableView(
+                    "Change request unavailable",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(detailError)
+                )
+            } else {
+                ContentUnavailableView(
+                    "Select a pull request",
+                    systemImage: "arrow.triangle.pull",
+                    description: Text("Open a pull request to inspect its overview, timeline, commits, and files.")
+                )
+            }
+        }
+        .padding(12)
+        .onChange(of: model.selectedCommitID) { _, _ in
+            Task { await model.loadFilesForSelectedCommit() }
+        }
+    }
+
+    @ViewBuilder
+    private func detailWorkspace(_ detail: HostingChangeRequestDetail) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("#\(detail.pullRequest.id)")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text(detail.pullRequest.title ?? "(untitled)")
+                    .font(.title3.bold())
+                    .lineLimit(2)
+                if detail.pullRequest.draft == true { Text("Draft").badgeStyle(.orange) }
+                Text(detail.pullRequest.state ?? "unknown")
+                    .badgeStyle(detail.pullRequest.state == "open" ? .green : .secondary)
+                Spacer()
+                if let urlString = detail.pullRequest.htmlURL,
+                   let url = URL(string: urlString) {
+                    Button("Open") { NSWorkspace.shared.open(url) }
+                }
+                Button("Checkout Incoming Branch") {
+                    onCheckoutIncomingBranch(detail)
+                }
+                .disabled(detail.pullRequest.headBranch?.isEmpty != false)
+                Button("Show in Git Log") {
+                    onShowInGitLog(detail)
+                }
+                .disabled(detail.headRevision?.isEmpty != false)
+            }
+            Text("\(detail.pullRequest.headBranch ?? "?") → \(detail.pullRequest.baseBranch ?? "?")")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+            if let headRevision = detail.headRevision {
+                Text("head \(headRevision.prefix(12))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("View", selection: $model.detailTab) {
+                Text("Overview").tag(HostingDetailTab.overview)
+                Text("Timeline").tag(HostingDetailTab.timeline)
+                Text("Commits").tag(HostingDetailTab.commits)
+                Text("Files").tag(HostingDetailTab.files)
+            }
+            .pickerStyle(.segmented)
+
+            Group {
+                switch model.detailTab {
+                case .overview:
+                    overview(detail)
+                case .timeline:
+                    timeline(detail)
+                case .commits:
+                    commits(detail)
+                case .files:
+                    files(detail)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            Divider()
+            reviewActions(detail)
+        }
+    }
+
+    private func overview(_ detail: HostingChangeRequestDetail) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    stat("Commits", value: detail.commits.count)
+                    stat("Files", value: detail.changedFiles ?? detail.files.count)
+                    stat("Added", value: detail.additions ?? 0)
+                    stat("Deleted", value: detail.deletions ?? 0)
+                    if let mergeable = detail.mergeable {
+                        Label(mergeable ? "Mergeable" : "Merge conflicts", systemImage: mergeable ? "checkmark.seal" : "exclamationmark.triangle")
+                            .foregroundStyle(mergeable ? .green : .orange)
+                    }
+                }
+                Text(detail.pullRequest.body?.isEmpty == false ? detail.pullRequest.body! : "No description")
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                capabilitySummary(detail.capabilities)
+                participantSummary(detail.pullRequest)
+            }
+        }
+    }
+
+    private func stat(_ label: String, value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(String(value)).font(.headline)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func capabilitySummary(_ capabilities: HostingChangeRequestCapabilities) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Available actions").font(.headline)
+            Text([
+                capabilities.canComment ? "Comment" : nil,
+                capabilities.canApprove ? "Approve" : nil,
+                capabilities.canRequestChanges ? "Request Changes" : nil,
+                capabilities.canMerge ? "Merge" : nil,
+                capabilities.canClose ? "Close" : nil,
+                capabilities.canRevokeApproval ? "Revoke Approval" : nil,
+            ].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func participantSummary(_ pullRequest: HostingPullRequest) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let assignees = pullRequest.assignees, !assignees.isEmpty {
+                Text("Assignees: \(assignees.compactMap(\.login).joined(separator: ", "))")
+            }
+            if let reviewers = pullRequest.reviewers, !reviewers.isEmpty {
+                Text("Reviewers: \(reviewers.compactMap(\.login).joined(separator: ", "))")
+            }
+            if let labels = pullRequest.labels, !labels.isEmpty {
+                Text("Labels: \(labels.joined(separator: ", "))")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func timeline(_ detail: HostingChangeRequestDetail) -> some View {
+        if detail.timeline.isEmpty {
+            return AnyView(ContentUnavailableView("No timeline events", systemImage: "clock"))
+        }
+        return AnyView(List(detail.timeline) { event in
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(event.kind.capitalized).font(.headline)
+                    if let author = event.author?.login { Text(author).foregroundStyle(.secondary) }
+                    Spacer()
+                    if let createdAt = event.createdAt { Text(String(createdAt.prefix(10))).foregroundStyle(.secondary) }
+                }
+                if let body = event.body { Text(body).textSelection(.enabled) }
+                if let path = event.path {
+                    Text("\(path)\(event.line.map { ":\($0)" } ?? "")")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 3)
+        }
+        .listStyle(.inset))
+    }
+
+    private func commits(_ detail: HostingChangeRequestDetail) -> some View {
+        if detail.commits.isEmpty {
+            return AnyView(ContentUnavailableView("No commits", systemImage: "point.3.connected.trianglepath.dotted"))
+        }
+        return AnyView(List(detail.commits, selection: $model.selectedCommitID) { commit in
+            VStack(alignment: .leading, spacing: 3) {
+                Text(commit.message ?? "(no message)").lineLimit(2)
+                HStack {
+                    Text(String(commit.id.prefix(12))).font(.system(.caption, design: .monospaced))
+                    if let author = commit.author?.login { Text(author) }
+                    if let authoredAt = commit.authoredAt { Text(String(authoredAt.prefix(10))) }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .tag(commit.id)
+            .padding(.vertical, 3)
+        }
+        .listStyle(.inset))
+    }
+
+    private func files(_ detail: HostingChangeRequestDetail) -> some View {
+        let files = model.detailFiles
+        if files.isEmpty {
+            return AnyView(ContentUnavailableView("No changed files", systemImage: "doc") )
+        }
+        return AnyView(HSplitView {
+            List(files, selection: $model.selectedFilePath) { file in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.path).lineLimit(1)
+                    Text(file.status ?? "modified").font(.caption).foregroundStyle(.secondary)
+                }
+                .tag(file.path)
+                .padding(.vertical, 2)
+            }
+            .listStyle(.inset)
+            .frame(minWidth: 220, idealWidth: 280)
+            if model.isCommitFilesLoading {
+                ProgressView("Loading commit files…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let selectedFile = files.first(where: { $0.path == model.selectedFilePath }) {
+                ScrollView([.vertical, .horizontal]) {
+                    Text(selectedFile.patch ?? "No patch available")
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ContentUnavailableView("Select a file", systemImage: "doc.text")
+            }
+        })
+    }
+
+    private func reviewActions(_ detail: HostingChangeRequestDetail) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Picker("Review", selection: $reviewOutcome) {
+                    if detail.capabilities.canComment { Text("Comment").tag(HostingReviewOutcome.comment) }
+                    if detail.capabilities.canApprove { Text("Approve").tag(HostingReviewOutcome.approve) }
+                    if detail.capabilities.canRequestChanges { Text("Request Changes").tag(HostingReviewOutcome.requestChanges) }
+                }
+                .frame(width: 180)
+                TextField("Review comment (optional for approval)", text: $reviewBody)
+                    .textFieldStyle(.roundedBorder)
+                Button(isWorking ? "Submitting…" : "Submit Review") {
+                    isWorking = true
+                    Task {
+                        let submitted = await model.submitReview(
+                            outcome: reviewOutcome,
+                            body: reviewBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : reviewBody
+                        )
+                        if submitted { reviewBody = "" }
+                        isWorking = false
+                    }
+                }
+                .disabled(isWorking || !canSubmitReview(detail.capabilities))
+            }
+            HStack(spacing: 8) {
+                if let commitID = model.selectedCommitID {
+                    Text("Commit \(commitID.prefix(12)) · \(model.detailFiles.count) files")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if detail.capabilities.canMerge, !detail.capabilities.mergeMethods.isEmpty {
+                    Picker("Merge", selection: $mergeMethod) {
+                        ForEach(detail.capabilities.mergeMethods, id: \.self) { method in
+                            Text(method.capitalized).tag(method)
+                        }
+                    }
+                    .frame(width: 180)
+                    Button("Merge") { runMerge() }
+                        .disabled(isWorking)
+                }
+                if detail.capabilities.canClose {
+                    Button("Close") { runClose() }
+                        .disabled(isWorking || detail.pullRequest.state == "closed")
+                }
+                if detail.capabilities.canRevokeApproval {
+                    Button("Revoke Approval") { runRevoke() }
+                        .disabled(isWorking)
+                }
+                Spacer()
+                if let error = model.detailError {
+                    Text(error).font(.caption).foregroundStyle(.red).lineLimit(2)
+                }
+            }
+        }
+    }
+
+    private func canSubmitReview(_ capabilities: HostingChangeRequestCapabilities) -> Bool {
+        switch reviewOutcome {
+        case .comment: capabilities.canComment
+        case .approve: capabilities.canApprove
+        case .requestChanges: capabilities.canRequestChanges
+        }
+    }
+
+    private func runMerge() {
+        isWorking = true
+        Task {
+            _ = await model.mergeSelected(method: mergeMethod)
+            isWorking = false
+        }
+    }
+
+    private func runClose() {
+        isWorking = true
+        Task {
+            _ = await model.closeSelected()
+            isWorking = false
+        }
+    }
+
+    private func runRevoke() {
+        isWorking = true
+        Task {
+            _ = await model.revokeApproval()
+            isWorking = false
         }
     }
 }

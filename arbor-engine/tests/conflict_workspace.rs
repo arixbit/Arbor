@@ -4,7 +4,9 @@
 
 mod common;
 
-use arbor_engine::{FilePick, GitCancelHandle, OperationKind, RebaseAction, RebasePauseReason};
+use arbor_engine::{
+    ConflictBatchAction, FilePick, GitCancelHandle, OperationKind, RebaseAction, RebasePauseReason,
+};
 use common::TestRepo;
 
 /// 三方冲突 fixture：base -> main/feature 各改同一行。
@@ -60,6 +62,51 @@ fn workspace_from_merge_operation() {
     assert!(file.file.result.contains("<<<<<<<"));
     // 块级数据可驱动块操作
     assert_eq!(file.file.blocks.len(), 1);
+}
+
+#[test]
+fn conflict_batch_preview_and_apply_leave_true_conflicts_unresolved() {
+    let r = TestRepo::new();
+    conflicted_pair(&r);
+    common::git_allow_failure(&r.path, &["merge", "feature"]);
+    let repo = r.open();
+
+    let preview = repo
+        .conflict_batch_preview("file.txt".into())
+        .expect("batch preview");
+    assert_eq!(preview.true_conflict_blocks, 1);
+    assert_eq!(preview.simple_blocks, 0);
+
+    let result = repo
+        .conflict_apply_batch(
+            "file.txt".into(),
+            ConflictBatchAction::ApplyOursNonConflicting,
+        )
+        .expect("batch action");
+    assert_eq!(result.applied_blocks, 0);
+    assert_eq!(result.remaining_blocks, 1);
+    assert!(!result.fully_resolved);
+    assert_eq!(repo.conflict_workspace().unwrap().files.len(), 1);
+}
+
+#[test]
+fn conflict_batch_does_not_overwrite_a_manually_edited_result_block() {
+    let r = TestRepo::new();
+    conflicted_pair(&r);
+    common::git_allow_failure(&r.path, &["merge", "feature"]);
+    let original = r.read("file.txt");
+    r.write("file.txt", &original.replace("ours", "manual"));
+
+    let repo = r.open();
+    let result = repo
+        .conflict_apply_batch(
+            "file.txt".into(),
+            ConflictBatchAction::ApplyOursNonConflicting,
+        )
+        .expect("batch action");
+    assert_eq!(result.applied_blocks, 0);
+    assert!(r.read("file.txt").contains("manual"));
+    assert!(r.read("file.txt").contains("<<<<<<<"));
 }
 
 #[test]

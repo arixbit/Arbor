@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use crate::error::EngineError;
+use crate::merge::write_resolved;
 use crate::merge::ConflictFile;
 use crate::opstate::OperationKind;
 
@@ -38,6 +39,29 @@ pub enum FilePick {
     Ours,
     Theirs,
     Both,
+}
+
+/// Batch operations available in the regular three-way conflict viewer.
+#[derive(uniffi::Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictBatchAction {
+    ApplyOursNonConflicting,
+    ApplyTheirsNonConflicting,
+    ResolveSimple,
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct ConflictBatchPreview {
+    pub simple_blocks: u32,
+    pub ours_only_blocks: u32,
+    pub theirs_only_blocks: u32,
+    pub true_conflict_blocks: u32,
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct ConflictBatchResult {
+    pub applied_blocks: u32,
+    pub remaining_blocks: u32,
+    pub fully_resolved: bool,
 }
 
 /// 冲突工作台中的一个文件（含二进制降级标记）。
@@ -99,6 +123,232 @@ pub(crate) fn build_workspace(repo: &gix::Repository) -> Result<ConflictWorkspac
         operation,
         files,
         resolved_files,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BatchBlockKind {
+    Simple,
+    OursOnly,
+    TheirsOnly,
+    TrueConflict,
+}
+
+fn classify_blocks(repo: &gix::Repository, file: &ConflictFile) -> Vec<BatchBlockKind> {
+    let diff3 = diff3_blocks(repo, file).unwrap_or_default();
+    file.blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| {
+            let Some((ours, base, theirs)) = diff3.get(index) else {
+                return if block.ours_lines == block.theirs_lines {
+                    BatchBlockKind::Simple
+                } else {
+                    BatchBlockKind::TrueConflict
+                };
+            };
+            if ours == theirs {
+                BatchBlockKind::Simple
+            } else if theirs == base {
+                BatchBlockKind::OursOnly
+            } else if ours == base {
+                BatchBlockKind::TheirsOnly
+            } else {
+                BatchBlockKind::TrueConflict
+            }
+        })
+        .collect()
+}
+
+fn diff3_blocks(
+    repo: &gix::Repository,
+    file: &ConflictFile,
+) -> Result<Vec<(Vec<String>, Vec<String>, Vec<String>)>, EngineError> {
+    let workdir = repo.workdir().unwrap_or_else(|| Path::new("."));
+    let mut ours_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    let mut base_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    let mut theirs_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    ours_file
+        .write_all(file.ours.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    base_file
+        .write_all(file.base.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    theirs_file
+        .write_all(file.theirs.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    let output = crate::gitprocess::git_command_for_working_dir(workdir)
+        .args([
+            "merge-file",
+            "--diff3",
+            "-p",
+            ours_file.path().to_string_lossy().as_ref(),
+            base_file.path().to_string_lossy().as_ref(),
+            theirs_file.path().to_string_lossy().as_ref(),
+        ])
+        .output()
+        .map_err(EngineError::from_gix)?;
+    // merge-file exits 1 when it found conflicts; stdout is still the useful
+    // diff3 representation. Exit codes above 1 indicate an actual failure.
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "git merge-file failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        });
+    }
+    let output_text = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = output_text.lines().collect();
+    let mut blocks = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        if !lines[index].starts_with("<<<<<<<") {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        let mut ours = Vec::new();
+        while index < lines.len() && !lines[index].starts_with("|||||||") {
+            ours.push(lines[index].to_string());
+            index += 1;
+        }
+        if index >= lines.len() {
+            break;
+        }
+        index += 1;
+        let mut base = Vec::new();
+        while index < lines.len() && lines[index].trim_end() != "=======" {
+            base.push(lines[index].to_string());
+            index += 1;
+        }
+        if index >= lines.len() {
+            break;
+        }
+        index += 1;
+        let mut theirs = Vec::new();
+        while index < lines.len() && !lines[index].starts_with(">>>>>>>") {
+            theirs.push(lines[index].to_string());
+            index += 1;
+        }
+        if index >= lines.len() {
+            break;
+        }
+        blocks.push((ours, base, theirs));
+        index += 1;
+    }
+    Ok(blocks)
+}
+
+pub(crate) fn preview_batch(
+    repo: &gix::Repository,
+    path: &str,
+) -> Result<ConflictBatchPreview, EngineError> {
+    let (binary, file) = read_conflict_file(repo, path)?;
+    if binary {
+        return Ok(ConflictBatchPreview {
+            simple_blocks: 0,
+            ours_only_blocks: 0,
+            theirs_only_blocks: 0,
+            true_conflict_blocks: 0,
+        });
+    }
+    let mut preview = ConflictBatchPreview {
+        simple_blocks: 0,
+        ours_only_blocks: 0,
+        theirs_only_blocks: 0,
+        true_conflict_blocks: 0,
+    };
+    for kind in classify_blocks(repo, &file) {
+        match kind {
+            BatchBlockKind::Simple => preview.simple_blocks += 1,
+            BatchBlockKind::OursOnly => preview.ours_only_blocks += 1,
+            BatchBlockKind::TheirsOnly => preview.theirs_only_blocks += 1,
+            BatchBlockKind::TrueConflict => preview.true_conflict_blocks += 1,
+        }
+    }
+    Ok(preview)
+}
+
+pub(crate) fn apply_batch(
+    repo: &gix::Repository,
+    path: &str,
+    action: ConflictBatchAction,
+) -> Result<ConflictBatchResult, EngineError> {
+    let (binary, file) = read_conflict_file(repo, path)?;
+    if binary {
+        return Err(EngineError::GitOperation {
+            message: "conflict batch actions are unavailable for binary files".into(),
+        });
+    }
+    let canonical_blocks = diff3_blocks(repo, &file).unwrap_or_default();
+    let kinds = classify_blocks(repo, &file);
+    let mut lines: Vec<String> = file.result.lines().map(str::to_string).collect();
+    let mut applied = 0u32;
+    for (index, block) in file.blocks.iter().enumerate().rev() {
+        let should_apply = match action {
+            ConflictBatchAction::ApplyOursNonConflicting => {
+                matches!(
+                    kinds.get(index),
+                    Some(BatchBlockKind::OursOnly | BatchBlockKind::Simple)
+                )
+            }
+            ConflictBatchAction::ApplyTheirsNonConflicting => {
+                matches!(
+                    kinds.get(index),
+                    Some(BatchBlockKind::TheirsOnly | BatchBlockKind::Simple)
+                )
+            }
+            ConflictBatchAction::ResolveSimple => {
+                matches!(kinds.get(index), Some(BatchBlockKind::Simple))
+            }
+        };
+        if !should_apply {
+            continue;
+        }
+        // A manual edit changes the marker payload even though the index
+        // stages still contain the original sides. Skip that block so a
+        // batch action cannot overwrite the user's result buffer.
+        if let Some((canonical_ours, _, canonical_theirs)) = canonical_blocks.get(index) {
+            if block.ours_lines != *canonical_ours || block.theirs_lines != *canonical_theirs {
+                continue;
+            }
+        }
+        let start = block.result_start.saturating_sub(1) as usize;
+        let end = block.result_end as usize;
+        let replacement = match action {
+            ConflictBatchAction::ApplyTheirsNonConflicting => &block.theirs_lines,
+            _ => &block.ours_lines,
+        };
+        lines.splice(start..end, replacement.iter().cloned());
+        applied += 1;
+    }
+    let line_ending = if file.result.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let trailing = if file.result.ends_with('\n') {
+        line_ending
+    } else {
+        ""
+    };
+    let updated = lines.join(line_ending) + trailing;
+    let remaining = crate::merge::parse_marker_blocks(&updated, &file.ours, &file.theirs).len();
+    if remaining == 0 {
+        let index_entries = capture_index_entries(repo, path)?;
+        write_resolved(repo, path, &updated)?;
+        mark_resolved(repo, path, index_entries)?;
+    } else {
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "conflict batch action requires a non-bare worktree".into(),
+        })?;
+        std::fs::write(workdir.join(path), updated).map_err(EngineError::from_gix)?;
+    }
+    Ok(ConflictBatchResult {
+        applied_blocks: applied,
+        remaining_blocks: remaining as u32,
+        fully_resolved: remaining == 0,
     })
 }
 

@@ -46,6 +46,14 @@ enum PushDialogRefspec {
     }
 }
 
+struct MultiRootPushTargetSelection: Identifiable, Equatable {
+    let rootPath: String
+    let remote: String
+    let targetBranch: String
+
+    var id: String { rootPath }
+}
+
 enum PushDialogTagMode: String, CaseIterable, Identifiable {
     case all
     case currentBranch
@@ -62,6 +70,7 @@ enum PushDialogTagMode: String, CaseIterable, Identifiable {
 
 /// Rebased 风格 Push 选择器：远程、目标分支、force 和将被纳入操作的提交预览。
 struct PushDialogView: View {
+    let repo: Repository?
     let remotes: [RemoteInfo]
     let branches: [BranchInfo]
     let commits: [CommitInfo]
@@ -102,8 +111,10 @@ struct PushDialogView: View {
         onConfigureRemotes: @escaping () -> Void = {},
         onConfigureSSH: @escaping () -> Void = {},
         showsConfigurationActions: Bool = true,
-        showsSSHConfigurationAction: Bool = true
+        showsSSHConfigurationAction: Bool = true,
+        repo: Repository? = nil
     ) {
+        self.repo = repo
         self.remotes = remotes
         self.branches = branches
         self.commits = commits
@@ -134,6 +145,7 @@ struct PushDialogView: View {
         _pushTags = State(initialValue: defaultPushTagMode != nil)
         _pushTagMode = State(initialValue: defaultPushTagMode ?? .all)
         _runHooks = State(initialValue: defaultRunHooks)
+        _selectedCommitID = State(initialValue: commits.first?.id)
     }
 
     @State private var publishBranch: Bool
@@ -142,6 +154,12 @@ struct PushDialogView: View {
     @State private var pushTags: Bool
     @State private var pushTagMode: PushDialogTagMode
     @State private var runHooks: Bool
+    @State private var selectedCommitID: String?
+    @State private var changedFiles: [TreeChange] = []
+    @State private var selectedChangedPath: String?
+    @State private var selectedFileDiff: FileDiff?
+    @State private var previewError: String?
+    @State private var previewTask: Task<Void, Never>?
 
     private var selectedBranchIsProtected: Bool {
         GitProtectedBranchRules.matches(normalizedTargetBranch, patterns: protectedBranchPatterns)
@@ -256,38 +274,10 @@ struct PushDialogView: View {
                 }
 
                 Divider()
-                HStack {
-                    Text("Commits")
-                        .font(.headline)
-                    Spacer()
-                    Text("\(commits.count) loaded")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if commits.isEmpty {
-                    Text("No local commits loaded")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let repo {
+                    pushCommitPreview(repo: repo)
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 5) {
-                            ForEach(commits.prefix(12), id: \.id) { commit in
-                                HStack(spacing: 7) {
-                                    Image(systemName: commit.isHead ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(commit.isHead ? .blue : .secondary)
-                                    Text(commit.shortId)
-                                        .font(.system(.caption, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                    Text(commit.summary)
-                                        .lineLimit(1)
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .padding(8)
-                    }
-                    .frame(maxHeight: 150)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    commitList
                 }
             }
             HStack {
@@ -320,11 +310,149 @@ struct PushDialogView: View {
             }
         }
         .padding(20)
-        .frame(width: 480)
+        .frame(width: repo == nil ? 480 : 820)
+        .onAppear {
+            if let selectedCommitID, let repo {
+                loadCommitPreview(repo: repo, commitID: selectedCommitID)
+            }
+        }
+        .onDisappear { previewTask?.cancel() }
+        .onChange(of: selectedCommitID) { _, value in
+            guard let value, let repo else { return }
+            loadCommitPreview(repo: repo, commitID: value)
+        }
         .onChange(of: branch) { _, value in
             let cleaned = GitBranchNameCleanup.cleanUpOnTyping(value)
             if cleaned != value { branch = cleaned }
             if selectedBranchIsProtected { force = false }
+        }
+    }
+
+    private var commitList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Commits").font(.headline)
+                Spacer()
+                Text("\(commits.count) loaded").font(.caption).foregroundStyle(.secondary)
+            }
+            if commits.isEmpty {
+                Text("No local commits loaded").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(commits.prefix(12), id: \.id) { commit in
+                            Button {
+                                selectedCommitID = commit.id
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: selectedCommitID == commit.id ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selectedCommitID == commit.id ? .blue : .secondary)
+                                    Text(commit.shortId)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                    Text(commit.summary).lineLimit(1)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(maxHeight: 150)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pushCommitPreview(repo: Repository) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Commit Preview").font(.headline)
+            HSplitView {
+                commitList
+                    .frame(minWidth: 180, idealWidth: 230, maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let previewError {
+                        Text(previewError).font(.caption).foregroundStyle(.red)
+                    } else if changedFiles.isEmpty {
+                        Text("Select a commit to view changed files")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        HSplitView {
+                            List {
+                                ForEach(changedFiles, id: \.path) { change in
+                                    Button {
+                                        selectedChangedPath = change.path
+                                        loadCommitFileDiff(repo: repo, change: change)
+                                    } label: {
+                                        Label(change.path, systemImage: selectedChangedPath == change.path ? "checkmark.circle" : "doc.text")
+                                            .lineLimit(1)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .frame(minWidth: 150, idealWidth: 210)
+                            if let selectedFileDiff {
+                                SideBySideDiffView(fileDiff: selectedFileDiff)
+                            } else {
+                                Text("Select a changed file to view its diff")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                        }
+                    }
+                }
+                .frame(minWidth: 260, maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(height: 220)
+        }
+    }
+
+    private func loadCommitPreview(repo: Repository, commitID: String) {
+        previewTask?.cancel()
+        changedFiles = []
+        selectedChangedPath = nil
+        selectedFileDiff = nil
+        previewError = nil
+        previewTask = Task.detached(priority: .userInitiated) {
+            do {
+                let commitDiff = try repo.commitDiff(commitId: commitID, parentIndex: nil)
+                await MainActor.run {
+                    guard self.selectedCommitID == commitID else { return }
+                    self.changedFiles = commitDiff.changes
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.selectedCommitID == commitID else { return }
+                    self.previewError = "\(error)"
+                }
+            }
+        }
+    }
+
+    private func loadCommitFileDiff(repo: Repository, change: TreeChange) {
+        guard let commitID = selectedCommitID else { return }
+        Task.detached(priority: .userInitiated) {
+            do {
+                let diff = try repo.commitFileDiffWithSettings(
+                    commitId: commitID,
+                    parentIndex: nil,
+                    path: change.path,
+                    settings: makeArborGitDiffSettings()
+                )
+                await MainActor.run {
+                    guard self.selectedCommitID == commitID,
+                          self.selectedChangedPath == change.path else { return }
+                    self.selectedFileDiff = diff
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.selectedCommitID == commitID,
+                          self.selectedChangedPath == change.path else { return }
+                    self.previewError = "\(error)"
+                }
+            }
         }
     }
 }
@@ -332,14 +460,39 @@ struct PushDialogView: View {
 /// The project-level Push All action has no single remote/branch selector, but
 /// IntelliJ still presents the two push-wide options before dispatching roots.
 struct MultiRootPushOptionsDialog: View {
+    let snapshots: [GitRootBranchSnapshot]
     let onCancel: () -> Void
-    let onPush: (PushDialogTagMode?, Bool, Bool, Bool) -> Void
+    let onPush: ([MultiRootPushTargetSelection], PushDialogTagMode?, Bool, Bool, Bool) -> Void
 
     @State private var pushTags = false
     @State private var pushTagMode: PushDialogTagMode = .all
     @State private var runHooks = true
     @State private var force = false
     @State private var forceWithLease = GitPushSettings.forceWithLeaseDefault()
+    @State private var remoteByRoot: [String: String]
+    @State private var branchByRoot: [String: String]
+    @State private var bulkTargetBranch = ""
+    @State private var editingAllTargets = false
+
+    init(
+        snapshots: [GitRootBranchSnapshot],
+        onCancel: @escaping () -> Void,
+        onPush: @escaping ([MultiRootPushTargetSelection], PushDialogTagMode?, Bool, Bool, Bool) -> Void
+    ) {
+        self.snapshots = snapshots
+        self.onCancel = onCancel
+        self.onPush = onPush
+        _remoteByRoot = State(initialValue: Dictionary(uniqueKeysWithValues: snapshots.map { snapshot in
+            let preferred = snapshot.syncStatuses.first(where: { $0.branch == snapshot.headBranch })
+                .flatMap { status in
+                    status.upstream.split(separator: "/", maxSplits: 1).first.map(String.init)
+                }
+            let remote = preferred.flatMap { value in snapshot.remotes.contains(where: { $0.name == value }) ? value : nil }
+                ?? (snapshot.remotes.count == 1 ? snapshot.remotes[0].name : (snapshot.remotes.contains(where: { $0.name == "origin" }) ? "origin" : ""))
+            return (snapshot.rootPath, remote)
+        }))
+        _branchByRoot = State(initialValue: Dictionary(uniqueKeysWithValues: snapshots.map { ($0.rootPath, $0.headBranch ?? "") }))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -349,6 +502,39 @@ struct MultiRootPushOptionsDialog: View {
             Text("The selected options apply to every root included in this operation.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            if snapshots.isEmpty {
+                ContentUnavailableView("No Git roots selected", systemImage: "externaldrive.badge.xmark")
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Push targets").font(.headline)
+                        Spacer()
+                        Button(editingAllTargets ? "Done" : "Edit All Targets") {
+                            editingAllTargets.toggle()
+                        }
+                    }
+                    if editingAllTargets {
+                        HStack {
+                            TextField("Target branch for all roots", text: $bulkTargetBranch)
+                                .textFieldStyle(.roundedBorder)
+                            Button("Apply") {
+                                let branch = PushDialogRefspec.normalizeTargetBranch(bulkTargetBranch)
+                                guard !branch.isEmpty else { return }
+                                branchByRoot = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.rootPath, branch) })
+                            }
+                        }
+                    }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(snapshots, id: \.rootPath) { snapshot in
+                                rootTargetRow(snapshot)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 190)
+                }
+            }
 
             Toggle("Push tags", isOn: $pushTags)
             if pushTags {
@@ -374,7 +560,13 @@ struct MultiRootPushOptionsDialog: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { onCancel() }
                 Button("Push All") {
+                    let targets = snapshots.compactMap { snapshot -> MultiRootPushTargetSelection? in
+                        guard let remote = remoteByRoot[snapshot.rootPath], !remote.isEmpty,
+                              let branch = branchByRoot[snapshot.rootPath], !branch.isEmpty else { return nil }
+                        return MultiRootPushTargetSelection(rootPath: snapshot.rootPath, remote: remote, targetBranch: branch)
+                    }
                     onPush(
+                        targets,
                         pushTags ? pushTagMode : nil,
                         !runHooks,
                         force,
@@ -382,9 +574,35 @@ struct MultiRootPushOptionsDialog: View {
                     )
                 }
                 .keyboardShortcut(.defaultAction)
+                .disabled(snapshots.isEmpty || snapshots.contains { remoteByRoot[$0.rootPath]?.isEmpty != false || branchByRoot[$0.rootPath]?.isEmpty != false })
             }
         }
         .padding(20)
         .frame(width: 440)
+    }
+
+    private func rootTargetRow(_ snapshot: GitRootBranchSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(snapshot.displayName)
+                .font(.system(.caption, design: .monospaced))
+            HStack {
+                Picker("Remote", selection: Binding(
+                    get: { remoteByRoot[snapshot.rootPath] ?? "" },
+                    set: { remoteByRoot[snapshot.rootPath] = $0 }
+                )) {
+                    Text("Select remote").tag("")
+                    ForEach(snapshot.remotes, id: \.name) { remote in
+                        Text(remote.name).tag(remote.name)
+                    }
+                }
+                TextField("Target branch", text: Binding(
+                    get: { branchByRoot[snapshot.rootPath] ?? "" },
+                    set: { branchByRoot[snapshot.rootPath] = PushDialogRefspec.normalizeTargetBranch($0) }
+                ))
+                .textFieldStyle(.roundedBorder)
+            }
+        }
+        .padding(7)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
     }
 }

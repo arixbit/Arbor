@@ -48,6 +48,54 @@ fn shelve_survives_reopen() {
 }
 
 #[test]
+fn shelf_location_migrates_manifests_and_patches_without_moving_refs() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "v1", "init");
+    r.write("a.txt", "v2");
+    let repo = r.open();
+    repo.shelve("portable".into(), vec!["a.txt".into()])
+        .unwrap();
+
+    let target = r.path.with_extension("arbor-shelf-location");
+    let _ = std::fs::remove_dir_all(&target);
+    let resolved = repo
+        .shelve_set_location(target.to_string_lossy().into_owned(), true)
+        .unwrap();
+    assert_eq!(resolved, target.to_string_lossy());
+    assert_eq!(repo.shelve_location().unwrap(), target.to_string_lossy());
+    assert_eq!(repo.shelve_list().unwrap().len(), 1);
+    assert!(target.join("arbor-shelves").exists());
+
+    let reopened = r.open();
+    reopened.shelve_pop("portable".into()).unwrap();
+    assert_eq!(r.read("a.txt"), "v2");
+    let _ = std::fs::remove_dir_all(&target);
+}
+
+#[test]
+fn shelf_location_without_migration_keeps_existing_shelves_visible() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "v1", "init");
+    r.write("a.txt", "v2");
+    let repo = r.open();
+    repo.shelve("existing".into(), vec!["a.txt".into()])
+        .unwrap();
+
+    let target = r.path.with_extension("arbor-shelf-no-migrate");
+    let _ = std::fs::remove_dir_all(&target);
+    let error = repo
+        .shelve_set_location(target.to_string_lossy().into_owned(), false)
+        .expect_err("existing shelves must require migration");
+    assert!(error.to_string().contains("require migration"));
+    assert_eq!(
+        repo.shelve_location().unwrap(),
+        r.path.join(".git").to_string_lossy()
+    );
+    assert_eq!(repo.shelve_list().unwrap().len(), 1);
+    assert!(!target.exists());
+}
+
+#[test]
 fn cancelled_preservation_shelf_pop_keeps_snapshot_for_retry() {
     let r = TestRepo::new();
     common::commit(&r.path, "a.txt", "base\n", "init");

@@ -86,11 +86,16 @@ use the repository's repeatable launcher:
 ./script/build_and_run.sh --verify --project /path/to/a/git-repository
 ```
 
-The launcher signs the Debug app before opening it. If you configured the Team
-in Xcode, it preserves that setting when regenerating the project. You can also
-pass it explicitly with `ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
+The launcher signs the Debug app when a usable Apple code-signing identity and
+Team are available. If no signing setup is present, it automatically builds an
+unsigned local Debug app so development can still start on a clean Mac. That
+fallback is for local development only and does not make a downloaded package
+trusted by Gatekeeper. Set `ARBOR_REQUIRE_SIGNING=1` to fail instead when a
+signed build is required. If you configured the Team in Xcode, the launcher preserves that
+setting when regenerating the project; you can also pass it explicitly with
+`ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
 
-For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.17`. The
+For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.18`. The
 default output is explicitly unsigned and arm64; signing and notarization
 require the external Apple Developer credentials described in
 [RELEASE.md](RELEASE.md).

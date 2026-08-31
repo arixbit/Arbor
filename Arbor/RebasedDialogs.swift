@@ -6653,13 +6653,18 @@ struct RebasedCloneDialog: View {
     @Binding var parentDirectory: String
     @Binding var directoryName: String
     @Binding var recursiveSubmodules: Bool
+    @Binding var shallowClone: Bool
+    @Binding var depth: String
     let onChooseParent: () -> Void
     let onClone: () -> Void
     let onCancel: () -> Void
 
     private var canClone: Bool {
-        !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let depthValue = depth.trimmingCharacters(in: .whitespacesAndNewlines)
+        let validDepth = !shallowClone || (UInt32(depthValue) != nil && UInt32(depthValue)! > 0)
+        return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !parentDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && validDepth
     }
 
     var body: some View {
@@ -6677,6 +6682,21 @@ struct RebasedCloneDialog: View {
                 .textFieldStyle(.roundedBorder)
             Toggle("Initialize and update submodules", isOn: $recursiveSubmodules)
                 .toggleStyle(.checkbox)
+            Toggle("Shallow clone", isOn: $shallowClone)
+                .toggleStyle(.checkbox)
+            if shallowClone {
+                TextField("Depth (positive integer)", text: $depth)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: depth) { _, value in
+                        let filtered = value.filter(\.isNumber)
+                        if filtered != value { depth = filtered }
+                    }
+                if !depth.isEmpty && (UInt32(depth) == nil || UInt32(depth)! == 0) {
+                    Text("Depth must be a positive integer.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
             Text("The destination folder must not already exist.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -6746,34 +6766,72 @@ struct RebasedTagDialog: View {
 
 struct RebasedShelveDialog: View {
     @Binding var name: String
+    var repo: Repository? = nil
     let entries: [FileEntry]
     let onShelve: ([String]) -> Void
     let onCancel: () -> Void
     @State private var selectedPaths: Set<String> = []
+    @State private var previewPath: String?
+    @State private var showPreview = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Shelve Changes").font(.title3.weight(.semibold))
             TextField("Shelf name", text: $name)
                 .textFieldStyle(.roundedBorder)
-            List(entries, id: \.path) { entry in
-                Toggle(isOn: Binding(
-                    get: { selectedPaths.contains(entry.path) },
-                    set: { checked in
-                        if checked { selectedPaths.insert(entry.path) }
-                        else { selectedPaths.remove(entry.path) }
-                    }
-                )) {
-                    HStack {
-                        StatusBadge(kind: entry.unstaged != .unchanged ? entry.unstaged : entry.staged)
-                        Text(entry.path).lineLimit(1)
+            HStack(spacing: 10) {
+                Text("Files selected: \(selectedPaths.count)/\(entries.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(showPreview ? "Hide Diff" : "Review Diff") {
+                    showPreview.toggle()
+                    if showPreview, previewPath == nil {
+                        previewPath = entries.first(where: { selectedPaths.contains($0.path) })?.path
                     }
                 }
-                .toggleStyle(.checkbox)
+                .disabled(repo == nil || selectedPaths.isEmpty)
             }
-            .frame(height: 220)
+            if showPreview, let repo {
+                HSplitView {
+                    List(entries, id: \.path, selection: $previewPath) { entry in
+                        Text(entry.path).lineLimit(1).tag(entry.path)
+                    }
+                    .frame(minWidth: 190, idealWidth: 240)
+                    if let previewPath,
+                       let entry = entries.first(where: { $0.path == previewPath }) {
+                        DiffDetailView(
+                            repo: repo,
+                            entry: entry,
+                            onChanged: {},
+                            selectionModePath: nil
+                        )
+                    } else {
+                        ContentUnavailableView("Select a file", systemImage: "doc.text")
+                    }
+                }
+                .frame(height: 280)
+            } else {
+                List(entries, id: \.path) { entry in
+                    Toggle(isOn: Binding(
+                        get: { selectedPaths.contains(entry.path) },
+                        set: { checked in
+                            if checked { selectedPaths.insert(entry.path) }
+                            else { selectedPaths.remove(entry.path) }
+                        }
+                    )) {
+                        HStack {
+                            StatusBadge(kind: entry.unstaged != .unchanged ? entry.unstaged : entry.staged)
+                            Text(entry.path).lineLimit(1)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                .frame(height: 220)
+            }
             HStack {
                 Button("Select All") { selectedPaths = Set(entries.map(\.path)) }
+                Button("Clear") { selectedPaths.removeAll(); previewPath = nil }
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
                 Button("Shelve", action: { onShelve(Array(selectedPaths)) })
@@ -6782,10 +6840,75 @@ struct RebasedShelveDialog: View {
             }
         }
         .padding(20)
-        .frame(width: 560)
+        .frame(width: showPreview ? 860 : 560)
         .onAppear {
             if selectedPaths.isEmpty { selectedPaths = Set(entries.map(\.path)) }
         }
+    }
+}
+
+/// Repository-scoped Shelf storage configuration. The engine keeps Git refs in
+/// the repository and only moves the manifest/patch artifacts, so migration is
+/// explicit and cannot be mistaken for a normal folder preference.
+struct RebasedShelfLocationDialog: View {
+    @Binding var location: String
+    @Binding var migrateExisting: Bool
+    let currentLocation: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    private var normalizedLocation: String {
+        location.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var validationError: String? {
+        guard !normalizedLocation.isEmpty else { return "Shelf location is required." }
+        guard URL(fileURLWithPath: normalizedLocation).isFileURL,
+              normalizedLocation.hasPrefix("/") else {
+            return "Shelf location must be an absolute path."
+        }
+        return nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Shelf Location")
+                .font(.title3.weight(.semibold))
+            Text("Choose where Shelf manifests and raw patches are stored for this Git repository.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            TextField("Absolute folder path", text: $location)
+                .textFieldStyle(.roundedBorder)
+            Text("Current: \(currentLocation)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Toggle("Migrate existing Shelves", isOn: $migrateExisting)
+                .toggleStyle(.checkbox)
+            if migrateExisting {
+                Text("Existing Shelf files will be copied and verified before this repository switches to the new folder. Git Shelf refs stay in the repository.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("New Shelves use the folder above. Existing Shelves remain at their current location until migrated.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let validationError {
+                Text(validationError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                Button("Save", action: onSave)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(validationError != nil || normalizedLocation == currentLocation)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
     }
 }
 
@@ -7458,7 +7581,7 @@ struct RebasedUnshelveDialog: View {
     let repo: Repository?
     var patchText: String? = nil
     @Binding var removeAppliedFilesFromShelf: Bool
-    let onUnshelve: ([String], [ShelvePatchSelection], String?, Bool, String?, UInt32) -> Void
+    let onUnshelve: ([String], [ShelvePatchSelection], String?, Bool, String?, UInt32, String?) -> Void
     var onApplyPatch: ([String], [ShelvePatchSelection], String?, String?, UInt32) -> Void = { _, _, _, _, _ in }
     let onCancel: () -> Void
     @State private var selectedPaths: Set<String> = []
@@ -7476,6 +7599,7 @@ struct RebasedUnshelveDialog: View {
     @State private var groupByDirectory = true
     @State private var collapsedPatchFolders: Set<String> = []
     @State private var targetName = ""
+    @State private var changelistComment = ""
     @State private var isImportedShelf = false
     @State private var mappedBaseDirectory: String?
     @State private var mappedPathStrip: UInt32 = 1
@@ -7593,6 +7717,10 @@ struct RebasedUnshelveDialog: View {
             }
             .pickerStyle(.menu)
             if patchText == nil {
+                TextField("Changelist comment (optional)", text: $changelistComment)
+                    .textFieldStyle(.roundedBorder)
+            }
+            if patchText == nil {
                 Toggle("Remove Applied Files from Shelf", isOn: $removeAppliedFilesFromShelf)
                     .toggleStyle(.checkbox)
                 if removeAppliedFilesFromShelf {
@@ -7613,7 +7741,10 @@ struct RebasedUnshelveDialog: View {
                             targetName.isEmpty ? nil : targetName,
                             removeAppliedFilesFromShelf,
                             mappedBaseDirectory,
-                            mappedPathStrip
+                            mappedPathStrip,
+                            changelistComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? nil
+                                : changelistComment.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                     } else {
                         onApplyPatch(

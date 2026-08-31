@@ -39,6 +39,40 @@ protocol HostingClient {
     ) async throws -> HostingComment
 
     func currentHostingUser(for repository: HostingRepository) async throws -> HostingUser
+
+    func hostingPullRequestDetail(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws -> HostingChangeRequestDetail
+
+    func hostingPullRequestFiles(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        commitID: String
+    ) async throws -> [HostingChangeRequestFile]
+
+    func submitHostingReview(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        outcome: HostingReviewOutcome,
+        body: String?
+    ) async throws
+
+    func mergeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        method: String
+    ) async throws
+
+    func closeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws
+
+    func revokeHostingApproval(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws
 }
 
 extension HostingClient {
@@ -49,6 +83,55 @@ extension HostingClient {
         for repository: HostingRepository
     ) async throws -> [String] {
         []
+    }
+
+    func hostingPullRequestDetail(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws -> HostingChangeRequestDetail {
+        throw HostingAPIError.http(status: 501, message: "Pull request details are not supported by this provider")
+    }
+
+    func hostingPullRequestFiles(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        commitID: String
+    ) async throws -> [HostingChangeRequestFile] {
+        try await hostingPullRequestDetail(
+            for: repository,
+            pullRequestID: pullRequestID
+        ).files
+    }
+
+    func submitHostingReview(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        outcome: HostingReviewOutcome,
+        body: String?
+    ) async throws {
+        throw HostingAPIError.http(status: 501, message: "Pull request reviews are not supported by this provider")
+    }
+
+    func mergeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        method: String
+    ) async throws {
+        throw HostingAPIError.http(status: 501, message: "Pull request merge is not supported by this provider")
+    }
+
+    func closeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws {
+        throw HostingAPIError.http(status: 501, message: "Pull request close is not supported by this provider")
+    }
+
+    func revokeHostingApproval(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws {
+        throw HostingAPIError.http(status: 501, message: "Approval revoke is not supported by this provider")
     }
 }
 
@@ -113,6 +196,103 @@ extension GitHubClient: HostingClient {
 
     func currentHostingUser(for repository: HostingRepository) async throws -> HostingUser {
         try await currentUser(for: repository).hostingUser
+    }
+
+    func hostingPullRequestDetail(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws -> HostingChangeRequestDetail {
+        try await loadGitHubChangeRequestDetail(for: repository, number: pullRequestID)
+    }
+
+    func hostingPullRequestFiles(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        commitID: String
+    ) async throws -> [HostingChangeRequestFile] {
+        try await loadGitHubCommitFiles(for: repository, commitID: commitID)
+    }
+
+    func submitHostingReview(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        outcome: HostingReviewOutcome,
+        body: String?
+    ) async throws {
+        try await submitGitHubReview(
+            for: repository,
+            number: pullRequestID,
+            outcome: outcome,
+            body: body
+        )
+    }
+
+    func mergeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        method: String
+    ) async throws {
+        try await mergeGitHubPullRequest(for: repository, number: pullRequestID, method: method)
+    }
+
+    func closeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws {
+        try await closeGitHubPullRequest(for: repository, number: pullRequestID)
+    }
+}
+
+extension GitLabClient {
+    func hostingPullRequestDetail(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws -> HostingChangeRequestDetail {
+        try await loadGitLabChangeRequestDetail(for: repository, iid: pullRequestID)
+    }
+
+    func hostingPullRequestFiles(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        commitID: String
+    ) async throws -> [HostingChangeRequestFile] {
+        try await loadGitLabCommitFiles(for: repository, commitID: commitID)
+    }
+
+    func submitHostingReview(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        outcome: HostingReviewOutcome,
+        body: String?
+    ) async throws {
+        try await submitGitLabReview(
+            for: repository,
+            iid: pullRequestID,
+            outcome: outcome,
+            body: body
+        )
+    }
+
+    func mergeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int,
+        method: String
+    ) async throws {
+        try await mergeGitLabMergeRequest(for: repository, iid: pullRequestID, method: method)
+    }
+
+    func closeHostingPullRequest(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws {
+        try await closeGitLabMergeRequest(for: repository, iid: pullRequestID)
+    }
+
+    func revokeHostingApproval(
+        for repository: HostingRepository,
+        pullRequestID: Int
+    ) async throws {
+        try await revokeGitLabApproval(for: repository, iid: pullRequestID)
     }
 }
 
