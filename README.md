@@ -10,11 +10,11 @@ operations, conflict resolution, rebase, remotes, and hosting integrations.
 
 Download the latest packages from the repository's
 [Releases](https://github.com/arixbit/Arbor/releases/latest) page. The
-automated workflow publishes an arm64 **unsigned QA** DMG and ZIP named
-`Arbor-VERSION-unsigned-arm64.*`. These packages are for Apple Silicon
-(arm64) and macOS 14 or later only. Intel users currently need to build a
-universal archive themselves; an Intel package is not published. These are
-testing packages, not Apple-trusted production releases.
+automated workflow publishes an arm64 **unsigned** DMG and ZIP named
+`Arbor-VERSION-unsigned-arm64.*`. This is the supported public distribution
+format and does not require an Apple Developer account, App Store listing, or
+review. The package is for Apple Silicon (arm64) and macOS 14 or later only;
+Intel users currently need to build a universal archive themselves.
 
 1. Download `SHA256SUMS` and the DMG or ZIP from the same release.
 2. Verify the checksum with `shasum -a 256 -c SHA256SUMS`.
@@ -26,7 +26,7 @@ Gatekeeper may block it. After verifying the checksum, first Control-click the
 app in Finder and choose **Open**, or use **System Settings > Privacy &
 Security > Open Anyway**. This approval is per app.
 
-If macOS still refuses to open this verified QA package, the message may say
+If macOS still refuses to open this verified package, the message may say
 that the app cannot be opened or is damaged. That wording can be misleading
 when Gatekeeper rejects an unsigned app, but it can also indicate a real
 signature, corruption, or modification problem. Only after the checksum
@@ -40,7 +40,27 @@ This removes the downloaded-file quarantine marker; it does not sign,
 notarize, or repair the app. Do not run it when the checksum does not match,
 and do not disable Gatekeeper globally. A correctly signed and notarized
 production package should not require this step. See the full
-[macOS installation guide](docs/macos-installation.md) for the QA flow.
+[macOS installation guide](docs/macos-installation.md) for the complete flow.
+
+### Homebrew
+
+Homebrew can download and install the same unsigned release without opening a
+browser or dragging the app from a DMG. Until the separate `homebrew-arbor`
+tap is published, use the Arbor repository as the tap remote:
+
+```sh
+brew tap arixbit/arbor https://github.com/arixbit/Arbor.git && brew install --cask arbor
+```
+
+After a dedicated tap repository is published, the command becomes:
+
+```sh
+brew tap arixbit/arbor && brew install --cask arbor
+```
+
+Homebrew does not remove Apple's trust requirement. The first launch may still
+need **Open/Open Anyway**, or the app-specific `xattr` command above after the
+download checksum has been verified.
 
 ## Quick start
 

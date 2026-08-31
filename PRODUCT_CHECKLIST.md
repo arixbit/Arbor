@@ -8,8 +8,9 @@
 已记录的呈现差异；这些宿主能力不阻塞 V1。矩阵不再有未决功能性 `partial` 项，
 跨 root 继续遵循逐 root partial-result 语义，不宣称跨 root 原子事务。
 
-发布命令：`ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.1`（仅本地 QA）；生产
-发布必须提供 Developer ID、完成 notarization、更新 appcast/Cask 校验和依赖
+发布命令：`ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.18`；unsigned arm64 包可
+作为公开下载渠道发布，但必须明确说明 Gatekeeper 风险并提供校验和/Cask。若要
+提供 Apple-trusted 包，才需要 Developer ID、notarization、appcast 和对应依赖
 许可证清单。
 
 本轮对齐 `Git.Show.Stash`（2026-08-28）：VCS > Git > Local Changes 增加 Show Stash，直接选择 Stash/Shelf 工作页；Unstash 继续保持恢复弹窗语义。
@@ -437,11 +438,11 @@
 
 - [x] AppIcon Asset Catalog：macOS 16/32/128/256/512 的 1x/2x 资源
 - [x] MIT `LICENSE`、`README.md`、`CHANGELOG.md`、`RELEASE.md`
-- [x] 本地 unsigned archive / DMG / ZIP / SHA256 发布脚本，并明确不等同于公证
+- [x] unsigned archive / DMG / ZIP / SHA256 发布脚本，并明确不等同于公证
 - [x] JSONL rolling diagnostics、日志导出、用户确认后的报告问题 URL
 - [ ] Sparkle 2.x 正式 SPM 接入、EdDSA 公钥与 staging feed（需要外部密钥/依赖确认）
 - [ ] Developer ID 签名、公证、staple、`spctl` 验收（需要 Apple Developer 账号）
-- [ ] 真实 GitHub Release 与 Homebrew Cask tap（需要外部仓库与固定产物 URL）
+- [ ] 独立 `homebrew-arbor` GitHub tap（需要外部仓库；当前仓库已提供可用 Cask）
 - [ ] 依赖许可证逐项人工/法律复核（见 `DEPENDENCY_LICENSES.md`）
 
 ## 10. v0.13 体验重构验收

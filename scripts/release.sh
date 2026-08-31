@@ -88,5 +88,5 @@ fi
 
 echo "Local release artifacts: $release_dir"
 if [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
-  echo "STATUS: unsigned-local (not notarized; do not publish as production)"
+  echo "STATUS: unsigned-public (not Apple-trusted; Gatekeeper approval may be required)"
 fi

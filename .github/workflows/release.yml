@@ -38,7 +38,7 @@ jobs:
           ./scripts/release.sh "$version"
           echo "ARBOR_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Publish unsigned QA release
+      - name: Publish unsigned macOS release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,14 +47,15 @@ jobs:
           {
             echo "# Arbor $ARBOR_RELEASE_VERSION"
             echo
-            echo "This release contains an unsigned arm64 macOS QA build."
+            echo "This release contains the supported unsigned arm64 macOS build."
+            echo "It is not Apple-trusted; the first launch may require Gatekeeper approval."
             echo "Read the macOS Gatekeeper instructions in README.md before opening it."
             echo
             cat "$release_dir/CHANGELOG.md"
           } > "$notes_file"
           gh release create "v$ARBOR_RELEASE_VERSION" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Arbor $ARBOR_RELEASE_VERSION (unsigned QA)" \
+            --title "Arbor $ARBOR_RELEASE_VERSION (unsigned arm64)" \
             --notes-file "$notes_file" \
             "$release_dir"/Arbor-* \
             "$release_dir/SHA256SUMS"
