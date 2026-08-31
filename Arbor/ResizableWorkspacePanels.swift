@@ -141,8 +141,17 @@ struct WorkspaceColumnResizeHandle: View {
 /// writes the final width back to SwiftUI once.
 final class WorkspaceNativeSplitView: NSSplitView {
     var onResizeEnded: (() -> Void)?
+    var onLayout: (() -> Void)?
 
     override var dividerThickness: CGFloat { 12 }
+
+    override func layout() {
+        super.layout()
+        // SwiftUI may create the representable before the split view has a
+        // non-zero bounds. Re-apply the persisted position after AppKit has
+        // laid out the arranged hosts so the initial width is not lost.
+        onLayout?()
+    }
 
     override func drawDivider(in rect: NSRect) {
         NSColor.separatorColor.withAlphaComponent(0.48).setFill()
@@ -173,8 +182,11 @@ final class WorkspaceNativeSplitView: NSSplitView {
         grip.stroke()
     }
 
-    override func mouseUp(with event: NSEvent) {
-        super.mouseUp(with: event)
+    override func mouseDown(with event: NSEvent) {
+        // NSSplitView tracks divider drags synchronously from mouseDown and
+        // consumes the matching mouseUp internally. Persist only after the
+        // superclass returns, when the final divider frame is available.
+        super.mouseDown(with: event)
         onResizeEnded?()
     }
 }
@@ -276,11 +288,17 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
         mainHost.translatesAutoresizingMaskIntoConstraints = false
         sidebarHost.setContentHuggingPriority(.defaultLow, for: .horizontal)
         mainHost.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        sidebarHost.setContentCompressionResistancePriority(.required, for: .horizontal)
-        mainHost.setContentCompressionResistancePriority(.required, for: .horizontal)
+        // The split view delegate owns the minimum widths. Required
+        // compression resistance on both hosted trees makes AppKit treat
+        // their intrinsic SwiftUI sizes as immovable and leaves the divider
+        // apparently dead.
+        sidebarHost.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        mainHost.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         splitView.addArrangedSubview(sidebarHost)
         splitView.addArrangedSubview(mainHost)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
 
         context.coordinator.splitView = splitView
         context.coordinator.sidebarHost = sidebarHost
@@ -288,6 +306,9 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
         context.coordinator.parent = self
         splitView.onResizeEnded = { [weak coordinator = context.coordinator] in
             coordinator?.commitCurrentPosition()
+        }
+        splitView.onLayout = { [weak coordinator = context.coordinator] in
+            coordinator?.applyExternalPositionIfNeeded()
         }
         return splitView
     }
