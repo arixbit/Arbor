@@ -457,14 +457,14 @@ func openBranchComparisonTab(rootPath: String, first: String, second: String) {
 }
 
 func loadMoreBranchComparison(_ side: BranchComparisonSide) {
-    guard logViewMode == .compareBranches,
+    guard logList.viewMode == .compareBranches,
           !branchComparisonIsLoading(side),
           branchComparisonSideHasMore(side) else { return }
     startBranchComparisonLoad(side, reset: false)
 }
 
 func refreshBranchComparison(_ side: BranchComparisonSide) {
-    guard logViewMode == .compareBranches else { return }
+    guard logList.viewMode == .compareBranches else { return }
     let selectedWasInSide = branchComparisonEntries(side).contains {
         $0.id == branchCompareSelectionID
     }
@@ -480,7 +480,7 @@ func refreshBranchComparison(_ side: BranchComparisonSide) {
 }
 
 func loadBranchComparison(reset: Bool = true) {
-    guard reset, logViewMode == .compareBranches else { return }
+    guard reset, logList.viewMode == .compareBranches else { return }
     branchCompareError = nil
     refreshBranchComparison(.first)
     refreshBranchComparison(.second)
@@ -509,7 +509,7 @@ func cancelBranchComparisonTask(_ side: BranchComparisonSide) {
 }
 
 func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
-    guard logViewMode == .compareBranches else { return }
+    guard logList.viewMode == .compareBranches else { return }
     let first = compareRev1.trimmingCharacters(in: .whitespacesAndNewlines)
     let second = compareRev2.trimmingCharacters(in: .whitespacesAndNewlines)
     let filter = branchComparisonFilter(side)
@@ -605,7 +605,7 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
                 guard !Task.isCancelled,
                       self.branchCompareGeneration == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
-                      self.logViewMode == .compareBranches,
+                      self.logList.viewMode == .compareBranches,
                       self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
                       self.compareRev2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
                       self.branchComparisonFilter(side) == filterSnapshot,
@@ -633,7 +633,7 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
                 guard !Task.isCancelled,
                       self.branchCompareGeneration == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
-                      self.logViewMode == .compareBranches,
+                      self.logList.viewMode == .compareBranches,
                       self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
                       self.compareRev2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
                       self.branchComparisonFilter(side) == filterSnapshot,
@@ -747,8 +747,8 @@ func repairBranchComparisonSelection() {
 func activateComparisonRepository(_ rootRepo: Repository, rootPath: String) {
     activeCompareRepo = rootRepo
     compareRepositoryPath = rootPath
-    logActiveRootPath = rootPath
-    logActiveRepo = rootRepo
+    logList.activeRootPath = rootPath
+    logList.activeRepo = rootRepo
     logActiveBranches = (try? rootRepo.branchList()) ?? []
     logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
     logActiveRemotes = (try? rootRepo.remoteList()) ?? []

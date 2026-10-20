@@ -106,10 +106,10 @@ func disposeExternalLogSession() {
     } else {
         externalLogProviderSession?.dispose()
     }
-    logRefreshTask?.cancel()
-    logRefreshTask = nil
-    logLoadTask?.cancel()
-    logLoadTask = nil
+    logList.refreshTask?.cancel()
+    logList.refreshTask = nil
+    logList.loadTask?.cancel()
+    logList.loadTask = nil
     logSignatureLoadTask?.cancel()
     logSignatureLoadTask = nil
     logCommandTask?.cancel()
@@ -138,12 +138,12 @@ func disposeExternalLogSession() {
     multiRootLoadGeneration &+= 1
     multiRootLoadNeedsRefresh = false
     multiRootLoadCompletion = nil
-    logGeneration &+= 1
+    logList.generation &+= 1
     logSignatureGeneration &+= 1
     logCommandGeneration &+= 1
     reflogGeneration &+= 1
     logAggregateRepositories.removeAll()
-    logActiveRepo = nil
+    logList.activeRepo = nil
     reflogRootRepo = nil
     activeCompareRepo = nil
     projectRepo = nil
@@ -160,14 +160,14 @@ var currentLogTabID: UUID {
 /// field as a compatibility bridge for old in-memory tabs and revision-entry
 /// actions, while using the set as the source of truth for the graph query.
 var activeLogStartRevisions: [String] {
-    let selected = logStartRevisions
+    let selected = logList.startRevisions
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
         .sorted()
     if !selected.isEmpty {
         return selected
     }
-    let legacy = logStartRevision.trimmingCharacters(in: .whitespacesAndNewlines)
+    let legacy = logList.startRevision.trimmingCharacters(in: .whitespacesAndNewlines)
     return legacy.isEmpty ? [] : [legacy]
 }
 
@@ -175,8 +175,8 @@ func setLogStartRevisions(_ revisions: [String]) {
     let normalized = revisions
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
-    logStartRevisions = Set(normalized)
-    logStartRevision = normalized.count == 1 ? normalized[0] : ""
+    logList.startRevisions = Set(normalized)
+    logList.startRevision = normalized.count == 1 ? normalized[0] : ""
 }
 
 func setLogStartRevision(_ revision: String) {
@@ -184,7 +184,7 @@ func setLogStartRevision(_ revision: String) {
 }
 
 func setLogStartRevisionSelected(_ revision: String, selected: Bool) {
-    var revisions = logStartRevisions
+    var revisions = logList.startRevisions
     if selected {
         revisions.insert(revision)
     } else {
@@ -281,18 +281,18 @@ func navigateLogToRevision(rootPath: String, revision: String) {
         )
         return
     }
-    logActiveRootPath = rootPath
-    logActiveRepo = rootRepo
+    logList.activeRootPath = rootPath
+    logList.activeRepo = rootRepo
     logActiveBranches = (try? rootRepo.branchList()) ?? []
     logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
     logActiveRemotes = (try? rootRepo.remoteList()) ?? []
     setLogStartRevisions([])
     logSelection = nil
     logSelectedIDs = []
-    logViewMode = .graph
+    logList.viewMode = .graph
     loadLog()
     Task { @MainActor in
-        while isLoadingLog {
+        while logList.isLoading {
             guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -303,7 +303,7 @@ func navigateLogToRevision(rootPath: String, revision: String) {
 
 func logStartRevisionBinding(for revision: String) -> Binding<Bool> {
     Binding(
-        get: { self.logStartRevisions.contains(revision) },
+        get: { self.logList.startRevisions.contains(revision) },
         set: { self.setLogStartRevisionSelected(revision, selected: $0) }
     )
 }
@@ -313,35 +313,35 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
     return LogTabDescriptor(
         id: currentLogTabID,
         title: logTabs.first(where: { $0.id == currentLogTabID })?.title ?? "Log",
-        rootPath: (logActiveRootPath ?? existingTab?.rootPath).map(canonicalExternalLogPath),
+        rootPath: (logList.activeRootPath ?? existingTab?.rootPath).map(canonicalExternalLogPath),
         historyPath: existingTab?.historyPath,
         updateInfoRanges: existingTab?.updateInfoRanges,
         aggregateBranchFilters: logAggregateBranchFilters,
         aggregateRevisionRanges: logAggregateRevisionRanges.map(\.persisted),
         aggregateRootPaths: logAggregateRootPaths.sorted(),
-        viewMode: logViewMode,
-        startRevision: logStartRevision,
+        viewMode: logList.viewMode,
+        startRevision: logList.startRevision,
         startRevisions: activeLogStartRevisions,
-        pathFilter: logPathFilter,
+        pathFilter: logList.pathFilter,
         pathSelections: activeLogPathFilterSelections(),
-        visibleRootPathsRaw: logVisibleRootPathsRaw,
-        authorFilter: logAuthorFilter,
-        messageFilter: logMessageFilter,
-        messageRegex: logMessageRegex,
-        messageMatchCase: logMessageMatchCase,
-        sinceText: logSinceText,
-        untilText: logUntilText,
+        visibleRootPathsRaw: logList.visibleRootPathsRaw,
+        authorFilter: logList.authorFilter,
+        messageFilter: logList.messageFilter,
+        messageRegex: logList.messageRegex,
+        messageMatchCase: logList.messageMatchCase,
+        sinceText: logList.since,
+        untilText: logList.until,
         commandFilter: logCommandFilter,
-        follow: logFollow,
+        follow: logList.follow,
         graphSortModeRaw: logGraphSortModeRaw,
         compareRevision1: compareRev1,
         compareRevision2: compareRev2,
         compareRepositoryPath: compareRepositoryPath,
         compareWithWorkingTree: compareWithWorkingTree,
-        compareFirstFilter: logViewMode == .compareBranches
+        compareFirstFilter: logList.viewMode == .compareBranches
             ? branchCompareFirstFilter
             : nil,
-        compareSecondFilter: logViewMode == .compareBranches
+        compareSecondFilter: logList.viewMode == .compareBranches
             ? branchCompareSecondFilter
             : nil,
         selection: logSelection,
@@ -369,8 +369,8 @@ func saveCurrentLogTab() {
 }
 
 func clearLogActiveRootContext() {
-    logActiveRootPath = nil
-    logActiveRepo = nil
+    logList.activeRootPath = nil
+    logList.activeRepo = nil
     logActiveBranches = []
     logActiveRemoteBranches = []
     logActiveRemotes = []
@@ -413,7 +413,7 @@ func openAnotherLogTab() {
 func switchLogTab(_ id: UUID) {
     guard id != currentLogTabID,
           let tab = logTabs.first(where: { $0.id == id }) else { return }
-    let previousMode = logViewMode
+    let previousMode = logList.viewMode
     saveCurrentLogTab()
     activeLogTabID = id
     applyLogTab(tab)
@@ -441,7 +441,7 @@ func closeLogTab(_ id: UUID) {
         persistExternalLogTabs()
         return
     }
-    let previousMode = logViewMode
+    let previousMode = logList.viewMode
     let replacementIndex = min(index, logTabs.count - 1)
     let replacement = logTabs[replacementIndex]
     activeLogTabID = replacement.id
@@ -493,7 +493,7 @@ func runLogCommand(reset: Bool = true) {
             allRoots: candidateRoots,
             raw: logVisibleRootFilterRaw(for: candidateRoots)
         ).sorted()
-    } else if let commandRepository = logRepository ?? logActiveRepo ?? repo,
+    } else if let commandRepository = logRepository ?? logList.activeRepo ?? repo,
               let rootPath = commandRepository.workdir() {
         commandRootPaths = [canonicalExternalLogPath(rootPath)]
     } else {
@@ -502,7 +502,7 @@ func runLogCommand(reset: Bool = true) {
     let requestedAggregateFilters = logAggregateBranchFilters
     let requestedAggregateRanges = logAggregateRevisionRanges
     let requestedAggregateRootPaths = logAggregateRootPaths
-    let requestedVisibleRootPathsRaw = logVisibleRootPathsRaw
+    let requestedVisibleRootPathsRaw = logList.visibleRootPathsRaw
     let requestedDiscoveredRootPaths = discoveredRootPaths
     var commandRepositories: [(String, Repository)] = []
     for rootPath in commandRootPaths {
@@ -510,7 +510,7 @@ func runLogCommand(reset: Bool = true) {
             commandRepositories.append((rootPath, cached))
             continue
         }
-        if let active = logActiveRepo,
+        if let active = logList.activeRepo,
            let activePath = active.workdir(),
            canonicalExternalLogPath(activePath) == rootPath {
             commandRepositories.append((rootPath, active))
@@ -527,7 +527,7 @@ func runLogCommand(reset: Bool = true) {
         }
     }
     if commandRepositories.isEmpty,
-       let commandRepository = logRepository ?? logActiveRepo ?? repo {
+       let commandRepository = logRepository ?? logList.activeRepo ?? repo {
         commandRepositories = [(
             canonicalExternalLogPath(commandRepository.workdir() ?? ""),
             commandRepository
@@ -568,13 +568,13 @@ func runLogCommand(reset: Bool = true) {
             await MainActor.run {
                 guard generation == self.logCommandGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .command,
+                      self.logList.viewMode == .command,
                       self.logCommandIsAggregate == commandIsAggregate,
                       self.logCommandEntries.count == previousEntryCount,
                       self.logAggregateBranchFilters == requestedAggregateFilters,
                       self.logAggregateRevisionRanges == requestedAggregateRanges,
                       self.logAggregateRootPaths == requestedAggregateRootPaths,
-                      self.logVisibleRootPathsRaw == requestedVisibleRootPathsRaw,
+                      self.logList.visibleRootPathsRaw == requestedVisibleRootPathsRaw,
                       normalizedLogRootPaths(self.multiRoots.map(\.path))
                           == requestedDiscoveredRootPaths else { return }
                 self.isLoadingLogCommand = false
@@ -586,13 +586,13 @@ func runLogCommand(reset: Bool = true) {
             await MainActor.run {
                 guard generation == self.logCommandGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .command,
+                      self.logList.viewMode == .command,
                       self.logCommandIsAggregate == commandIsAggregate,
                       self.logCommandEntries.count == previousEntryCount,
                       self.logAggregateBranchFilters == requestedAggregateFilters,
                       self.logAggregateRevisionRanges == requestedAggregateRanges,
                       self.logAggregateRootPaths == requestedAggregateRootPaths,
-                      self.logVisibleRootPathsRaw == requestedVisibleRootPathsRaw,
+                      self.logList.visibleRootPathsRaw == requestedVisibleRootPathsRaw,
                       normalizedLogRootPaths(self.multiRoots.map(\.path))
                           == requestedDiscoveredRootPaths else { return }
                 self.isLoadingLogCommand = false
@@ -648,20 +648,20 @@ func selectReflogRoot(_ rootPath: String, preservingSelection: Bool = false) {
     logAggregateRootPaths = []
     logAggregateRepositories = [:]
     logAggregateLoadedCounts = [:]
-    logStartRevision = ""
-    logStartRevisions = []
+    logList.startRevision = ""
+    logList.startRevisions = []
     logSelection = nil
     logSelectedIDs = []
 
     if normalizedPath == primaryPath {
-        logActiveRootPath = nil
-        logActiveRepo = nil
+        logList.activeRootPath = nil
+        logList.activeRepo = nil
         logActiveBranches = []
         logActiveRemoteBranches = []
         logActiveRemotes = []
     } else {
-        logActiveRootPath = normalizedPath
-        logActiveRepo = rootRepo
+        logList.activeRootPath = normalizedPath
+        logList.activeRepo = rootRepo
         logActiveBranches = (try? rootRepo.branchList()) ?? []
         logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
         logActiveRemotes = (try? rootRepo.remoteList()) ?? []
@@ -674,11 +674,11 @@ func selectReflogRoot(_ rootPath: String, preservingSelection: Bool = false) {
 
 func prepareReflogRoot() {
     let rootPath = reflogRootPath
-        ?? logActiveRootPath
+        ?? logList.activeRootPath
         ?? repo?.workdir()
         ?? availableReflogRootPaths.first
     guard let rootPath, !rootPath.isEmpty else {
-        logError = "No Git root is available for Reflog."
+        logList.error = "No Git root is available for Reflog."
         return
     }
     if reflogRootPath == rootPath, reflogRootRepo != nil {
@@ -689,7 +689,7 @@ func prepareReflogRoot() {
 }
 
 func loadReflog() {
-    guard logViewMode == .reflog else { return }
+    guard logList.viewMode == .reflog else { return }
     guard let rootPath = reflogRootPath, !rootPath.isEmpty else {
         prepareReflogRoot()
         return
@@ -702,10 +702,10 @@ func loadReflog() {
     let tabID = currentLogTabID
     let requestedRepo = reflogRootRepo
     let pageSize: UInt32 = 100
-    isLoadingLog = true
+    logList.isLoading = true
     isLoadingMoreReflog = false
     reflogHasMore = false
-    logError = nil
+    logList.error = nil
 
     let task = Task.detached(priority: .userInitiated) {
         do {
@@ -720,7 +720,7 @@ func loadReflog() {
             await MainActor.run {
                 guard generation == self.reflogGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .reflog,
+                      self.logList.viewMode == .reflog,
                       self.reflogRootPath == rootPath else { return }
                 if self.reflogRootRepo == nil {
                     self.reflogRootRepo = rootRepo
@@ -735,19 +735,19 @@ func loadReflog() {
                 self.reflogSelection = selectionState.selection
                 self.reflogSelectedIDs = selectionState.selectedIDs
                 self.reflogHasMore = page.count > Int(pageSize)
-                self.isLoadingLog = false
-                self.logError = nil
+                self.logList.isLoading = false
+                self.logList.error = nil
                 self.loadReflogCommitDetails()
             }
         } catch {
             await MainActor.run {
                 guard generation == self.reflogGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .reflog,
+                      self.logList.viewMode == .reflog,
                       self.reflogRootPath == rootPath else { return }
-                self.isLoadingLog = false
+                self.logList.isLoading = false
                 self.reflogHasMore = false
-                self.logError = errorMessage(error)
+                self.logList.error = errorMessage(error)
             }
         }
     }
@@ -758,9 +758,9 @@ func loadReflog() {
 /// selection. The extra record is only a has-more probe, so a page boundary
 /// never needs a second request merely to discover that the file ended.
 func loadMoreReflog() {
-    guard logViewMode == .reflog,
+    guard logList.viewMode == .reflog,
           reflogHasMore,
-          !isLoadingLog,
+          !logList.isLoading,
           !isLoadingMoreReflog,
           let rootPath = reflogRootPath,
           !rootPath.isEmpty else { return }
@@ -790,7 +790,7 @@ func loadMoreReflog() {
             await MainActor.run {
                 guard generation == self.reflogGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .reflog,
+                      self.logList.viewMode == .reflog,
                       self.reflogRootPath == rootPath else { return }
                 let entries = appendedReflogEntries(
                     existing: self.reflogEntries,
@@ -805,10 +805,10 @@ func loadMoreReflog() {
             await MainActor.run {
                 guard generation == self.reflogGeneration,
                       self.externalLogTabIsAlive(tabID),
-                      self.logViewMode == .reflog,
+                      self.logList.viewMode == .reflog,
                       self.reflogRootPath == rootPath else { return }
                 self.isLoadingMoreReflog = false
-                self.logError = errorMessage(error)
+                self.logList.error = errorMessage(error)
             }
         }
     }
@@ -816,9 +816,9 @@ func loadMoreReflog() {
 }
 
 func reloadLogView() {
-    if logViewMode == .command {
+    if logList.viewMode == .command {
         runLogCommand()
-    } else if logViewMode == .reflog {
+    } else if logList.viewMode == .reflog {
         loadReflog()
     } else {
         loadLog()
@@ -829,11 +829,11 @@ func reloadLogView() {
 /// toggling Regex, Match Case, graph options or multiple branch heads in one
 /// event turn produces one refresh request with the final state snapshot.
 func scheduleLogRefresh() {
-    logRefreshTask?.cancel()
-    logRefreshTask = Task { @MainActor in
+    logList.refreshTask?.cancel()
+    logList.refreshTask = Task { @MainActor in
         await Task.yield()
         guard !Task.isCancelled else { return }
-        logRefreshTask = nil
+        logList.refreshTask = nil
         loadLog()
     }
 }
@@ -842,11 +842,11 @@ func scheduleLogRefresh() {
 /// root-qualified selections. Legacy `[[String]]` values are still accepted
 /// and become shared selections that apply to every visible Git root.
 func activeLogPathFilterSelections() -> [LogPathFilterSelection] {
-    let normalized = normalizedLogPathFilterSelections(logPathFilterSelections)
+    let normalized = normalizedLogPathFilterSelections(logList.pathFilterSelections)
     if !normalized.isEmpty {
         return normalized
     }
-    return makeLogPathFilterSelections(from: normalizedLogPathFilters(logPathFilter))
+    return makeLogPathFilterSelections(from: normalizedLogPathFilters(logList.pathFilter))
 }
 
 func recentLogPathFilterSelections() -> [[LogPathFilterSelection]] {
@@ -887,8 +887,8 @@ func setLogPathFilterSelections(
             for: projectPath
         )
     }
-    logPathFilterSelections = normalized
-    logPathFilter = logPathFilterEditorText(normalized)
+    logList.pathFilterSelections = normalized
+    logList.pathFilter = logPathFilterEditorText(normalized)
     if remember {
         rememberLogPathFilterSelections(normalized)
     }
@@ -900,8 +900,8 @@ func setLogPathFilterPaths(_ paths: [String], remember: Bool = true) {
 }
 
 func openLogPathsEditor() {
-    logPathsEditorText = logPathFilterEditorText(activeLogPathFilterSelections())
-    isLogPathsEditorPresented = true
+    logList.pathsEditorText = logPathFilterEditorText(activeLogPathFilterSelections())
+    logList.pathsEditorPresented = true
 }
 
 func clearRecentLogPathFilters() {
@@ -944,9 +944,9 @@ func openLogPathsTreeChooser() {
         )
         return
     }
-    logPathsTreeChooserRoots = roots
-    logPathsTreeChooserSelections = logPathTreeSelections()
-    isLogPathsTreeChooserPresented = true
+    logList.pathsTreeChooserRoots = roots
+    logList.pathsTreeChooserSelections = logPathTreeSelections()
+    logList.pathsTreeChooserPresented = true
 }
 
 var logStructureFilterRootPaths: [String] {
@@ -981,9 +981,9 @@ func persistedLogVisibleRootPaths(for roots: [String]) -> Set<String>? {
 }
 
 func logVisibleRootFilterRaw(for roots: [String]) -> String {
-    guard logVisibleRootPathsRaw.isEmpty,
+    guard logList.visibleRootPathsRaw.isEmpty,
           let selected = persistedLogVisibleRootPaths(for: roots) else {
-        return logVisibleRootPathsRaw
+        return logList.visibleRootPathsRaw
     }
     return serializedLogVisibleRootPaths(selected: selected, allRoots: roots)
 }
@@ -1015,7 +1015,7 @@ func setLogStructureFilterRoot(_ rootPath: String, visible: Bool) {
         guard selected.count > 1 else { return }
         selected.remove(rootPath)
     }
-    logVisibleRootPathsRaw = serializedLogVisibleRootPaths(selected: selected, allRoots: allRoots)
+    logList.visibleRootPathsRaw = serializedLogVisibleRootPaths(selected: selected, allRoots: allRoots)
     persistLogVisibleRootPaths(selected: selected, allRoots: allRoots)
     loadLog()
 }
@@ -1076,7 +1076,7 @@ func clearLogPathFilter() {
 }
 
 func loadLog(reset: Bool = true) {
-    if logViewMode == .reflog {
+    if logList.viewMode == .reflog {
         loadReflog()
         return
     }
@@ -1086,9 +1086,9 @@ func loadLog(reset: Bool = true) {
     }
     guard let repo = logRepository else { return }
     // Phase 5 取消行为:新加载使旧请求结果失效(切换条件后不覆盖新结果)
-    logLoadTask?.cancel()
-    logGeneration += 1
-    let generation = logGeneration
+    logList.loadTask?.cancel()
+    logList.generation += 1
+    let generation = logList.generation
     let tabID = currentLogTabID
     let activePathSelections = activeLogPathFilterSelections()
     let pathFilters = logPathFilterPathsForRoot(
@@ -1098,22 +1098,22 @@ func loadLog(reset: Bool = true) {
     let hasActivePathFilter = !activePathSelections.isEmpty
     let startRevisions = activeLogStartRevisions
     let start = startRevisions.count == 1 ? startRevisions[0] : ""
-    let author = logAuthorFilter.trimmingCharacters(in: .whitespaces)
-    let message = logMessageFilter.trimmingCharacters(in: .whitespaces)
-    let messageRegex = logMessageRegex
-    let messageMatchCase = logMessageMatchCase
+    let author = logList.authorFilter.trimmingCharacters(in: .whitespaces)
+    let message = logList.messageFilter.trimmingCharacters(in: .whitespaces)
+    let messageRegex = logList.messageRegex
+    let messageMatchCase = logList.messageMatchCase
     let hashQuery = isCommitHashQuery(message) ? message.lowercased() : nil
-    let since = parseLogSince(logSinceText)
-    let until = parseLogUntil(logUntilText)
+    let since = parseLogSince(logList.since)
+    let until = parseLogUntil(logList.until)
     let noMerges = logNoMerges
-    let follow = logFollow
+    let follow = logList.follow
     let querySortModeRaw = logGraphSortModeRaw
     let sortMode = LogGraphSortChoice(rawValue: logGraphSortModeRaw)?.engineValue
         ?? LogGraphSortChoice.byCommitDate.engineValue
     let effectiveStart = hashQuery ?? start
     let effectiveMessage = hashQuery == nil ? message : ""
-    let dateText = logSinceText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let untilText = logUntilText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let dateText = logList.since.trimmingCharacters(in: .whitespacesAndNewlines)
+    let untilText = logList.until.trimmingCharacters(in: .whitespacesAndNewlines)
     let canPage = !hasActivePathFilter && startRevisions.isEmpty && effectiveStart.isEmpty
         && author.isEmpty && effectiveMessage.isEmpty
         && since == nil && dateText.isEmpty && until == nil && untilText.isEmpty && !noMerges
@@ -1124,22 +1124,22 @@ func loadLog(reset: Bool = true) {
     let canContinueWithCursor = hashQuery == nil
         && !(hasActivePathFilter && pathFilters.isEmpty)
     if (!dateText.isEmpty && since == nil) || (!untilText.isEmpty && until == nil) {
-        logError = "Date filters must be YYYY-MM-DD, YYYY-MM-DD HH:mm, or Unix seconds."
-        isLoadingLog = false
-        isLoadingMoreLog = false
+        logList.error = "Date filters must be YYYY-MM-DD, YYYY-MM-DD HH:mm, or Unix seconds."
+        logList.isLoading = false
+        logList.isLoadingMore = false
         return
     }
     if let since, let until, since >= until {
-        logError = "The Since date must be earlier than the Until date."
-        isLoadingLog = false
-        isLoadingMoreLog = false
+        logList.error = "The Since date must be earlier than the Until date."
+        logList.isLoading = false
+        logList.isLoadingMore = false
         return
     }
-    let requestedCursor = reset ? nil : logPageCursor
+    let requestedCursor = reset ? nil : logList.pageCursor
     if reset {
-        isLoadingLog = true
-        isLoadingMoreLog = false
-        isShowingCachedLogSnapshot = false
+        logList.isLoading = true
+        logList.isLoadingMore = false
+        logList.isShowingCachedSnapshot = false
         logDetailCommit = nil
         reflogDetailCommit = nil
         reflogDetailCommits = []
@@ -1148,7 +1148,7 @@ func loadLog(reset: Bool = true) {
         reflogDetailLoadTask?.cancel()
         reflogDetailLoadTask = nil
     } else {
-        isLoadingMoreLog = true
+        logList.isLoadingMore = true
     }
     let pageLimit = reset ? initialLogPageLimit : continuationLogPageLimit
     let rootPath = canonicalExternalLogPath(repo.workdir() ?? "")
@@ -1205,15 +1205,15 @@ func loadLog(reset: Bool = true) {
             if let restoredGraph {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard generation == self.logGeneration,
+                    guard generation == self.logList.generation,
                           self.externalLogTabIsAlive(tabID),
                           self.isActiveLogRepository(repo) else { return }
-                    self.logEntries = restoredGraph.commits
-                    self.logPageCursor = restoredGraph.cursor
-                    self.hasMoreLog = restoredGraph.hasMore
+                    self.logList.entries = restoredGraph.commits
+                    self.logList.pageCursor = restoredGraph.cursor
+                    self.logList.hasMore = restoredGraph.hasMore
                     self.logSelection = restoredGraph.commits.first?.id
                     self.logSelectedIDs = restoredGraph.commits.first.map { [$0.id] } ?? []
-                    self.isShowingCachedLogSnapshot = true
+                    self.logList.isShowingCachedSnapshot = true
                 }
             } else if reset,
                       let cachedEntry,
@@ -1225,13 +1225,13 @@ func loadLog(reset: Bool = true) {
                       ) {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard generation == self.logGeneration,
+                    guard generation == self.logList.generation,
                           self.externalLogTabIsAlive(tabID),
                           self.isActiveLogRepository(repo) else { return }
-                    self.logEntries = cachedLog
-                    self.logPageCursor = cachedLog.last?.id
-                    self.hasMoreLog = canPage && cachedLog.count >= Int(pageLimit)
-                    self.isShowingCachedLogSnapshot = true
+                    self.logList.entries = cachedLog
+                    self.logList.pageCursor = cachedLog.last?.id
+                    self.logList.hasMore = canPage && cachedLog.count >= Int(pageLimit)
+                    self.logList.isShowingCachedSnapshot = true
                 }
             }
             // A completed snapshot still needs a fresh first-page read on an
@@ -1279,7 +1279,7 @@ func loadLog(reset: Bool = true) {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard !Task.isCancelled,
-                      generation == self.logGeneration,
+                      generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.isActiveLogRepository(repo) else { return } // 过期结果丢弃
                 if reset {
@@ -1288,8 +1288,8 @@ func loadLog(reset: Bool = true) {
                     var restoredEntries = restoredGraph?.commits ?? []
                     let restoredIDs = Set(restoredEntries.map(\.id))
                     restoredEntries.append(contentsOf: log.filter { !restoredIDs.contains($0.id) })
-                    self.logEntries = restoredEntries
-                    self.isShowingCachedLogSnapshot = false
+                    self.logList.entries = restoredEntries
+                    self.logList.isShowingCachedSnapshot = false
                     // Keep the current row when a refresh still contains it;
                     // otherwise select the first visible revision. Refresh
                     // changes the model, not the user's context.
@@ -1314,19 +1314,19 @@ func loadLog(reset: Bool = true) {
                         self.logSelection = restoredEntries.first?.id
                         self.logSelectedIDs = restoredEntries.first.map { Set([$0.id]) } ?? []
                     }
-                    self.logPageCursor = log.last?.id ?? restoredGraph?.cursor
+                    self.logList.pageCursor = log.last?.id ?? restoredGraph?.cursor
                 } else {
-                    let oldIds = Set(self.logEntries.map(\.id))
-                    self.logEntries.append(contentsOf: log.filter { !oldIds.contains($0.id) })
-                    self.logPageCursor = log.last?.id ?? self.logPageCursor
+                    let oldIds = Set(self.logList.entries.map(\.id))
+                    self.logList.entries.append(contentsOf: log.filter { !oldIds.contains($0.id) })
+                    self.logList.pageCursor = log.last?.id ?? self.logList.pageCursor
                 }
-                self.hasMoreLog = if let restoredGraph {
+                self.logList.hasMore = if let restoredGraph {
                     restoredGraph.hasMore && log.count >= Int(pageLimit)
                 } else {
                     canContinueWithCursor && log.count >= Int(pageLimit)
                 }
-                self.isLoadingMoreLog = false
-                if reset { self.isLoadingLog = false }
+                self.logList.isLoadingMore = false
+                if reset { self.logList.isLoading = false }
                 if reset, let refsToken {
                     savePersistedLogCache(
                         PersistedLogCacheEntry(
@@ -1341,9 +1341,9 @@ func loadLog(reset: Bool = true) {
                             rootPath: rootPath,
                             queryFingerprint: graphQueryFingerprint,
                             refsToken: refsToken,
-                            commits: self.logEntries,
-                            cursor: self.logPageCursor,
-                            hasMore: self.hasMoreLog
+                            commits: self.logList.entries,
+                            cursor: self.logList.pageCursor,
+                            hasMore: self.logList.hasMore
                         )
                     )
                 } else if let refsToken {
@@ -1352,29 +1352,29 @@ func loadLog(reset: Bool = true) {
                             rootPath: rootPath,
                             queryFingerprint: graphQueryFingerprint,
                             refsToken: refsToken,
-                            commits: self.logEntries,
-                            cursor: self.logPageCursor,
-                            hasMore: self.hasMoreLog
+                            commits: self.logList.entries,
+                            cursor: self.logList.pageCursor,
+                            hasMore: self.logList.hasMore
                         )
                     )
                 }
-                self.logError = nil
+                self.logList.error = nil
             }
         } catch {
             await MainActor.run {
                 guard !Task.isCancelled,
-                      generation == self.logGeneration,
+                      generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.isActiveLogRepository(repo) else { return }
-                self.logError = self.isShowingCachedLogSnapshot
+                self.logList.error = self.logList.isShowingCachedSnapshot
                     ? "Refresh failed; showing cached history. \(errorMessage(error))"
                     : errorMessage(error)
-                self.isLoadingMoreLog = false
-                if reset { self.isLoadingLog = false }
+                self.logList.isLoadingMore = false
+                if reset { self.logList.isLoading = false }
             }
         }
     }
-    logLoadTask = task
+    logList.loadTask = task
 }
 
 struct AggregatedLogRootResult {
@@ -1420,9 +1420,9 @@ nonisolated func flattenedAggregatedLogEntries(
 /// roots would create false parent edges. The table remains fully selectable,
 /// sortable, and diff-capable while each row keeps its owning repository.
 func loadAggregatedLog(reset: Bool) {
-    logLoadTask?.cancel()
-    logGeneration += 1
-    let generation = logGeneration
+    logList.loadTask?.cancel()
+    logList.generation += 1
+    let generation = logList.generation
     let filters = logAggregateBranchFilters
     let revisionRanges = logAggregateRevisionRanges
     let aggregateRootPaths = logAggregateRootPaths
@@ -1452,7 +1452,7 @@ func loadAggregatedLog(reset: Bool) {
         raw: logVisibleRootFilterRaw(for: aggregateRoots)
     )
     let filterByRoot = allFilterByRoot.filter { visibleRootPaths.contains($0.key) }
-    let visibleRootPathsRaw = logVisibleRootPathsRaw
+    let visibleRootPathsRaw = logList.visibleRootPathsRaw
     let visibleRootPathsPersistedRaw = logVisibleRootPathsPersistedRaw
     let activePathSelections = activeLogPathFilterSelections()
     let pathFiltersByRoot = Dictionary(uniqueKeysWithValues: allFilterByRoot.keys.map { rootPath in
@@ -1463,36 +1463,36 @@ func loadAggregatedLog(reset: Bool) {
             ? []
             : pathFiltersByRoot.compactMap { $0.value.isEmpty ? $0.key : nil }
     )
-    let author = logAuthorFilter.trimmingCharacters(in: .whitespaces)
-    let message = logMessageFilter.trimmingCharacters(in: .whitespaces)
-    let messageRegex = logMessageRegex
-    let messageMatchCase = logMessageMatchCase
+    let author = logList.authorFilter.trimmingCharacters(in: .whitespaces)
+    let message = logList.messageFilter.trimmingCharacters(in: .whitespaces)
+    let messageRegex = logList.messageRegex
+    let messageMatchCase = logList.messageMatchCase
     let hashQuery = isCommitHashQuery(message) ? message.lowercased() : nil
-    let since = parseLogSince(logSinceText)
-    let until = parseLogUntil(logUntilText)
+    let since = parseLogSince(logList.since)
+    let until = parseLogUntil(logList.until)
     let noMerges = logNoMerges
-    let follow = logFollow
+    let follow = logList.follow
     let querySortModeRaw = logGraphSortModeRaw
     let sortMode = LogGraphSortChoice(rawValue: logGraphSortModeRaw)?.engineValue
         ?? LogGraphSortChoice.byCommitDate.engineValue
-    let dateText = logSinceText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let untilText = logUntilText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let dateText = logList.since.trimmingCharacters(in: .whitespacesAndNewlines)
+    let untilText = logList.until.trimmingCharacters(in: .whitespacesAndNewlines)
     if (!dateText.isEmpty && since == nil) || (!untilText.isEmpty && until == nil) {
-        logError = "Date filters must be YYYY-MM-DD, YYYY-MM-DD HH:mm, or Unix seconds."
-        isLoadingLog = false
-        isLoadingMoreLog = false
+        logList.error = "Date filters must be YYYY-MM-DD, YYYY-MM-DD HH:mm, or Unix seconds."
+        logList.isLoading = false
+        logList.isLoadingMore = false
         return
     }
     if let since, let until, since >= until {
-        logError = "The Since date must be earlier than the Until date."
-        isLoadingLog = false
-        isLoadingMoreLog = false
+        logList.error = "The Since date must be earlier than the Until date."
+        logList.isLoading = false
+        logList.isLoadingMore = false
         return
     }
     if reset {
-        isLoadingLog = true
-        isLoadingMoreLog = false
-        isShowingCachedLogSnapshot = false
+        logList.isLoading = true
+        logList.isLoadingMore = false
+        logList.isShowingCachedSnapshot = false
         logAggregateLoadedCounts = [:]
         logAggregatePageCursors = [:]
         logDetailCommit = nil
@@ -1502,7 +1502,7 @@ func loadAggregatedLog(reset: Bool) {
         logCherryPickComparisonCompletedRoots = 0
         logCherryPickComparisonTotalRoots = 0
     } else {
-        isLoadingMoreLog = true
+        logList.isLoadingMore = true
     }
     let pageCursors = reset ? [:] : logAggregatePageCursors
     let pageSize = reset ? Int(initialLogPageLimit) : Int(continuationLogPageLimit)
@@ -1656,22 +1656,22 @@ func loadAggregatedLog(reset: Bool) {
             if reset, !cachedResults.isEmpty {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard generation == self.logGeneration,
+                    guard generation == self.logList.generation,
                           self.externalLogTabIsAlive(tabID),
                           !(self.externalLogWindow && self.externalLogSessionDisposed),
                           self.logAggregateBranchFilters == filters,
                           self.logAggregateRevisionRanges == revisionRanges,
                           self.logAggregateRootPaths == aggregateRootPaths,
-                          self.logVisibleRootPathsRaw == visibleRootPathsRaw,
+                          self.logList.visibleRootPathsRaw == visibleRootPathsRaw,
                           self.logVisibleRootPathsPersistedRaw == visibleRootPathsPersistedRaw else { return }
-                    self.logEntries = cachedEntriesSnapshot
+                    self.logList.entries = cachedEntriesSnapshot
                     self.logAggregateRepositories = cachedRepositoriesSnapshot
                     self.logAggregateLoadedCounts = cachedCountsSnapshot
                     self.logAggregatePageCursors = cachedCursorsSnapshot
                     self.logSelection = cachedEntriesSnapshot.first.map(self.logCommitIdentity)
                     self.logSelectedIDs = cachedEntriesSnapshot.first.map { [self.logCommitIdentity($0)] } ?? []
-                    self.hasMoreLog = cachedHasMoreSnapshot
-                    self.isShowingCachedLogSnapshot = true
+                    self.logList.hasMore = cachedHasMoreSnapshot
+                    self.logList.isShowingCachedSnapshot = true
                 }
             }
 
@@ -1736,15 +1736,15 @@ func loadAggregatedLog(reset: Bool) {
             let loadedResults = results
             await MainActor.run {
                 guard !Task.isCancelled,
-                      generation == self.logGeneration,
+                      generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
                       !(self.externalLogWindow && self.externalLogSessionDisposed),
                       self.logAggregateBranchFilters == filters,
                       self.logAggregateRevisionRanges == revisionRanges,
                       self.logAggregateRootPaths == aggregateRootPaths,
-                      self.logVisibleRootPathsRaw == visibleRootPathsRaw,
+                      self.logList.visibleRootPathsRaw == visibleRootPathsRaw,
                       self.logVisibleRootPathsPersistedRaw == visibleRootPathsPersistedRaw else { return }
-                var visible: [CommitInfo] = reset ? cachedEntriesSnapshot : self.logEntries
+                var visible: [CommitInfo] = reset ? cachedEntriesSnapshot : self.logList.entries
                 var cursors = reset ? cachedCursorsSnapshot : self.logAggregatePageCursors
                 var repositories = reset
                     ? (self.externalLogUIManager?.repositories(for: aggregateRoots)
@@ -1783,12 +1783,12 @@ func loadAggregatedLog(reset: Bool) {
                 }
                 let previousSelection = self.logSelection
                 let previousSelections = self.logSelectedIDs
-                self.logEntries = deduplicated
+                self.logList.entries = deduplicated
                 self.logAggregateRepositories = repositories
                 self.logAggregateLoadedCounts = counts
                 self.logAggregatePageCursors = cursors
-                self.logPageCursor = nil
-                self.hasMoreLog = loadedResults.contains { $0.hasMore }
+                self.logList.pageCursor = nil
+                self.logList.hasMore = loadedResults.contains { $0.hasMore }
                 let retained = deduplicated.filter { commit in
                     let identity = self.logCommitIdentity(commit)
                     return previousSelections.contains(identity) || identity == previousSelection
@@ -1803,9 +1803,9 @@ func loadAggregatedLog(reset: Bool) {
                     self.logSelection = nil
                     self.logSelectedIDs = []
                 }
-                self.isLoadingMoreLog = false
-                if reset { self.isLoadingLog = false }
-                self.isShowingCachedLogSnapshot = false
+                self.logList.isLoadingMore = false
+                if reset { self.logList.isLoading = false }
+                self.logList.isShowingCachedSnapshot = false
                 if reset {
                     for result in loadedResults {
                         if let refsToken = result.refsToken {
@@ -1851,40 +1851,40 @@ func loadAggregatedLog(reset: Bool) {
                         }
                     }
                 }
-                self.logError = nil
+                self.logList.error = nil
                 self.refreshCherryPickedHighlights()
             }
         } catch {
             await MainActor.run {
                 guard !Task.isCancelled,
-                      generation == self.logGeneration,
+                      generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
                       !(self.externalLogWindow && self.externalLogSessionDisposed),
                       self.logAggregateBranchFilters == filters,
                       self.logAggregateRevisionRanges == revisionRanges,
                       self.logAggregateRootPaths == aggregateRootPaths,
-                      self.logVisibleRootPathsRaw == visibleRootPathsRaw,
+                      self.logList.visibleRootPathsRaw == visibleRootPathsRaw,
                       self.logVisibleRootPathsPersistedRaw == visibleRootPathsPersistedRaw else { return }
-                self.logError = self.isShowingCachedLogSnapshot
+                self.logList.error = self.logList.isShowingCachedSnapshot
                     ? "Refresh failed; showing cached history. \(errorMessage(error))"
                     : errorMessage(error)
-                self.isLoadingMoreLog = false
-                if reset { self.isLoadingLog = false }
+                self.logList.isLoadingMore = false
+                if reset { self.logList.isLoading = false }
             }
         }
     }
-    logLoadTask = task
+    logList.loadTask = task
 }
 
 func isActiveLogRepository(_ candidate: Repository) -> Bool {
-    if let logActiveRepo {
-        return logActiveRepo === candidate
+    if let activeRepo = logList.activeRepo {
+        return logList.activeRepo === candidate
     }
     return projectRepo === candidate
 }
 
 /// Aggregate VCS Log rows carry their owning Git root. A secondary root is
-/// active even though it is not `logActiveRepo`; use the aggregate repository
+/// active even though it is not `logList.activeRepo`; use the aggregate repository
 /// map for navigation and stale-result checks in that mode.
 func isActiveLogNavigationRepository(
     _ candidate: Repository,
@@ -1943,18 +1943,18 @@ func loadReflogCommitDetails() {
 }
 
 func loadMoreLog() {
-    if logViewMode == .command {
+    if logList.viewMode == .command {
         guard hasMoreLogCommand else { return }
         runLogCommand(reset: false)
         return
     }
-    guard !isLoadingMoreLog, hasMoreLog else { return }
-    guard logPageCursor != nil else { return }
+    guard !logList.isLoadingMore, logList.hasMore else { return }
+    guard logList.pageCursor != nil else { return }
     loadLog(reset: false)
 }
 
 func selectLogRevision(_ id: String) {
-    let visibleEntries = logViewMode == .command ? logCommandEntries : logEntries
+    let visibleEntries = logList.viewMode == .command ? logCommandEntries : logList.entries
     if let visible = visibleEntries.first(where: {
         let identity = logCommitIdentity($0)
         return identity == id || identity.hasPrefix(id) || id.hasPrefix(identity)
@@ -1972,7 +1972,7 @@ func selectLogRevision(_ id: String) {
         ?? repositoryPath.flatMap { try? openRepository(path: $0) }
         ?? logRepository
     guard let repo = revisionRepo else { return }
-    let expectedGeneration = logGeneration
+    let expectedGeneration = logList.generation
     Task.detached(priority: .userInitiated) {
         guard let commit = try? repo.logFiltered(
             path: nil,
@@ -1984,13 +1984,13 @@ func selectLogRevision(_ id: String) {
         ).first else { return }
         await MainActor.run {
             guard self.isActiveLogNavigationRepository(repo, rootPath: repositoryPath),
-                  self.logGeneration == expectedGeneration else { return }
-            if self.logViewMode == .command {
+                  self.logList.generation == expectedGeneration else { return }
+            if self.logList.viewMode == .command {
                 if !self.logCommandEntries.contains(where: { $0.id == commit.id }) {
                     self.logCommandEntries.insert(commit, at: 0)
                 }
-            } else if !self.logEntries.contains(where: { $0.id == commit.id }) {
-                self.logEntries.insert(commit, at: 0)
+            } else if !self.logList.entries.contains(where: { $0.id == commit.id }) {
+                self.logList.entries.insert(commit, at: 0)
             }
             let identity = self.logCommitIdentity(commit)
             self.logSelection = identity
@@ -2000,7 +2000,7 @@ func selectLogRevision(_ id: String) {
 }
 
 func copySelectedLogIDs() {
-    let ids = logEntries
+    let ids = logList.entries
         .filter { logSelectedIDs.contains(logCommitIdentity($0)) }
         .map(\.id)
     guard !ids.isEmpty else { return }
@@ -2383,10 +2383,10 @@ func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                     self.loadLog()
                 } else {
                     self.loadMultiRoots {
-                        let activeRootMatches = self.logActiveRootPath.map {
+                        let activeRootMatches = self.logList.activeRootPath.map {
                             logSelectedChangesRootPathsMatch(rootPath, $0)
                         } == true
-                        if self.isLogAggregate || self.logViewMode == .command || activeRootMatches {
+                        if self.isLogAggregate || self.logList.viewMode == .command || activeRootMatches {
                             self.reloadLogView()
                         }
                     }
@@ -2470,10 +2470,10 @@ func extractSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                     self.loadLog()
                 } else {
                     self.loadMultiRoots {
-                        let activeRootMatches = self.logActiveRootPath.map {
+                        let activeRootMatches = self.logList.activeRootPath.map {
                             logSelectedChangesRootPathsMatch(rootPath, $0)
                         } == true
-                        if self.isLogAggregate || self.logViewMode == .command || activeRootMatches {
+                        if self.isLogAggregate || self.logList.viewMode == .command || activeRootMatches {
                             self.reloadLogView()
                         }
                     }
@@ -2776,10 +2776,10 @@ func undoLogSelectedChanges(_ target: LogSelectedChangesUndoTarget) {
                     self.loadLog()
                 } else {
                     self.loadMultiRoots {
-                        let activeRootMatches = self.logActiveRootPath.map {
+                        let activeRootMatches = self.logList.activeRootPath.map {
                             logSelectedChangesRootPathsMatch(target.repositoryPath, $0)
                         } == true
-                        if self.isLogAggregate || self.logViewMode == .command || activeRootMatches {
+                        if self.isLogAggregate || self.logList.viewMode == .command || activeRootMatches {
                             self.reloadLogView()
                         }
                     }
@@ -2832,7 +2832,7 @@ func showFileHistory(_ path: String, rootPath: String? = nil) {
     let historyRootPath = resolvedFileHistoryRootPath(
         preferredRootPath: rootPath,
         selectedCommitRootPath: selectedCommit?.repositoryPath,
-        activeLogRootPath: logActiveRootPath,
+        activeLogRootPath: logList.activeRootPath,
         repositoryRootPath: repo?.workdir()
     )
     logAggregateBranchFilters = []
@@ -2860,7 +2860,7 @@ func showFileHistoryForRevision(_ commit: CommitInfo, _ path: String) {
     let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalizedPath.isEmpty else { return }
     let historyRootPath = commit.repositoryPath
-        ?? logActiveRootPath
+        ?? logList.activeRootPath
         ?? repo?.workdir()
     logAggregateBranchFilters = []
     logAggregateRevisionRanges = []

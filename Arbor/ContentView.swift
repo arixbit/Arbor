@@ -7,6 +7,9 @@ struct ContentView: View {
 
     /// Stash / Unstash 工作页状态（对话框、预览、请求身份）。
     @StateObject var stashUI = StashWorkspaceState()
+
+    /// Log 列表与过滤状态（过滤条件、分页、当前 root）。
+    @StateObject var logList = LogListState()
     let externalLogWindow: Bool
     let initialExternalLogRootPaths: Set<String>
     let externalLogProviderSession: ExternalLogProviderSession?
@@ -179,10 +182,10 @@ struct ContentView: View {
         if isLogRootQualified {
             return nil
         }
-        if logActiveRootPath != nil {
-            return logActiveRepo
+        if logList.activeRootPath != nil {
+            return logList.activeRepo
         }
-        return logActiveRepo ?? repo
+        return logList.activeRepo ?? repo
     }
 
     var isLogAggregate: Bool {
@@ -192,7 +195,7 @@ struct ContentView: View {
     }
 
     var isLogRootQualified: Bool {
-        isLogAggregate || (logViewMode == .command && logCommandIsAggregate)
+        isLogAggregate || (logList.viewMode == .command && logCommandIsAggregate)
     }
 
     var availableReflogRootPaths: [String] {
@@ -201,7 +204,7 @@ struct ContentView: View {
             paths.append(primary)
         }
         paths.append(contentsOf: multiRoots.map(\.path))
-        if let active = logActiveRootPath, !active.isEmpty {
+        if let active = logList.activeRootPath, !active.isEmpty {
             paths.append(active)
         }
         return Array(Set(paths)).sorted()
@@ -335,13 +338,13 @@ struct ContentView: View {
     func logRepository(for commit: CommitInfo) -> Repository? {
         guard let repositoryPath = commit.repositoryPath,
               !repositoryPath.isEmpty else {
-            return logActiveRepo ?? repo
+            return logList.activeRepo ?? repo
         }
         if let aggregateRepository = logAggregateRepositories[repositoryPath] {
             return aggregateRepository
         }
-        if logActiveRootPath == repositoryPath {
-            return logActiveRepo
+        if logList.activeRootPath == repositoryPath {
+            return logList.activeRepo
         }
         if repo?.workdir() == repositoryPath {
             return repo
@@ -391,7 +394,7 @@ struct ContentView: View {
             }) {
                 return snapshot.branches.first(where: \.isCurrent)?.name
             }
-            if repositoryPath == logActiveRootPath {
+            if repositoryPath == logList.activeRootPath {
                 return logActiveBranches.first(where: \.isCurrent)?.name
             }
             return nil
@@ -407,7 +410,7 @@ struct ContentView: View {
             }) {
                 return snapshot.remotes
             }
-            if repositoryPath == logActiveRootPath {
+            if repositoryPath == logList.activeRootPath {
                 return logActiveRemotes
             }
             return []
@@ -416,15 +419,15 @@ struct ContentView: View {
     }
 
     var activeLogBranches: [BranchInfo] {
-        logActiveRootPath == nil ? branches : logActiveBranches
+        logList.activeRootPath == nil ? branches : logActiveBranches
     }
 
     var activeLogRemoteBranches: [RemoteBranchInfo] {
-        logActiveRootPath == nil ? remoteBranches : logActiveRemoteBranches
+        logList.activeRootPath == nil ? remoteBranches : logActiveRemoteBranches
     }
 
     var activeLogRemotes: [RemoteInfo] {
-        logActiveRootPath == nil ? remotes : logActiveRemotes
+        logList.activeRootPath == nil ? remotes : logActiveRemotes
     }
 
     /// Include repository identity so a project restored before its
@@ -532,7 +535,6 @@ struct ContentView: View {
     /// 逐行暂存入口：侧栏「逐行」点击后选中文件并让 diff 视图进入选择模式
     @State var selectionModePath: String?
     // 日志模式
-    @State var logEntries: [CommitInfo] = []
     @State var logCommandEntries: [CommitInfo] = []
     @State var logCommandIsAggregate = false
     @State var hasMoreLogCommand = true
@@ -551,25 +553,14 @@ struct ContentView: View {
     /// active row in `logSelection` for the details panel, while this set
     /// preserves Cmd/Shift selections for toolbar and future batch actions.
     @State var logSelectedIDs: Set<String> = []
-    @State var logPathFilter: String = ""
-    @State var logPathFilterSelections: [LogPathFilterSelection] = []
-    @State var logVisibleRootPathsRaw: String = ""
     @AppStorage("arbor.log.recentPathFilters.v1") var logRecentPathFiltersRaw = ""
     @AppStorage("arbor.log.visibleRootPaths.v1") var logVisibleRootPathsPersistedRaw = ""
-    @State var isLogPathsEditorPresented = false
-    @State var logPathsEditorText = ""
-    @State var isLogPathsTreeChooserPresented = false
-    @State var logPathsTreeChooserRoots: [LogPathChooserRoot] = []
-    @State var logPathsTreeChooserSelections: Set<LogPathFilterSelection> = []
     /// Phase 5:log 加载代际计数——切换条件后旧请求结果直接丢弃(取消行为)。
-    @State var logGeneration: Int = 0
     /// Keep the active history request cancellable. Generation checks protect
     /// state correctness; cancelling the task also prevents superseded log
     /// loads from competing for CPU while the user changes filters or panes.
-    @State var logLoadTask: Task<Void, Never>?
     /// Coalesce several filter/control mutations arriving in one main-actor
     /// turn before starting the expensive VisibleGraph refresh.
-    @State var logRefreshTask: Task<Void, Never>?
     @State var logSignatureLoadTask: Task<Void, Never>?
     @State var logSignatureGeneration: Int = 0
     @State var logSignatureStatuses: [String: CommitSignatureInfo] = [:]
@@ -611,8 +602,6 @@ struct ContentView: View {
     @State var logDetailLoadTask: Task<Void, Never>?
     @State var reflogDetailLoadTask: Task<Void, Never>?
     @State var compareLoadTask: Task<Void, Never>?
-    @State var isLoadingLog = false
-    @State var isShowingCachedLogSnapshot = false
     /// REPO-001:多 root 发现与聚合结果
     @State var multiRoots: [GitRootInfo] = []
     /// Keep root discovery cancellable so startup and filesystem events cannot
@@ -709,19 +698,13 @@ struct ContentView: View {
     @State var multiRootResolverError: String?
     @State var multiRootResolverLoadGeneration = 0
     @State var multiRootUpdateStashedRoots: Set<String> = []
-    @State var logFollow = false
     @State var logGraphSortModeRaw = LogGraphSortChoice.byCommitDate.rawValue
-    @State var logViewMode: LogViewMode = .graph
     @State var logCommandFilter = ""
     @State var logCommandError: String?
     @State var logCommandGeneration = 0
     @State var isLoadingLogCommand = false
-    @State var logStartRevision: String = ""
-    @State var logStartRevisions: Set<String> = []
     /// The Log dashboard may be scoped to a nested Git root without changing
     /// the project's primary repository context used by Commit/Status panes.
-    @State var logActiveRootPath: String?
-    @State var logActiveRepo: Repository?
     @State var logActiveBranches: [BranchInfo] = []
     @State var logActiveRemoteBranches: [RemoteBranchInfo] = []
     @State var logActiveRemotes: [RemoteInfo] = []
@@ -741,14 +724,6 @@ struct ContentView: View {
     /// Keeping this separate from the merged row count prevents a later page
     /// from re-querying the entire root history just to discard its prefix.
     @State var logAggregatePageCursors: [String: String] = [:]
-    @State var showLogRevisionFilterAlert = false
-    @State var logRevisionFilterInput = ""
-    @State var logAuthorFilter: String = ""
-    @State var logMessageFilter: String = ""
-    @State var logMessageRegex = false
-    @State var logMessageMatchCase = false
-    @State var logSinceText: String = ""
-    @State var logUntilText: String = ""
     @State var logCherryPickedCommitIDs: Set<String> = []
     @State var logCherryPickComparisonReady = false
     @State var compareRev1: String = ""
@@ -792,9 +767,6 @@ struct ContentView: View {
     @State var reflogGeneration = 0
     @State var reflogHasMore = false
     @State var isLoadingMoreReflog = false
-    @State var logPageCursor: String?
-    @State var isLoadingMoreLog = false
-    @State var hasMoreLog = true
     @State var rebasePaused = false
     /// OPS-001 统一操作状态（merge/rebase/cherry-pick/revert），Recovery Bar 数据源。
     @State var operationState: OperationState?
@@ -850,7 +822,6 @@ struct ContentView: View {
     @State var fileContentRefreshToken = 0
     @State var rebasePauseReason: RebasePauseReason?
     @State var rebaseConflicts: [String] = []
-    @State var logError: String?
     // 分支模式
     @State var mergeBranch: String = ""
     @State var mergeMergedBranches: Set<String> = []
@@ -1381,7 +1352,7 @@ struct ContentView: View {
     }
     var selectedCommit: CommitInfo? {
         guard let logSelection else { return nil }
-        let visibleEntries = logViewMode == .command ? logCommandEntries : logEntries
+        let visibleEntries = logList.viewMode == .command ? logCommandEntries : logList.entries
         return visibleEntries.first {
             let identity = logCommitIdentity($0)
             return identity == logSelection
@@ -1421,7 +1392,7 @@ struct ContentView: View {
         }
         var seen = Set<String>()
         return selectedReflogEntries.compactMap { entry in
-            guard let commit = logEntries.first(where: {
+            guard let commit = logList.entries.first(where: {
                 $0.id == entry.newId || $0.id.hasPrefix(entry.newId) || entry.newId.hasPrefix($0.id)
             }), seen.insert(commit.id).inserted else { return nil }
             return commit
@@ -1439,7 +1410,7 @@ struct ContentView: View {
         }
         return reflogDetailCommits.first(where: matches)
             ?? reflogDetailCommit.flatMap { matches($0) ? $0 : nil }
-            ?? logEntries.first(where: matches)
+            ?? logList.entries.first(where: matches)
     }
 
     var hostingRepositories: [HostingRepository] {
@@ -2132,7 +2103,7 @@ struct ContentView: View {
             toolWindowMode = .log
             toolWindowExpanded = true
             projectPanelExpanded = false
-            logViewMode = .graph
+            logList.viewMode = .graph
             // A commit-detail notification can originate from the Commit
             // workspace (for example, Show History on a changed file). The
             // Log editor owns this context after the hand-off; leaving the
@@ -2421,7 +2392,7 @@ struct ContentView: View {
                         selection = nil
                         fileSelection = nil
                         selectionModePath = nil
-                        logViewMode = .graph
+                        logList.viewMode = .graph
                         loadLog()
                     }
                 },
@@ -2462,11 +2433,11 @@ struct ContentView: View {
             } else if mode != .log {
                 // Do not let a history scan continue while another tool
                 // window owns the main workspace.
-                logRefreshTask?.cancel()
-                logRefreshTask = nil
-                logLoadTask?.cancel()
-                logLoadTask = nil
-                logGeneration += 1
+                logList.refreshTask?.cancel()
+                logList.refreshTask = nil
+                logList.loadTask?.cancel()
+                logList.loadTask = nil
+                logList.generation += 1
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -2599,7 +2570,7 @@ struct ContentView: View {
             PushDialogView(
                 remotes: remotes,
                 branches: branches,
-                commits: logEntries,
+                commits: logList.entries,
                 mode: pushDialogMode,
                 defaultRemote: pushDialogRemote,
                 defaultBranch: pushDialogBranch

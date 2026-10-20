@@ -33,7 +33,7 @@ var logWorkspace: some View {
 @ViewBuilder
 var logInspector: some View {
     ZStack {
-        switch logViewMode {
+        switch logList.viewMode {
         case .compare:
             TreeCompareDetailView(
                 repo: activeCompareRepo ?? repo,
@@ -1500,14 +1500,14 @@ func issueLogGraphCommand(_ action: LinearBekGraphActionType) {
 /// be slow or unavailable, so only the currently loaded rows request a
 /// cancellable background batch and stale generations are discarded.
 func loadLogSignatureStatuses() {
-    guard logShowSignatureColumn, logViewMode == .graph else {
+    guard logShowSignatureColumn, logList.viewMode == .graph else {
         logSignatureLoadTask?.cancel()
         logSignatureLoadingIDs.removeAll()
         logSignatureFailedIDs.removeAll()
         return
     }
 
-    let commits = logEntries
+    let commits = logList.entries
     guard !commits.isEmpty else {
         logSignatureLoadTask?.cancel()
         logSignatureLoadingIDs.removeAll()
@@ -1699,12 +1699,12 @@ var externalLogRootsMenu: some View {
 
 
 var logRefreshButtonTitle: String {
-    logViewMode == .reflog ? "Refresh Reflog" : "Refresh Log"
+    logList.viewMode == .reflog ? "Refresh Reflog" : "Refresh Log"
 }
 
 
 var shouldShowLogError: Bool {
-    logViewMode != .command
+    logList.viewMode != .command
 }
 
 
@@ -1885,614 +1885,13 @@ var reflogHistoryContent: some View {
 
 
 var logGraphPanel: some View {
-    VStack(spacing: 0) {
-        HStack(spacing: 10) {
-            Button {
-                logViewMode = .graph
-            } label: {
-                Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, 12)
-                    .frame(height: 32)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Design.Colors.accent)
-
-            if externalLogWindow {
-                externalLogRootsMenu
-            }
-
-            Menu {
-                Picker("Log view", selection: $logViewMode) {
-                    Text("History").tag(LogViewMode.graph)
-                    Text("Git Log Command").tag(LogViewMode.command)
-                    Text("Compare").tag(LogViewMode.compare)
-                    Text("Tags").tag(LogViewMode.tags)
-                    Text("Reflog").tag(LogViewMode.reflog)
-                }
-                Picker("Sort", selection: $logGraphSortModeRaw) {
-                    ForEach(LogGraphSortChoice.allCases) { choice in
-                        Text(choice.title).tag(choice.rawValue)
-                    }
-                }
-                Divider()
-                Toggle("Show Commit Details", isOn: $logShowDetails)
-                Toggle("Show Diff Preview", isOn: $logShowDiffPreview)
-                Toggle("Diff Preview on Bottom", isOn: $logDiffPreviewVertical)
-                Divider()
-                Toggle("Compact References", isOn: $logCompactReferences)
-                Menu("Log Columns") {
-                    Toggle("Show Author and Date", isOn: showAuthorAndDateBinding)
-                    Toggle("Show Author", isOn: showAuthorColumnBinding)
-                    Toggle("Show Date", isOn: showDateColumnBinding)
-                    Toggle("Show Commit Hash", isOn: $logShowHashColumn)
-                    Toggle("Show Root Names", isOn: $logShowRootColumn)
-                    Toggle("Show Commit Signature", isOn: $logShowSignatureColumn)
-                    Divider()
-                    ForEach(LogColumnID.allCases) { column in
-                        Menu(column.title) {
-                            Button("Wider") { resizeLogColumn(column, by: 16) }
-                                .disabled(!column.isResizable)
-                            Button("Narrower") { resizeLogColumn(column, by: -16) }
-                                .disabled(!column.isResizable)
-                            Divider()
-                            Button("Move Left") { moveLogColumn(column, by: -1) }
-                                .disabled(!canMoveLogColumn(column, by: -1))
-                            Button("Move Right") { moveLogColumn(column, by: 1) }
-                                .disabled(!canMoveLogColumn(column, by: 1))
-                        }
-                    }
-                    Divider()
-                    Button("Reset Column Order") {
-                        logColumnOrderRaw = LogColumnLayout.defaultOrder.map(\.rawValue).joined(separator: ",")
-                    }
-                    Button("Reset Column Widths") {
-                        logColumnWidthsRaw = ""
-                    }
-                }
-                Toggle("Show Tag Names", isOn: $logShowTagNames)
-                Toggle("Align Labels", isOn: $logAlignLabels)
-                Toggle("Show Long Edges", isOn: $logShowLongEdges)
-                Button("Collapse All Graph") {
-                    issueLogGraphCommand(.buttonCollapse)
-                }
-                .disabled(logViewMode != .graph)
-                Button("Expand All Graph") {
-                    issueLogGraphCommand(.buttonExpand)
-                }
-                .disabled(logViewMode != .graph)
-                Toggle("Collapse Graph", isOn: $logCollapseGraph)
-                Toggle("No Merges", isOn: $logNoMerges)
-                Toggle("Show Branches", isOn: $logBranchesVisible)
-                Divider()
-                Button("Go to Parent") { selectParentLogCommit() }
-                    .disabled(selectedCommit?.parentIds.isEmpty ?? true)
-                Button("Go to Child") { selectChildLogCommit() }
-                    .disabled(selectedCommit == nil)
-                Button("Copy Selected Revision IDs") { copySelectedLogIDs() }
-                    .disabled(logSelectedIDs.isEmpty)
-                Divider()
-                Menu("More Log Actions") {
-                    Button("Show Git Log Command…") {
-                        logCommandFilter = ""
-                        logCommandEntries = []
-                        logCommandError = nil
-                        logViewMode = .command
-                    }
-                    Button("Create Patch…") {
-                        if let selectedCommit { createPatchFromLog(selectedCommit) }
-                    }
-                    .disabled(selectedCommit == nil || logSelectedIDs.count > 1)
-                    .help("Create a patch for one selected commit")
-                    Button("Reset Selected Revisions…") {
-                        resetFromLog(selectedLogCommits)
-                    }
-                    .disabled(
-                        !isResetSelectionAvailable(for: selectedLogCommits)
-                            || !logActionAvailability.allowsMutation(for: selectedLogCommits)
-                    )
-                    .help("Reset one selected revision per Git root")
-                    Button("Create Fixup Commit…") {
-                        if let selectedCommit {
-                            beginAutoSquashCommitFromLog(selectedCommit, kind: .fixup)
-                        }
-                    }
-                    .disabled(
-                        selectedCommit == nil
-                            || !logActionAvailability.hasLocalChanges
-                            || (selectedCommit.map { !logActionAvailability.allowsHistoryRewrite(for: [$0]) } ?? true)
-                    )
-                    Button("Create Squash Commit…") {
-                        if let selectedCommit {
-                            beginAutoSquashCommitFromLog(selectedCommit, kind: .squash)
-                        }
-                    }
-                    .disabled(
-                        selectedCommit == nil
-                            || !logActionAvailability.hasLocalChanges
-                            || (selectedCommit.map { !logActionAvailability.allowsHistoryRewrite(for: [$0]) } ?? true)
-                    )
-                    Button("Squash Selected Commits…") {
-                        rewriteSelectedCommitsFromLog(selectedLogCommits, action: .squash)
-                    }
-                    .disabled(
-                        !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
-                            || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
-                    )
-                    Button("Reword Selected Commits…") {
-                        rewriteSelectedCommitsFromLog(selectedLogCommits, action: .reword)
-                    }
-                    .disabled(
-                        !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
-                            || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
-                    )
-                    Button("Drop Selected Commits…", role: .destructive) {
-                        rewriteSelectedCommitsFromLog(selectedLogCommits, action: .drop)
-                    }
-                    .disabled(
-                        !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
-                            || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
-                    )
-                    Button("Toggle Log Columns") {
-                        showAuthorAndDateBinding.wrappedValue.toggle()
-                    }
-                    Menu("Highlight Cherry-Picked Commits") {
-                        Picker("Compared branch", selection: $logCherryPickCompareBranch) {
-                            Text("Choose source branch…").tag("")
-                            ForEach(cherryPickCompareBranchChoices, id: \.self) { branch in
-                                Text(branch).tag(branch)
-                            }
-                        }
-                        Toggle("Enable Highlighting", isOn: $logHighlightCherryPicked)
-                            .disabled(logCherryPickCompareBranch.isEmpty)
-                        if !logCherryPickCompareBranch.isEmpty {
-                            Text("Target: \(cherryPickTargetBranchLabel)")
-                        }
-                        if logCherryPickComparisonInProgress {
-                            Label(
-                                "Comparing cherry-picked commits… (\(logCherryPickComparisonCompletedRoots)/\(logCherryPickComparisonTotalRoots))",
-                                systemImage: "hourglass"
-                            )
-                            Button("Cancel Comparison") {
-                                cancelCherryPickedHighlighting()
-                            }
-                        }
-                    }
-                    Toggle("Show Changes from Parents", isOn: $logShowChangesFromParents)
-                    if logViewMode == .graph, !activeLogPathFilterSelections().isEmpty {
-                        Toggle("Show Only Affected Changes", isOn: $logShowOnlyAffectedChanges)
-                    }
-                    Button("Open Log in New Window") {
-                        guard let projectPath,
-                              let request = chooseExternalLogWindowRequest(for: projectPath) else {
-                            return
-                        }
-                        openWindow(id: "git-log", value: request)
-                    }
-                    .disabled(projectRepo == nil || projectPath == nil)
-                    Button("Open Another Log Tab") { openAnotherLogTab() }
-                }
-                Divider()
-                Button(logRefreshButtonTitle) {
-                    reloadLogView()
-                }
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "ellipsis")
-                    Image(systemName: "chevron.down")
-                }
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 32)
-            }
-            .menuStyle(.borderlessButton)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(Design.Colors.chrome)
-        .overlay(alignment: .bottom) { Divider() }
-        .onChange(of: logViewMode) { _, mode in
-            if mode == .graph {
-                activeCompareRepo = nil
-                compareRepositoryPath = nil
-                loadLog()
-            } else if mode == .reflog {
-                activeCompareRepo = nil
-                compareRepositoryPath = nil
-                prepareReflogRoot()
-            } else if mode == .command {
-                activeCompareRepo = nil
-                compareRepositoryPath = nil
-                runLogCommand()
-            } else if mode == .tags {
-                activeCompareRepo = nil
-                compareRepositoryPath = nil
-                // Tags is its own Log sub-view. Do not leave the last History
-                // commit rendered in the inspector while the left workspace
-                // has already switched to tag management.
-                logSelection = nil
-                logSelectedIDs = []
-            }
-        }
-        .onChange(of: logGraphSortModeRaw) { _, _ in
-            guard logViewMode == .graph else { return }
-            scheduleLogRefresh()
-        }
-        .onChange(of: logMessageRegex) { _, _ in
-            guard logViewMode == .graph else { return }
-            scheduleLogRefresh()
-        }
-        .onChange(of: logMessageMatchCase) { _, _ in
-            guard logViewMode == .graph else { return }
-            scheduleLogRefresh()
-        }
-        .onChange(of: logNoMerges) { _, _ in
-            guard logViewMode == .graph else { return }
-            scheduleLogRefresh()
-        }
-        .onChange(of: logCherryPickCompareBranch) { _, branch in
-            logHighlightCherryPicked = cherryPickHighlightEnabledAfterSourceChange(
-                sourceBranch: branch,
-                currentlyEnabled: logHighlightCherryPicked
-            )
-            refreshCherryPickedHighlights()
-        }
-        .onChange(of: logHighlightCherryPicked) { _, _ in
-            refreshCherryPickedHighlights()
-        }
-
-        if logTabs.count > 1 {
-            LogTabBar(
-                tabs: logTabs,
-                activeID: currentLogTabID,
-                onSelect: switchLogTab,
-                onClose: closeLogTab,
-                onNew: openAnotherLogTab
-            )
-        }
-
-        if logViewMode == .command {
-            logCommandFilterBar
-        } else if logViewMode == .graph {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                logFilterField("Text or hash", text: $logMessageFilter, width: 215)
-                    .onSubmit { scheduleLogRefresh() }
-                Menu {
-                    Toggle("Regex", isOn: $logMessageRegex)
-                    Toggle("Match Case", isOn: $logMessageMatchCase)
-                    Divider()
-                    Button("Clear Text Filter") {
-                        logMessageFilter = ""
-                        scheduleLogRefresh()
-                    }
-                    .disabled(logMessageFilter.isEmpty)
-                } label: {
-                    Label("Text Filter Settings", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .foregroundStyle((logMessageRegex || logMessageMatchCase) ? Design.Colors.accent : .secondary)
-                .help("Text Filter Settings")
-                HStack(spacing: 4) {
-                    let currentPathSelections = activeLogPathFilterSelections()
-                    if currentPathSelections.count > 1 {
-                        Button {
-                            openLogPathsEditor()
-                        } label: {
-                            Text(logPathFilterSummary(currentPathSelections))
-                                .lineLimit(1)
-                                .frame(width: 150, height: 32, alignment: .leading)
-                                .padding(.horizontal, 10)
-                                .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        logFilterField("Paths", text: $logPathFilter, width: 150)
-                            .onSubmit { applyManualLogPathFilter() }
-                    }
-                    Menu {
-                        Button("Edit Paths…") { openLogPathsEditor() }
-                        Button("Select Paths in Tree…") { openLogPathsTreeChooser() }
-                            .disabled(logStructureFilterRootPaths.isEmpty && availableReflogRootPaths.isEmpty)
-                        Button("Choose…") { chooseLogPathFilter() }
-                            .disabled(availableReflogRootPaths.isEmpty)
-                        if logStructureFilterRootPaths.count > 1 {
-                            Divider()
-                            Section("Repositories") {
-                                ForEach(logStructureFilterRootPaths, id: \.self) { rootPath in
-                                    Toggle(
-                                        isOn: Binding(
-                                            get: { visibleLogStructureFilterRootPaths.contains(rootPath) },
-                                            set: { setLogStructureFilterRoot(rootPath, visible: $0) }
-                                        )
-                                    ) {
-                                        Text(URL(fileURLWithPath: rootPath).lastPathComponent)
-                                            .help(rootPath)
-                                    }
-                                }
-                            }
-                        }
-                        let recent = recentLogPathFilterSelections()
-                        if !recent.isEmpty {
-                            Divider()
-                            Section("Recent Filters") {
-                                ForEach(Array(recent.enumerated()), id: \.offset) { _, paths in
-                                    Button(logPathFilterSummary(paths)) {
-                                        setLogPathFilterSelections(paths, remember: false)
-                                    }
-                                }
-                                Button("Clear Recent Filters") {
-                                    clearRecentLogPathFilters()
-                                }
-                            }
-                        }
-                        if !currentPathSelections.isEmpty {
-                            Divider()
-                            Button("Clear") { clearLogPathFilter() }
-                        }
-                    } label: {
-                        Image(systemName: currentPathSelections.isEmpty
-                              ? "folder"
-                              : "folder.fill")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .foregroundStyle(currentPathSelections.isEmpty ? .secondary : Design.Colors.accent)
-                    .help("Choose or clear Paths filter")
-                }
-                Menu {
-                    Button("HEAD") { setLogStartRevisions([]) }
-                    Button("Enter branch, tag, or commit") {
-                        logRevisionFilterInput = ""
-                        showLogRevisionFilterAlert = true
-                    }
-                    Divider()
-                    Section("Local Branches") {
-                        ForEach(branches, id: \.name) { branch in
-                            Toggle(
-                                isOn: logStartRevisionBinding(for: branch.name)
-                            ) {
-                                Text(branch.name)
-                            }
-                        }
-                    }
-                    if !remoteBranches.isEmpty {
-                        Section("Remote Branches") {
-                            ForEach(remoteBranches, id: \.name) { branch in
-                                Toggle(
-                                    isOn: logStartRevisionBinding(for: branch.name)
-                                ) {
-                                    Text(branch.name)
-                                }
-                            }
-                        }
-                    }
-                    if !tags.isEmpty {
-                        Section("Tags") {
-                            ForEach(tags, id: \.name) { tag in
-                                Toggle(
-                                    isOn: logStartRevisionBinding(for: tag.name)
-                                ) {
-                                    Text(tag.name)
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Label(logBranchFilterTitle,
-                          systemImage: "arrow.triangle.branch")
-                        .lineLimit(1)
-                }
-                .menuStyle(.borderlessButton)
-                .padding(.horizontal, 8)
-                .frame(height: 32)
-                .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
-                .onChange(of: logStartRevisions) { _, _ in scheduleLogRefresh() }
-                logFilterField("User", text: $logAuthorFilter, width: 110)
-                    .onSubmit { scheduleLogRefresh() }
-                logFilterField("Since", text: $logSinceText, width: 120)
-                    .onSubmit { scheduleLogRefresh() }
-                logFilterField("Until", text: $logUntilText, width: 120)
-                    .onSubmit { scheduleLogRefresh() }
-                Toggle(isOn: $logFollow) {
-                    Image(systemName: "arrow.right.to.line.compact")
-                }
-                .toggleStyle(.checkbox)
-                .help("Follow current branch")
-                Button {
-                    loadLog()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("Refresh log")
-                if isShowingCachedLogSnapshot {
-                    ProgressView()
-                        .controlSize(.small)
-                        .help("Refreshing cached history")
-                }
-            }
-            // The filter row belongs to the commit-table column, not to the
-            // graph gutter. Rebased keeps the fields aligned with the first
-            // commit summary while the colored lanes remain visible below.
-            .padding(.leading, 10)
-            .padding(.trailing, 10)
-            .padding(.vertical, 8)
-        }
-        .frame(height: 48)
-        .onChange(of: logFollow) { _, _ in scheduleLogRefresh() }
-        }
-        if shouldShowLogError {
-            if let logError {
-                Text(logError).foregroundStyle(.red).font(.callout).padding(8)
-            }
-        }
-        switch logViewMode {
-        case .graph:
-            logGraphHistoryContent
-        case .command:
-            logGraphHistoryContent
-        case .compareBranches:
-            BranchCommitComparisonView(
-                firstBranch: compareRev1,
-                secondBranch: compareRev2,
-                firstCommits: branchCompareFirstEntries,
-                secondCommits: branchCompareSecondEntries,
-                firstFilter: $branchCompareFirstFilter,
-                secondFilter: $branchCompareSecondFilter,
-                isLoading: isLoadingBranchComparison,
-                error: branchCompareError,
-                selectedID: $branchCompareSelectionID,
-                selectedSide: $branchCompareSelectionSide,
-                onFilterChanged: refreshBranchComparison,
-                pagination: branchComparisonPagination,
-                onSelect: { side, id in
-                    branchCompareSelectionSide = side
-                    branchCompareSelectionID = id
-                },
-                onAction: { action, commit in
-                    switch action {
-                    case .checkout:
-                        checkoutFromLog(commit)
-                    case .reset:
-                        resetFromLog(commit)
-                    case .createBranch:
-                        createBranchFromCommit(commit)
-                    case .compare:
-                        compareFromLog(commit)
-                    case .interactiveRebase:
-                        interactiveRebaseFromLog(commit)
-                    case .cherryPick:
-                        cherryPickFromLog(commit)
-                    case .revert:
-                        revertFromLog(commit)
-                    }
-                },
-                logActions: branchComparisonLogActions
-            )
-        case .compare:
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    TextField("旧版本 / 分支", text: $compareRev1)
-                        .textFieldStyle(.roundedBorder)
-                    Text("→").foregroundStyle(.secondary)
-                    TextField("新版本 / 分支", text: $compareRev2)
-                        .textFieldStyle(.roundedBorder)
-                    Button("比较") {
-                        compareWithWorkingTree = false
-                        loadTreeChanges()
-                    }
-                    Menu {
-                        Button("Select All") {
-                            compareSelectedPaths = Set(treeChanges.map(\.path))
-                            compareSelection = treeChanges.first?.path
-                        }
-                        .disabled(treeChanges.isEmpty)
-                        Button("Clear") {
-                            compareSelectedPaths = []
-                            compareSelection = nil
-                        }
-                        .disabled(compareSelectedPaths.isEmpty)
-                        Divider()
-                        Button("Copy Selected Paths") {
-                            copySelectedComparePaths()
-                        }
-                        .disabled(compareSelectedPaths.isEmpty)
-                        Divider()
-                        Button("Create Patch…") {
-                            createPatchFromCompare()
-                        }
-                        .disabled(compareSelectedPaths.isEmpty)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .help("Compare actions")
-                }
-                .padding(.horizontal, 8)
-                HStack(spacing: 8) {
-                    Text("\(treeChanges.count) files")
-                    if !compareSelectedPaths.isEmpty {
-                        Text("\(compareSelectedPaths.count) selected")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .font(.caption2)
-                .padding(.horizontal, 8)
-                if let compareError {
-                    Text(compareError).foregroundStyle(.red).font(.caption).padding(.horizontal, 8)
-                }
-                List(treeChanges, id: \.path, selection: $compareSelectedPaths) { change in
-                    HStack {
-                        Text(treeChangeKindText(change.kind))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 56, alignment: .leading)
-                        Text(change.path).font(.system(.body, design: .monospaced))
-                    }
-                    .tag(change.path)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        compareSelection = change.path
-                    })
-                }
-                .listStyle(.inset)
-                .onChange(of: compareSelectedPaths) { _, selectedPaths in
-                    let validPaths = Set(treeChanges.map(\.path))
-                    let normalized = selectedPaths.intersection(validPaths)
-                    if normalized != selectedPaths {
-                        compareSelectedPaths = normalized
-                        return
-                    }
-                    if let compareSelection, normalized.contains(compareSelection) {
-                        return
-                    }
-                    compareSelection = orderedCompareSelection(
-                        changes: treeChanges,
-                        selectedPaths: normalized
-                    ).first?.path
-                }
-            }
-        case .tags:
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    TextField("tag 名称", text: $tagName)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("指向 rev（空=HEAD）", text: $tagAt)
-                        .textFieldStyle(.roundedBorder)
-                    Button("创建") { createTag() }
-                }
-                .padding(.horizontal, 8)
-                if let tagFeedback {
-                    Text(tagFeedback).font(.caption)
-                        .foregroundStyle(tagFeedback.hasPrefix("已") ? .green : .red)
-                        .padding(.horizontal, 8)
-                }
-                List(tags, id: \.name) { tag in
-                    HStack {
-                        Text(tag.name).font(.system(.body, design: .monospaced))
-                        Text(tag.shortId).font(.caption).foregroundStyle(.secondary)
-                        Text(tag.kind == .lightweight ? "lightweight" : tag.kind == .signed ? "signed" : "annotated")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .help(tag.message)
-                        Spacer()
-                        pushTagAction(for: tag.name)
-                        Button("删除") { deleteTag(tag.name) }
-                    }
-                }
-                .listStyle(.inset)
-            }
-        case .reflog:
-            reflogHistoryContent
-        }
-    }
+    logGraphBody
         .onChange(of: logSelection) { _, id in
             guard let id else { return }
             loadCommitDetailsIfNeeded(id)
         }
     .onChange(of: reflogSelection) { _, selection in
-        guard logViewMode == .reflog, let selection else { return }
+        guard logList.viewMode == .reflog, let selection else { return }
         if !reflogSelectedIDs.contains(selection) {
             reflogSelectedIDs.insert(selection)
         }
@@ -2514,29 +1913,29 @@ var logGraphPanel: some View {
         .onChange(of: logShowSignatureColumn) { _, _ in
             loadLogSignatureStatuses()
         }
-        .onChange(of: logEntries.map(logCommitIdentity)) { _, _ in
+        .onChange(of: logList.entries.map(logCommitIdentity)) { _, _ in
             loadLogSignatureStatuses()
         }
-        .sheet(isPresented: $isLogPathsEditorPresented) {
+        .sheet(isPresented: $logList.pathsEditorPresented) {
             LogPathsEditorView(
-                text: $logPathsEditorText,
-                onCancel: { isLogPathsEditorPresented = false },
+                text: $logList.pathsEditorText,
+                onCancel: { logList.pathsEditorPresented = false },
                 onApply: applyLogPathsEditor
             )
         }
-        .sheet(isPresented: $isLogPathsTreeChooserPresented) {
+        .sheet(isPresented: $logList.pathsTreeChooserPresented) {
             LogPathsTreeChooserView(
-                roots: logPathsTreeChooserRoots,
-                selections: $logPathsTreeChooserSelections,
-                onCancel: { isLogPathsTreeChooserPresented = false },
+                roots: logList.pathsTreeChooserRoots,
+                selections: $logList.pathsTreeChooserSelections,
+                onCancel: { logList.pathsTreeChooserPresented = false },
                 onApply: applyLogPathsTreeChooser
             )
         }
-    .alert("Enter branch, tag, or commit", isPresented: $showLogRevisionFilterAlert) {
-        TextField("branch or revision", text: $logRevisionFilterInput)
+    .alert("Enter branch, tag, or commit", isPresented: $logList.revisionFilterPresented) {
+        TextField("branch or revision", text: $logList.revisionInput)
         Button("Cancel", role: .cancel) {}
         Button("Add") {
-            let value = logRevisionFilterInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = logList.revisionInput.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty else { return }
             // A typed value is a complete filter expression. Replacing the
             // popup selection prevents a branch head and an A..B range from
@@ -2544,7 +1943,7 @@ var logGraphPanel: some View {
             // range/revision filters as a separate filter category.
             setLogStartRevisions([value])
         }
-        .disabled(logRevisionFilterInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(logList.revisionInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .confirmationDialog(
@@ -2580,7 +1979,7 @@ var logCommandFilterBar: some View {
         Button("Run") { runLogCommand() }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
-        Button("History") { logViewMode = .graph }
+        Button("History") { logList.viewMode = .graph }
             .buttonStyle(.bordered)
     }
     .padding(.horizontal, 12)
@@ -2592,10 +1991,10 @@ var logCommandFilterBar: some View {
 
 @ViewBuilder
 var logGraphHistoryContent: some View {
-    let isCommand = logViewMode == .command
+    let isCommand = logList.viewMode == .command
     let isFileHistory = logTabs.first { $0.id == currentLogTabID }?.historyPath != nil
-    let entries = isCommand ? logCommandEntries : logEntries
-    let isLoading = isCommand ? isLoadingLogCommand : isLoadingLog
+    let entries = isCommand ? logCommandEntries : logList.entries
+    let isLoading = isCommand ? isLoadingLogCommand : logList.isLoading
     if isLoading && entries.isEmpty {
         ProgressView("Loading history…")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2611,7 +2010,7 @@ var logGraphHistoryContent: some View {
                     .foregroundStyle(.secondary)
                 Text(isCommand
                     ? (logCommandError ?? "No commits match the command")
-                    : (logError ?? "No commits match the current filters"))
+                    : (logList.error ?? "No commits match the current filters"))
                     .foregroundStyle(.secondary)
                 Button("Refresh") {
                     if isCommand { runLogCommand() } else { loadLog() }
@@ -2655,8 +2054,8 @@ var logGraphHistoryContent: some View {
                 actionAvailability: logActionAvailability,
                 isFileHistory: isFileHistory,
                 onReachedEnd: loadMoreLog,
-                hasMore: isCommand ? hasMoreLogCommand : hasMoreLog,
-                isLoadingMore: isCommand ? isLoadingLogCommand : isLoadingMoreLog,
+                hasMore: isCommand ? hasMoreLogCommand : logList.hasMore,
+                isLoadingMore: isCommand ? isLoadingLogCommand : logList.isLoadingMore,
                 pullRequestRemotesForCommit: pullRequestRemotesForCommit,
                 onOpenPullRequest: openPullRequestsForCommit,
                 commentRemotesForCommit: commentRemotesForCommit,
@@ -3059,6 +2458,646 @@ struct LogPathsEditorView: View {
         .padding(18)
         .frame(width: 520, height: 320)
     }
+}
+
+
+/// Log 工具栏齿轮菜单。
+///
+/// 单独成属性：整块 HStack 加上这些 Toggle/Picker 后，Swift 类型检查在
+/// 单个表达式里会超时（"unable to type-check this expression in reasonable time"）。
+var logGraphGearMenu: some View {
+    Menu {
+        Picker("Log view", selection: $logList.viewMode) {
+            Text("History").tag(LogViewMode.graph)
+            Text("Git Log Command").tag(LogViewMode.command)
+            Text("Compare").tag(LogViewMode.compare)
+            Text("Tags").tag(LogViewMode.tags)
+            Text("Reflog").tag(LogViewMode.reflog)
+        }
+        Picker("Sort", selection: $logGraphSortModeRaw) {
+            ForEach(LogGraphSortChoice.allCases) { choice in
+                Text(choice.title).tag(choice.rawValue)
+            }
+        }
+        Divider()
+        Toggle("Show Commit Details", isOn: $logShowDetails)
+        Toggle("Show Diff Preview", isOn: $logShowDiffPreview)
+        Toggle("Diff Preview on Bottom", isOn: $logDiffPreviewVertical)
+        Divider()
+        Toggle("Compact References", isOn: $logCompactReferences)
+        Menu("Log Columns") {
+            Toggle("Show Author and Date", isOn: showAuthorAndDateBinding)
+            Toggle("Show Author", isOn: showAuthorColumnBinding)
+            Toggle("Show Date", isOn: showDateColumnBinding)
+            Toggle("Show Commit Hash", isOn: $logShowHashColumn)
+            Toggle("Show Root Names", isOn: $logShowRootColumn)
+            Toggle("Show Commit Signature", isOn: $logShowSignatureColumn)
+            Divider()
+            ForEach(LogColumnID.allCases) { column in
+                Menu(column.title) {
+                    Button("Wider") { resizeLogColumn(column, by: 16) }
+                        .disabled(!column.isResizable)
+                    Button("Narrower") { resizeLogColumn(column, by: -16) }
+                        .disabled(!column.isResizable)
+                    Divider()
+                    Button("Move Left") { moveLogColumn(column, by: -1) }
+                        .disabled(!canMoveLogColumn(column, by: -1))
+                    Button("Move Right") { moveLogColumn(column, by: 1) }
+                        .disabled(!canMoveLogColumn(column, by: 1))
+                }
+            }
+            Divider()
+            Button("Reset Column Order") {
+                logColumnOrderRaw = LogColumnLayout.defaultOrder.map(\.rawValue).joined(separator: ",")
+            }
+            Button("Reset Column Widths") {
+                logColumnWidthsRaw = ""
+            }
+        }
+        Toggle("Show Tag Names", isOn: $logShowTagNames)
+        Toggle("Align Labels", isOn: $logAlignLabels)
+        Toggle("Show Long Edges", isOn: $logShowLongEdges)
+        Button("Collapse All Graph") {
+            issueLogGraphCommand(.buttonCollapse)
+        }
+        .disabled(logList.viewMode != .graph)
+        Button("Expand All Graph") {
+            issueLogGraphCommand(.buttonExpand)
+        }
+        .disabled(logList.viewMode != .graph)
+        Toggle("Collapse Graph", isOn: $logCollapseGraph)
+        Toggle("No Merges", isOn: $logNoMerges)
+        Toggle("Show Branches", isOn: $logBranchesVisible)
+        Divider()
+        Button("Go to Parent") { selectParentLogCommit() }
+            .disabled(selectedCommit?.parentIds.isEmpty ?? true)
+        Button("Go to Child") { selectChildLogCommit() }
+            .disabled(selectedCommit == nil)
+        Button("Copy Selected Revision IDs") { copySelectedLogIDs() }
+            .disabled(logSelectedIDs.isEmpty)
+        Divider()
+        Menu("More Log Actions") {
+            Button("Show Git Log Command…") {
+                logCommandFilter = ""
+                logCommandEntries = []
+                logCommandError = nil
+                logList.viewMode = .command
+            }
+            Button("Create Patch…") {
+                if let selectedCommit { createPatchFromLog(selectedCommit) }
+            }
+            .disabled(selectedCommit == nil || logSelectedIDs.count > 1)
+            .help("Create a patch for one selected commit")
+            Button("Reset Selected Revisions…") {
+                resetFromLog(selectedLogCommits)
+            }
+            .disabled(
+                !isResetSelectionAvailable(for: selectedLogCommits)
+                    || !logActionAvailability.allowsMutation(for: selectedLogCommits)
+            )
+            .help("Reset one selected revision per Git root")
+            Button("Create Fixup Commit…") {
+                if let selectedCommit {
+                    beginAutoSquashCommitFromLog(selectedCommit, kind: .fixup)
+                }
+            }
+            .disabled(
+                selectedCommit == nil
+                    || !logActionAvailability.hasLocalChanges
+                    || (selectedCommit.map { !logActionAvailability.allowsHistoryRewrite(for: [$0]) } ?? true)
+            )
+            Button("Create Squash Commit…") {
+                if let selectedCommit {
+                    beginAutoSquashCommitFromLog(selectedCommit, kind: .squash)
+                }
+            }
+            .disabled(
+                selectedCommit == nil
+                    || !logActionAvailability.hasLocalChanges
+                    || (selectedCommit.map { !logActionAvailability.allowsHistoryRewrite(for: [$0]) } ?? true)
+            )
+            Button("Squash Selected Commits…") {
+                rewriteSelectedCommitsFromLog(selectedLogCommits, action: .squash)
+            }
+            .disabled(
+                !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
+                    || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
+            )
+            Button("Reword Selected Commits…") {
+                rewriteSelectedCommitsFromLog(selectedLogCommits, action: .reword)
+            }
+            .disabled(
+                !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
+                    || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
+            )
+            Button("Drop Selected Commits…", role: .destructive) {
+                rewriteSelectedCommitsFromLog(selectedLogCommits, action: .drop)
+            }
+            .disabled(
+                !areLogRewriteSelectionActionsAvailable(for: selectedLogCommits)
+                    || !logActionAvailability.allowsSingleRootHistoryRewrite(for: selectedLogCommits)
+            )
+            Button("Toggle Log Columns") {
+                showAuthorAndDateBinding.wrappedValue.toggle()
+            }
+            Menu("Highlight Cherry-Picked Commits") {
+                Picker("Compared branch", selection: $logCherryPickCompareBranch) {
+                    Text("Choose source branch…").tag("")
+                    ForEach(cherryPickCompareBranchChoices, id: \.self) { branch in
+                        Text(branch).tag(branch)
+                    }
+                }
+                Toggle("Enable Highlighting", isOn: $logHighlightCherryPicked)
+                    .disabled(logCherryPickCompareBranch.isEmpty)
+                if !logCherryPickCompareBranch.isEmpty {
+                    Text("Target: \(cherryPickTargetBranchLabel)")
+                }
+                if logCherryPickComparisonInProgress {
+                    Label(
+                        "Comparing cherry-picked commits… (\(logCherryPickComparisonCompletedRoots)/\(logCherryPickComparisonTotalRoots))",
+                        systemImage: "hourglass"
+                    )
+                    Button("Cancel Comparison") {
+                        cancelCherryPickedHighlighting()
+                    }
+                }
+            }
+            Toggle("Show Changes from Parents", isOn: $logShowChangesFromParents)
+            if logList.viewMode == .graph, !activeLogPathFilterSelections().isEmpty {
+                Toggle("Show Only Affected Changes", isOn: $logShowOnlyAffectedChanges)
+            }
+            Button("Open Log in New Window") {
+                guard let projectPath,
+                      let request = chooseExternalLogWindowRequest(for: projectPath) else {
+                    return
+                }
+                openWindow(id: "git-log", value: request)
+            }
+            .disabled(projectRepo == nil || projectPath == nil)
+            Button("Open Another Log Tab") { openAnotherLogTab() }
+        }
+        Divider()
+        Button(logRefreshButtonTitle) {
+            reloadLogView()
+        }
+    } label: {
+        HStack(spacing: 3) {
+            Image(systemName: "ellipsis")
+            Image(systemName: "chevron.down")
+        }
+        .foregroundStyle(.secondary)
+        .frame(width: 34, height: 32)
+    }
+    .menuStyle(.borderlessButton)
+}
+
+
+/// Log 左侧的起始 revision / 分支过滤菜单。
+///
+/// `logGraphPanel` 单个表达式过大，类型检查会超时；把这块单独成属性。
+var logStartRevisionMenu: some View {
+        Menu {
+            Button("HEAD") { setLogStartRevisions([]) }
+            Button("Enter branch, tag, or commit") {
+                logList.revisionInput = ""
+                logList.revisionFilterPresented = true
+            }
+            Divider()
+            Section("Local Branches") {
+                ForEach(branches, id: \.name) { branch in
+                    Toggle(
+                        isOn: logStartRevisionBinding(for: branch.name)
+                    ) {
+                        Text(branch.name)
+                    }
+                }
+            }
+            if !remoteBranches.isEmpty {
+                Section("Remote Branches") {
+                    ForEach(remoteBranches, id: \.name) { branch in
+                        Toggle(
+                            isOn: logStartRevisionBinding(for: branch.name)
+                        ) {
+                            Text(branch.name)
+                        }
+                    }
+                }
+            }
+            if !tags.isEmpty {
+                Section("Tags") {
+                    ForEach(tags, id: \.name) { tag in
+                        Toggle(
+                            isOn: logStartRevisionBinding(for: tag.name)
+                        ) {
+                            Text(tag.name)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(logBranchFilterTitle,
+                  systemImage: "arrow.triangle.branch")
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .padding(.horizontal, 8)
+        .frame(height: 32)
+        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
+        .onChange(of: logList.startRevisions) { _, _ in scheduleLogRefresh() }
+}
+
+
+/// Log 过滤条（文本 / 分支 / 作者 / 路径 / 时间范围 / Follow）。
+///
+/// 单独成属性避免 `logGraphPanel` 的单个表达式超出类型检查预算。
+var logFilterBar: some View {
+ScrollView(.horizontal, showsIndicators: false) {
+    HStack(spacing: 6) {
+        logFilterField("Text or hash", text: $logList.messageFilter, width: 215)
+            .onSubmit { scheduleLogRefresh() }
+        Menu {
+            Toggle("Regex", isOn: $logList.messageRegex)
+            Toggle("Match Case", isOn: $logList.messageMatchCase)
+            Divider()
+            Button("Clear Text Filter") {
+                logList.messageFilter = ""
+                scheduleLogRefresh()
+            }
+            .disabled(logList.messageFilter.isEmpty)
+        } label: {
+            Label("Text Filter Settings", systemImage: "line.3.horizontal.decrease.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .foregroundStyle((logList.messageRegex || logList.messageMatchCase) ? Design.Colors.accent : .secondary)
+        .help("Text Filter Settings")
+        HStack(spacing: 4) {
+            let currentPathSelections = activeLogPathFilterSelections()
+            if currentPathSelections.count > 1 {
+                Button {
+                    openLogPathsEditor()
+                } label: {
+                    Text(logPathFilterSummary(currentPathSelections))
+                        .lineLimit(1)
+                        .frame(width: 150, height: 32, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            } else {
+                logFilterField("Paths", text: $logList.pathFilter, width: 150)
+                    .onSubmit { applyManualLogPathFilter() }
+            }
+            Menu {
+                Button("Edit Paths…") { openLogPathsEditor() }
+                Button("Select Paths in Tree…") { openLogPathsTreeChooser() }
+                    .disabled(logStructureFilterRootPaths.isEmpty && availableReflogRootPaths.isEmpty)
+                Button("Choose…") { chooseLogPathFilter() }
+                    .disabled(availableReflogRootPaths.isEmpty)
+                if logStructureFilterRootPaths.count > 1 {
+                    Divider()
+                    Section("Repositories") {
+                        ForEach(logStructureFilterRootPaths, id: \.self) { rootPath in
+                            Toggle(
+                                isOn: Binding(
+                                    get: { visibleLogStructureFilterRootPaths.contains(rootPath) },
+                                    set: { setLogStructureFilterRoot(rootPath, visible: $0) }
+                                )
+                            ) {
+                                Text(URL(fileURLWithPath: rootPath).lastPathComponent)
+                                    .help(rootPath)
+                            }
+                        }
+                    }
+                }
+                let recent = recentLogPathFilterSelections()
+                if !recent.isEmpty {
+                    Divider()
+                    Section("Recent Filters") {
+                        ForEach(Array(recent.enumerated()), id: \.offset) { _, paths in
+                            Button(logPathFilterSummary(paths)) {
+                                setLogPathFilterSelections(paths, remember: false)
+                            }
+                        }
+                        Button("Clear Recent Filters") {
+                            clearRecentLogPathFilters()
+                        }
+                    }
+                }
+                if !currentPathSelections.isEmpty {
+                    Divider()
+                    Button("Clear") { clearLogPathFilter() }
+                }
+            } label: {
+                Image(systemName: currentPathSelections.isEmpty
+                      ? "folder"
+                      : "folder.fill")
+            }
+            .menuStyle(.borderlessButton)
+            .foregroundStyle(currentPathSelections.isEmpty ? .secondary : Design.Colors.accent)
+            .help("Choose or clear Paths filter")
+        }
+        logStartRevisionMenu
+        logFilterField("User", text: $logList.authorFilter, width: 110)
+            .onSubmit { scheduleLogRefresh() }
+        logFilterField("Since", text: $logList.since, width: 120)
+            .onSubmit { scheduleLogRefresh() }
+        logFilterField("Until", text: $logList.until, width: 120)
+            .onSubmit { scheduleLogRefresh() }
+        Toggle(isOn: $logList.follow) {
+            Image(systemName: "arrow.right.to.line.compact")
+        }
+        .toggleStyle(.checkbox)
+        .help("Follow current branch")
+        Button {
+            loadLog()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+        }
+        .buttonStyle(.borderless)
+        .help("Refresh log")
+        if logList.isShowingCachedSnapshot {
+            ProgressView()
+                .controlSize(.small)
+                .help("Refreshing cached history")
+        }
+    }
+    // The filter row belongs to the commit-table column, not to the
+    // graph gutter. Rebased keeps the fields aligned with the first
+    // commit summary while the colored lanes remain visible below.
+    .padding(.leading, 10)
+    .padding(.trailing, 10)
+    .padding(.vertical, 8)
+}
+.frame(height: 48)
+.onChange(of: logList.follow) { _, _ in scheduleLogRefresh() }
+}
+
+
+/// Log 工具栏（视图切换、排序、列设置、刷新）。
+var logGraphHeader: some View {
+HStack(spacing: 10) {
+    Button {
+        logList.viewMode = .graph
+    } label: {
+        Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+    }
+    .buttonStyle(.borderedProminent)
+    .tint(Design.Colors.accent)
+
+    if externalLogWindow {
+        externalLogRootsMenu
+    }
+
+    logGraphGearMenu
+
+    Spacer(minLength: 0)
+}
+.padding(.horizontal, 12)
+.padding(.vertical, 7)
+.background(Design.Colors.chrome)
+.overlay(alignment: .bottom) { Divider() }
+.onChange(of: logList.viewMode) { _, mode in
+    if mode == .graph {
+        activeCompareRepo = nil
+        compareRepositoryPath = nil
+        loadLog()
+    } else if mode == .reflog {
+        activeCompareRepo = nil
+        compareRepositoryPath = nil
+        prepareReflogRoot()
+    } else if mode == .command {
+        activeCompareRepo = nil
+        compareRepositoryPath = nil
+        runLogCommand()
+    } else if mode == .tags {
+        activeCompareRepo = nil
+        compareRepositoryPath = nil
+        // Tags is its own Log sub-view. Do not leave the last History
+        // commit rendered in the inspector while the left workspace
+        // has already switched to tag management.
+        logSelection = nil
+        logSelectedIDs = []
+    }
+}
+.onChange(of: logGraphSortModeRaw) { _, _ in
+    guard logList.viewMode == .graph else { return }
+    scheduleLogRefresh()
+}
+.onChange(of: logList.messageRegex) { _, _ in
+    guard logList.viewMode == .graph else { return }
+    scheduleLogRefresh()
+}
+.onChange(of: logList.messageMatchCase) { _, _ in
+    guard logList.viewMode == .graph else { return }
+    scheduleLogRefresh()
+}
+.onChange(of: logNoMerges) { _, _ in
+    guard logList.viewMode == .graph else { return }
+    scheduleLogRefresh()
+}
+.onChange(of: logCherryPickCompareBranch) { _, branch in
+    logHighlightCherryPicked = cherryPickHighlightEnabledAfterSourceChange(
+        sourceBranch: branch,
+        currentlyEnabled: logHighlightCherryPicked
+    )
+    refreshCherryPickedHighlights()
+}
+.onChange(of: logHighlightCherryPicked) { _, _ in
+    refreshCherryPickedHighlights()
+}
+}
+
+
+/// Log 面板主体：工具栏 + 过滤条 + 各视图内容。
+///
+/// 从 `logGraphPanel` 拆出来，让外层只保留弹窗与 onChange 修饰符。
+var logGraphBody: some View {
+VStack(spacing: 0) {
+    logGraphHeader
+
+    if logTabs.count > 1 {
+        LogTabBar(
+            tabs: logTabs,
+            activeID: currentLogTabID,
+            onSelect: switchLogTab,
+            onClose: closeLogTab,
+            onNew: openAnotherLogTab
+        )
+    }
+
+    if logList.viewMode == .command {
+        logCommandFilterBar
+    } else if logList.viewMode == .graph {
+    logFilterBar
+    }
+    if shouldShowLogError {
+        if let error = logList.error {
+            Text(error).foregroundStyle(.red).font(.callout).padding(8)
+        }
+    }
+    switch logList.viewMode {
+    case .graph:
+        logGraphHistoryContent
+    case .command:
+        logGraphHistoryContent
+    case .compareBranches:
+        BranchCommitComparisonView(
+            firstBranch: compareRev1,
+            secondBranch: compareRev2,
+            firstCommits: branchCompareFirstEntries,
+            secondCommits: branchCompareSecondEntries,
+            firstFilter: $branchCompareFirstFilter,
+            secondFilter: $branchCompareSecondFilter,
+            isLoading: isLoadingBranchComparison,
+            error: branchCompareError,
+            selectedID: $branchCompareSelectionID,
+            selectedSide: $branchCompareSelectionSide,
+            onFilterChanged: refreshBranchComparison,
+            pagination: branchComparisonPagination,
+            onSelect: { side, id in
+                branchCompareSelectionSide = side
+                branchCompareSelectionID = id
+            },
+            onAction: { action, commit in
+                switch action {
+                case .checkout:
+                    checkoutFromLog(commit)
+                case .reset:
+                    resetFromLog(commit)
+                case .createBranch:
+                    createBranchFromCommit(commit)
+                case .compare:
+                    compareFromLog(commit)
+                case .interactiveRebase:
+                    interactiveRebaseFromLog(commit)
+                case .cherryPick:
+                    cherryPickFromLog(commit)
+                case .revert:
+                    revertFromLog(commit)
+                }
+            },
+            logActions: branchComparisonLogActions
+        )
+    case .compare:
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                TextField("旧版本 / 分支", text: $compareRev1)
+                    .textFieldStyle(.roundedBorder)
+                Text("→").foregroundStyle(.secondary)
+                TextField("新版本 / 分支", text: $compareRev2)
+                    .textFieldStyle(.roundedBorder)
+                Button("比较") {
+                    compareWithWorkingTree = false
+                    loadTreeChanges()
+                }
+                Menu {
+                    Button("Select All") {
+                        compareSelectedPaths = Set(treeChanges.map(\.path))
+                        compareSelection = treeChanges.first?.path
+                    }
+                    .disabled(treeChanges.isEmpty)
+                    Button("Clear") {
+                        compareSelectedPaths = []
+                        compareSelection = nil
+                    }
+                    .disabled(compareSelectedPaths.isEmpty)
+                    Divider()
+                    Button("Copy Selected Paths") {
+                        copySelectedComparePaths()
+                    }
+                    .disabled(compareSelectedPaths.isEmpty)
+                    Divider()
+                    Button("Create Patch…") {
+                        createPatchFromCompare()
+                    }
+                    .disabled(compareSelectedPaths.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .help("Compare actions")
+            }
+            .padding(.horizontal, 8)
+            HStack(spacing: 8) {
+                Text("\(treeChanges.count) files")
+                if !compareSelectedPaths.isEmpty {
+                    Text("\(compareSelectedPaths.count) selected")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            if let compareError {
+                Text(compareError).foregroundStyle(.red).font(.caption).padding(.horizontal, 8)
+            }
+            List(treeChanges, id: \.path, selection: $compareSelectedPaths) { change in
+                HStack {
+                    Text(treeChangeKindText(change.kind))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 56, alignment: .leading)
+                    Text(change.path).font(.system(.body, design: .monospaced))
+                }
+                .tag(change.path)
+                .simultaneousGesture(TapGesture().onEnded {
+                    compareSelection = change.path
+                })
+            }
+            .listStyle(.inset)
+            .onChange(of: compareSelectedPaths) { _, selectedPaths in
+                let validPaths = Set(treeChanges.map(\.path))
+                let normalized = selectedPaths.intersection(validPaths)
+                if normalized != selectedPaths {
+                    compareSelectedPaths = normalized
+                    return
+                }
+                if let compareSelection, normalized.contains(compareSelection) {
+                    return
+                }
+                compareSelection = orderedCompareSelection(
+                    changes: treeChanges,
+                    selectedPaths: normalized
+                ).first?.path
+            }
+        }
+    case .tags:
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                TextField("tag 名称", text: $tagName)
+                    .textFieldStyle(.roundedBorder)
+                TextField("指向 rev（空=HEAD）", text: $tagAt)
+                    .textFieldStyle(.roundedBorder)
+                Button("创建") { createTag() }
+            }
+            .padding(.horizontal, 8)
+            if let tagFeedback {
+                Text(tagFeedback).font(.caption)
+                    .foregroundStyle(tagFeedback.hasPrefix("已") ? .green : .red)
+                    .padding(.horizontal, 8)
+            }
+            List(tags, id: \.name) { tag in
+                HStack {
+                    Text(tag.name).font(.system(.body, design: .monospaced))
+                    Text(tag.shortId).font(.caption).foregroundStyle(.secondary)
+                    Text(tag.kind == .lightweight ? "lightweight" : tag.kind == .signed ? "signed" : "annotated")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help(tag.message)
+                    Spacer()
+                    pushTagAction(for: tag.name)
+                    Button("删除") { deleteTag(tag.name) }
+                }
+            }
+            .listStyle(.inset)
+        }
+    case .reflog:
+        reflogHistoryContent
+    }
+}
 }
 
 }

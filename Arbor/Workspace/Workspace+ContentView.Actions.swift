@@ -686,7 +686,7 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         selection = nil
         fileSelection = nil
         selectionModePath = nil
-        logViewMode = .graph
+        logList.viewMode = .graph
         loadLog()
     case .showExternalLog:
         // ProjectCommands routes this action directly through openWindow so

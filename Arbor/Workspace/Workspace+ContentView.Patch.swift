@@ -83,16 +83,16 @@ func applyLogBranchFilters(_ filters: [LogRootBranchFilter]) {
     logAggregateRootPaths = []
     logAggregateRepositories = [:]
     logAggregateLoadedCounts = [:]
-    logActiveRootPath = nil
-    logActiveRepo = nil
+    logList.activeRootPath = nil
+    logList.activeRepo = nil
     logActiveBranches = []
     logActiveRemoteBranches = []
     logActiveRemotes = []
-    logStartRevision = ""
-    logStartRevisions = []
+    logList.startRevision = ""
+    logList.startRevisions = []
     logSelection = nil
     logSelectedIDs = []
-    logViewMode = .graph
+    logList.viewMode = .graph
     loadLog()
 }
 
@@ -109,25 +109,25 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     logAggregateRepositories = [:]
     logAggregateLoadedCounts = [:]
     logAggregatePageCursors = [:]
-    logViewMode = tab.viewMode
+    logList.viewMode = tab.viewMode
     let tabRevisions = tab.startRevisions.isEmpty
         ? (tab.startRevision.isEmpty ? [] : [tab.startRevision])
         : tab.startRevisions
     setLogStartRevisions(tabRevisions)
-    logPathFilter = tab.pathFilter
-    logPathFilterSelections = normalizedLogPathFilterSelections(tab.pathSelections)
-    logVisibleRootPathsRaw = tab.visibleRootPathsRaw
-    logAuthorFilter = tab.authorFilter
-    logMessageFilter = tab.messageFilter
-    logMessageRegex = tab.messageRegex
-    logMessageMatchCase = tab.messageMatchCase
-    logSinceText = tab.sinceText
-    logUntilText = tab.untilText
+    logList.pathFilter = tab.pathFilter
+    logList.pathFilterSelections = normalizedLogPathFilterSelections(tab.pathSelections)
+    logList.visibleRootPathsRaw = tab.visibleRootPathsRaw
+    logList.authorFilter = tab.authorFilter
+    logList.messageFilter = tab.messageFilter
+    logList.messageRegex = tab.messageRegex
+    logList.messageMatchCase = tab.messageMatchCase
+    logList.since = tab.sinceText
+    logList.until = tab.untilText
     logCommandFilter = tab.commandFilter
     logCommandEntries = []
     hasMoreLogCommand = true
     logCommandError = nil
-    logFollow = tab.follow
+    logList.follow = tab.follow
     logGraphSortModeRaw = tab.graphSortModeRaw
     compareRev1 = tab.compareRevision1
     compareRev2 = tab.compareRevision2
@@ -141,11 +141,11 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     } else {
         activeCompareRepo = nil
     }
-    logEntries = []
-    isShowingCachedLogSnapshot = false
+    logList.entries = []
+    logList.isShowingCachedSnapshot = false
     logSelection = tab.selection
     logSelectedIDs = tab.selectedIDs
-    logPageCursor = nil
+    logList.pageCursor = nil
     reflogEntries = []
     let restoredReflogRoot = tab.reflogRootPath
         ?? (tab.viewMode == .reflog ? tab.rootPath : nil)
@@ -158,7 +158,7 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     reflogDetailCommits = []
     reflogDetailLoadTask?.cancel()
     reflogDetailLoadTask = nil
-    hasMoreLog = true
+    logList.hasMore = true
 }
 
 func applyLogTabRootContext(_ rootPath: String?) {
@@ -173,15 +173,15 @@ func applyLogTabRootContext(_ rootPath: String?) {
         clearLogActiveRootContext()
         return
     }
-    logActiveRootPath = normalizedRootPath
+    logList.activeRootPath = normalizedRootPath
     guard let rootRepo = try? openRepository(path: normalizedRootPath) else {
-        logActiveRepo = nil
+        logList.activeRepo = nil
         logActiveBranches = []
         logActiveRemoteBranches = []
         logActiveRemotes = []
         return
     }
-    logActiveRepo = rootRepo
+    logList.activeRepo = rootRepo
     logActiveBranches = (try? rootRepo.branchList()) ?? []
     logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
     logActiveRemotes = (try? rootRepo.remoteList()) ?? []
@@ -189,18 +189,18 @@ func applyLogTabRootContext(_ rootPath: String?) {
 
 func applyManualLogPathFilter() {
     let roots = logStructureFilterRootPaths + availableReflogRootPaths
-    setLogPathFilterSelections(parseLogPathFilterEditorText(logPathFilter, roots: roots))
+    setLogPathFilterSelections(parseLogPathFilterEditorText(logList.pathFilter, roots: roots))
 }
 
 func applyLogPathsEditor() {
-    isLogPathsEditorPresented = false
+    logList.pathsEditorPresented = false
     let roots = logStructureFilterRootPaths + availableReflogRootPaths
-    setLogPathFilterSelections(parseLogPathFilterEditorText(logPathsEditorText, roots: roots))
+    setLogPathFilterSelections(parseLogPathFilterEditorText(logList.pathsEditorText, roots: roots))
 }
 
 func applyLogPathsTreeChooser() {
-    isLogPathsTreeChooserPresented = false
-    setLogPathFilterSelections(Array(logPathsTreeChooserSelections))
+    logList.pathsTreeChooserPresented = false
+    setLogPathFilterSelections(Array(logList.pathsTreeChooserSelections))
 }
 
 /// Export the selected commit's parent-to-commit diff as a portable patch.
@@ -970,8 +970,8 @@ func applyExternalLogRootSelection(_ requestedPaths: Set<String>) {
     logAggregateLoadedCounts = [:]
     logSelection = nil
     logSelectedIDs = []
-    logError = nil
-    logViewMode = .graph
+    logList.error = nil
+    logList.viewMode = .graph
     loadLog()
 }
 

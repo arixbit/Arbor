@@ -9,7 +9,7 @@ var cherryPickTargetBranchLabel: String {
         return "each repository's current branch"
     }
     return Arbor.cherryPickTargetBranch(
-        mode: logViewMode,
+        mode: logList.viewMode,
         sourceBranch: logCherryPickCompareBranch,
         firstBranch: compareRev1,
         secondBranch: compareRev2,

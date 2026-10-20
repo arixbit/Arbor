@@ -72,7 +72,7 @@ func beginAutoSquashCommitFromLog(_ commit: CommitInfo, kind: AutoSquashCommitKi
         )
         return
     }
-    if let activeRoot = logActiveRootPath,
+    if let activeRoot = logList.activeRootPath,
        activeRoot != projectPath {
         feedbackCenter.warning(
             "Auto-squash is available in the primary Log root",

@@ -58,21 +58,21 @@ func openRewordCommit(rootPath: String, commitID: String) {
     logAggregateLoadedCounts = [:]
     logSelection = nil
     logSelectedIDs = []
-    logViewMode = .graph
+    logList.viewMode = .graph
     toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
 
     let primaryRoot = repo?.workdir().map { URL(fileURLWithPath: $0).standardizedFileURL.path }
     if normalizedRootPath == primaryRoot {
-        logActiveRootPath = nil
-        logActiveRepo = nil
+        logList.activeRootPath = nil
+        logList.activeRepo = nil
         logActiveBranches = []
         logActiveRemoteBranches = []
         logActiveRemotes = []
     } else {
-        logActiveRootPath = normalizedRootPath
-        logActiveRepo = rootRepo
+        logList.activeRootPath = normalizedRootPath
+        logList.activeRepo = rootRepo
         logActiveBranches = (try? rootRepo.branchList()) ?? []
         logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
         logActiveRemotes = (try? rootRepo.remoteList()) ?? []
@@ -145,7 +145,7 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
     guard let repo = logRepository, !normalized.isEmpty else { return }
     let revision = normalized.split(separator: "\u{1f}", maxSplits: 1).last.map(String.init) ?? normalized
     if !forReflog,
-       let visible = (logViewMode == .command ? logCommandEntries : logEntries).first(where: {
+       let visible = (logList.viewMode == .command ? logCommandEntries : logList.entries).first(where: {
            let identity = logCommitIdentity($0)
            return identity == normalized || identity.hasPrefix(normalized) || normalized.hasPrefix(identity)
        }) {
@@ -212,7 +212,7 @@ func selectParentLogCommit() {
 
     let parentIDs = commit.parentIds
     let expectedSelection = logCommitIdentity(commit)
-    let expectedGeneration = logGeneration
+    let expectedGeneration = logList.generation
     if parentIDs.count == 1 {
         selectLogRevision(
             logCommitIdentity(repositoryPath: commit.repositoryPath, id: parentIDs[0])
@@ -224,7 +224,7 @@ func selectParentLogCommit() {
         let parents = try? parentIDs.map { try repository.commitInfo(commitId: $0) }
         guard !Task.isCancelled else { return }
         await MainActor.run {
-            guard self.logGeneration == expectedGeneration,
+            guard self.logList.generation == expectedGeneration,
                   self.logSelection == expectedSelection,
                   self.isActiveLogNavigationRepository(repository, rootPath: commit.repositoryPath) else {
                 return
@@ -251,12 +251,12 @@ func selectChildLogCommit() {
           let repository = logRepository(for: commit) else { return }
 
     let expectedSelection = logCommitIdentity(commit)
-    let expectedGeneration = logGeneration
+    let expectedGeneration = logList.generation
     Task.detached(priority: .userInitiated) {
         let children = try? repository.commitChildren(commitId: commit.id)
         guard !Task.isCancelled else { return }
         await MainActor.run {
-            guard self.logGeneration == expectedGeneration,
+            guard self.logList.generation == expectedGeneration,
                   self.logSelection == expectedSelection,
                   self.isActiveLogNavigationRepository(repository, rootPath: commit.repositoryPath) else {
                 return
@@ -293,7 +293,7 @@ func selectChildLogCommit() {
 func choosePendingLogNavigationCommit(_ commit: CommitInfo) {
     guard isLogNavigationChoicePresented,
           pendingLogNavigationSelection == logSelection,
-          pendingLogNavigationGeneration == logGeneration else {
+          pendingLogNavigationGeneration == logList.generation else {
         isLogNavigationChoicePresented = false
         pendingLogNavigationCommits = []
         pendingLogNavigationSelection = nil
@@ -679,7 +679,7 @@ func performUncommit(_ request: RebasedUncommitRequest, targetName: String) {
                     self.refreshAll(showFeedback: false)
                 } else {
                     self.loadMultiRoots {
-                        if self.logViewMode == .command || self.isLogAggregate {
+                        if self.logList.viewMode == .command || self.isLogAggregate {
                             self.reloadLogView()
                         }
                     }
@@ -782,7 +782,7 @@ func undoUncommit(
                     self.refreshAll(showFeedback: false)
                 } else {
                     self.loadMultiRoots {
-                        if self.logViewMode == .command || self.isLogAggregate {
+                        if self.logList.viewMode == .command || self.isLogAggregate {
                             self.reloadLogView()
                         }
                     }
@@ -864,7 +864,7 @@ func undoRewordCommit(
                     self.refreshAll(showFeedback: false)
                 } else {
                     self.loadMultiRoots {
-                        if self.logViewMode == .command || self.isLogAggregate {
+                        if self.logList.viewMode == .command || self.isLogAggregate {
                             self.reloadLogView()
                         }
                     }

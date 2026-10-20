@@ -33,15 +33,15 @@ func navigateLogToBranch(rootPath: String?, branch: String) {
             )
             return
         }
-        logActiveRootPath = rootPath
-        logActiveRepo = rootRepo
+        logList.activeRootPath = rootPath
+        logList.activeRepo = rootRepo
         logActiveBranches = (try? rootRepo.branchList()) ?? []
         logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
         logActiveRemotes = (try? rootRepo.remoteList()) ?? []
         navigationHeadID = try? rootRepo.revisionCommitId(revision: branch)
     } else {
-        logActiveRootPath = nil
-        logActiveRepo = nil
+        logList.activeRootPath = nil
+        logList.activeRepo = nil
         logActiveBranches = []
         logActiveRemoteBranches = []
         logActiveRemotes = []
@@ -50,7 +50,7 @@ func navigateLogToBranch(rootPath: String?, branch: String) {
     setLogStartRevision(branch)
     logSelection = navigationHeadID
     logSelectedIDs = navigationHeadID.map { [$0] } ?? []
-    logViewMode = .graph
+    logList.viewMode = .graph
     loadLog()
 }
 

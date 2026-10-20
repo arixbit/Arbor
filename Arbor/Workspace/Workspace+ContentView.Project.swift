@@ -191,7 +191,7 @@ func refreshRepositoryChange(
             scopes: event.scopes
         )
         loadMultiRoots {
-            if self.logViewMode == .command || self.isLogAggregate {
+            if self.logList.viewMode == .command || self.isLogAggregate {
                 self.reloadLogView()
             }
             if shouldRefreshSecondaryShelf {
@@ -247,8 +247,8 @@ func refreshAll(
         ? requestedIncrementalStatusPaths
         : nil
     let existingEntries = entries
-    let shouldLoadLog = refreshMetadata && toolWindowMode == .log && logViewMode != .reflog
-    let shouldLoadReflog = refreshMetadata && toolWindowMode == .log && logViewMode == .reflog
+    let shouldLoadLog = refreshMetadata && toolWindowMode == .log && logList.viewMode != .reflog
+    let shouldLoadReflog = refreshMetadata && toolWindowMode == .log && logList.viewMode == .reflog
     DiagnosticsLogger.shared.record(operation: "refresh", repositoryPath: repositoryPath, code: "started")
     Task.detached(priority: .userInitiated) {
         do {
@@ -514,10 +514,10 @@ func openProjectPath(_ projectPath: String) {
     multiRootLoadNeedsRefresh = false
     multiRootLoadCompletion = nil
     beginFeedbackOperation("Open project")
-    logRefreshTask?.cancel()
-    logRefreshTask = nil
-    logLoadTask?.cancel()
-    logLoadTask = nil
+    logList.refreshTask?.cancel()
+    logList.refreshTask = nil
+    logList.loadTask?.cancel()
+    logList.loadTask = nil
     reflogLoadTask?.cancel()
     reflogLoadTask = nil
     reflogLoadMoreTask?.cancel()
@@ -528,9 +528,9 @@ func openProjectPath(_ projectPath: String) {
     cancelBranchComparisonTasks()
     activeCompareRepo = nil
     compareRepositoryPath = nil
-    logGeneration += 1
+    logList.generation += 1
     isLoading = true
-    isLoadingLog = toolWindowMode == .log
+    logList.isLoading = toolWindowMode == .log
     loadError = nil
     commitFeedback = nil
     stashPopConflictInProgress = false
@@ -588,7 +588,7 @@ func openProjectPath(_ projectPath: String) {
         for: requestedPath
     )
     applyProjectGitExecutableOverride(for: requestedPath, roots: [requestedPath])
-    let shouldLoadReflog = logViewMode == .reflog
+    let shouldLoadReflog = logList.viewMode == .reflog
     Task.detached(priority: .userInitiated) {
         do {
             let r = try openRepository(path: requestedPath)
@@ -628,8 +628,8 @@ func openProjectPath(_ projectPath: String) {
                     self.reflogRootRepo = r
                     self.prepareReflogRoot()
                 }
-                self.logActiveRootPath = nil
-                self.logActiveRepo = nil
+                self.logList.activeRootPath = nil
+                self.logList.activeRepo = nil
                 self.logActiveBranches = []
                 self.logActiveRemoteBranches = []
                 self.logActiveRemotes = []
@@ -848,10 +848,10 @@ func resetProjectState() {
     multiRootLoadGeneration &+= 1
     multiRootLoadNeedsRefresh = false
     multiRootLoadCompletion = nil
-    logRefreshTask?.cancel()
-    logRefreshTask = nil
-    logLoadTask?.cancel()
-    logLoadTask = nil
+    logList.refreshTask?.cancel()
+    logList.refreshTask = nil
+    logList.loadTask?.cancel()
+    logList.loadTask = nil
     reflogLoadTask?.cancel()
     reflogLoadTask = nil
     reflogLoadMoreTask?.cancel()
@@ -863,8 +863,8 @@ func resetProjectState() {
     compareLoadTask?.cancel()
     compareLoadTask = nil
     activeCompareRepo = nil
-    logActiveRootPath = nil
-    logActiveRepo = nil
+    logList.activeRootPath = nil
+    logList.activeRepo = nil
     logActiveBranches = []
     logActiveRemoteBranches = []
     logActiveRemotes = []
@@ -875,7 +875,7 @@ func resetProjectState() {
     externalLogAggregateLoadStarted = false
     logAggregateRepositories = [:]
     logAggregateLoadedCounts = [:]
-    logGeneration += 1
+    logList.generation += 1
     reflogGeneration += 1
     logShowMyTask?.cancel()
     logShowMyTask = nil
@@ -898,7 +898,7 @@ func resetProjectState() {
     stagingModel = nil
     lastIndexRevision = nil
     headId = nil
-    logEntries = []
+    logList.entries = []
     logTabs = [LogTabDescriptor()]
     activeLogTabID = nil
     logDetailCommit = nil
@@ -914,8 +914,8 @@ func resetProjectState() {
     isLoadingBranchComparison = false
     reflogDetailCommit = nil
     reflogDetailCommits = []
-    isLoadingLog = false
-    isShowingCachedLogSnapshot = false
+    logList.isLoading = false
+    logList.isShowingCachedSnapshot = false
     branches = []
     branchComparisons = [:]
     stashes = []
@@ -1002,7 +1002,7 @@ func refreshCherryPickedHighlights() {
     let aggregateFilters = logAggregateBranchFilters
     let aggregateRevisionRanges = logAggregateRevisionRanges
     let aggregateRootPaths = logAggregateRootPaths
-    let requestedLogGeneration = logGeneration
+    let requestedLogGeneration = logList.generation
     let requestedRepositories: [(path: String, repo: Repository)]
     if aggregate {
         requestedRepositories = logAggregateRepositories
@@ -1020,7 +1020,7 @@ func refreshCherryPickedHighlights() {
     }
 
     let target = cherryPickTargetBranch(
-        mode: logViewMode,
+        mode: logList.viewMode,
         sourceBranch: source,
         firstBranch: compareRev1,
         secondBranch: compareRev2,
@@ -1084,7 +1084,7 @@ func refreshCherryPickedHighlights() {
             let completed = completedComparisons
             await MainActor.run {
                 guard self.logCherryPickComparisonGeneration == requestedComparisonGeneration,
-                      self.logGeneration == requestedLogGeneration,
+                      self.logList.generation == requestedLogGeneration,
                       self.logHighlightCherryPicked,
                       self.logCherryPickCompareBranch == source else { return }
                 self.logCherryPickComparisonCompletedRoots = completed
@@ -1102,7 +1102,7 @@ func refreshCherryPickedHighlights() {
                 highlightingEnabled: self.logHighlightCherryPicked,
                 currentComparisonGeneration: self.logCherryPickComparisonGeneration,
                 resultComparisonGeneration: requestedComparisonGeneration,
-                currentLogGeneration: self.logGeneration,
+                currentLogGeneration: self.logList.generation,
                 resultLogGeneration: requestedLogGeneration,
                 currentSourceBranch: self.logCherryPickCompareBranch,
                 resultSourceBranch: source
@@ -1114,7 +1114,7 @@ func refreshCherryPickedHighlights() {
             } else {
                 guard self.isActiveLogRepository(eligibleRepositories[0].repo),
                       cherryPickTargetBranch(
-                          mode: self.logViewMode,
+                          mode: self.logList.viewMode,
                           sourceBranch: self.logCherryPickCompareBranch,
                           firstBranch: self.compareRev1,
                           secondBranch: self.compareRev2,
@@ -1605,11 +1605,11 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 if self.logBranchesShowOnlyMy {
                     self.refreshLogMyBranches()
                 }
-                if let activeRootPath = self.logActiveRootPath {
+                if let activeRootPath = self.logList.activeRootPath {
                     if snapshotsSnapshot.count <= 1
                         || !snapshotsSnapshot.contains(where: { $0.rootPath == activeRootPath }) {
-                        self.logActiveRootPath = nil
-                        self.logActiveRepo = nil
+                        self.logList.activeRootPath = nil
+                        self.logList.activeRepo = nil
                         self.logActiveBranches = []
                         self.logActiveRemoteBranches = []
                         self.logActiveRemotes = []
@@ -1621,7 +1621,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         // remote URL lookup and credential-aware actions.
                         self.logActiveBranches = activeSnapshot.branches
                         self.logActiveRemoteBranches = activeSnapshot.remoteBranches
-                        if let activeRepo = self.logActiveRepo {
+                        if let activeRepo = self.logList.activeRepo {
                             self.logActiveRemotes = (try? activeRepo.remoteList()) ?? self.logActiveRemotes
                         }
                     }
@@ -1633,7 +1633,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     self.logAggregateRevisionRanges = []
                     self.logAggregateRepositories = [:]
                     self.logAggregateLoadedCounts = [:]
-                    self.logEntries = []
+                    self.logList.entries = []
                     self.logSelection = nil
                     self.logSelectedIDs = []
                 }
@@ -1648,12 +1648,12 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.scanPendingApplyRestores()
                 if externalLogSelectionChanged {
                     if self.logAggregateRootPaths.isEmpty {
-                        self.logEntries = []
+                        self.logList.entries = []
                         self.logSelection = nil
                         self.logSelectedIDs = []
                     } else {
                         self.externalLogAggregateLoadStarted = true
-                        if self.logViewMode == .command {
+                        if self.logList.viewMode == .command {
                             self.runLogCommand()
                         } else {
                             self.loadLog()
@@ -1661,7 +1661,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     }
                 } else if externalLogNeedsInitialLoad {
                     self.externalLogAggregateLoadStarted = true
-                    if self.logViewMode == .command {
+                    if self.logList.viewMode == .command {
                         self.runLogCommand()
                     } else {
                         self.loadLog()
@@ -1694,8 +1694,8 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.shelfRootRepository = nil
                 self.shelfRootLoading = false
                 self.shelfRootError = nil
-                self.logActiveRootPath = nil
-                self.logActiveRepo = nil
+                self.logList.activeRootPath = nil
+                self.logList.activeRepo = nil
                 self.logActiveBranches = []
                 self.logActiveRemoteBranches = []
                 self.logActiveRemotes = []
