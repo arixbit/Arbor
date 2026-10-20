@@ -581,19 +581,19 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         guard isArborVCSActionEnabled(.showStagingArea, in: vcsActionContext) else { return }
         toolWindowMode = .commit
         toolWindowExpanded = true
-        isShelfWorkspaceTabActive = false
+        shelfWorkspace.isWorkspaceTabActive = false
     case .showShelf:
         guard isArborVCSActionEnabled(.showShelf, in: vcsActionContext) else { return }
         toolWindowMode = .commit
         toolWindowExpanded = true
-        isShelfWorkspaceTabActive = true
-        shelfTabRequestID &+= 1
+        shelfWorkspace.isWorkspaceTabActive = true
+        shelfWorkspace.tabRequestID &+= 1
     case .showStash:
         guard isArborVCSActionEnabled(.showStash, in: vcsActionContext) else { return }
         toolWindowMode = .commit
         toolWindowExpanded = true
-        isShelfWorkspaceTabActive = true
-        shelfTabRequestID &+= 1
+        shelfWorkspace.isWorkspaceTabActive = true
+        shelfWorkspace.tabRequestID &+= 1
     case .revertSelectedChanges:
         guard isArborVCSActionEnabled(.revertSelectedChanges, in: vcsActionContext),
               let path = vcsActionContext.selectedLocalChangePath else { return }
@@ -617,7 +617,7 @@ func handleArborVCSActionNotification(_ notification: Notification) {
     case .unstash:
         presentUnstashDialog()
     case .shelve:
-        showShelveDialog = true
+        shelfWorkspace.showCreateDialog = true
     case .applyPatch:
         applyPatchFromFile()
     case .applyPatchFromClipboard:
@@ -763,7 +763,7 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
                 requestedRootPath: requestedRootPath,
                 currentRootPath: activeShelfRootPath
             )
-            && shelfRootRepository != nil
+            && shelfWorkspace.rootRepository != nil
         if isShelfSemanticAction(request.kind) {
             guard isCurrentRoot || isActiveShelfRoot else { return }
         } else {

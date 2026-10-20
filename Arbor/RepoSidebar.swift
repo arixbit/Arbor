@@ -61,7 +61,7 @@ var repoSidebar: some View {
                     TextField("说明（可选）", text: $stashUI.message).textFieldStyle(.roundedBorder)
                     Button("保存") { stashSave() }
                 }
-                ForEach(stashes, id: \.id) { s in
+                ForEach(stashUI.stashes, id: \.id) { s in
                     HStack(spacing: 6) {
                         Text(s.message).font(.caption).lineLimit(1)
                         Text(s.shortId).font(.caption2).foregroundStyle(.secondary)
@@ -75,11 +75,11 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Shelve").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("补丁名", text: $shelveName).textFieldStyle(.roundedBorder)
+                    TextField("补丁名", text: $shelfWorkspace.name).textFieldStyle(.roundedBorder)
                     Button("保存全部变更") { doShelve() }
-                        .disabled(entries.isEmpty || shelveName.isEmpty)
+                        .disabled(entries.isEmpty || shelfWorkspace.name.isEmpty)
                 }
-                ForEach(shelves, id: \.name) { s in
+                ForEach(shelfWorkspace.shelves, id: \.name) { s in
                     HStack(spacing: 6) {
                         Text(s.name).font(.caption).lineLimit(1)
                         Text(s.shortId).font(.caption2).foregroundStyle(.secondary)

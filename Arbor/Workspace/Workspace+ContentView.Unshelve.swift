@@ -29,7 +29,7 @@ func recordUnshelveComment(
               activeRootPath: activeShelfRootPath,
               primaryRootPath: primaryShelfRootPath,
               primaryRepository: repo,
-              secondaryRepository: shelfRootRepository
+              secondaryRepository: shelfWorkspace.rootRepository
           ) else { return }
     let shelfRepo = context.repository
     let resolvedTarget = targetName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -84,14 +84,14 @@ func doShelveUnshelve(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     let notificationID = shelfBatchNotificationID(
         operation: .apply,
@@ -277,7 +277,7 @@ func doShelveUnshelvePathGroups(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -291,7 +291,7 @@ func doShelveUnshelvePathGroups(
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     let notificationID = shelfMemberBatchNotificationID(
         operation: operation,
@@ -604,14 +604,14 @@ func doShelveUnshelvePaths(
               activeRootPath: activeShelfRootPath,
               primaryRootPath: primaryShelfRootPath,
               primaryRepository: repo,
-              secondaryRepository: shelfRootRepository
+              secondaryRepository: shelfWorkspace.rootRepository
           ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     beginFeedbackOperation("Unshelve changes")
     Task.detached(priority: .userInitiated) {
@@ -940,7 +940,7 @@ func doShelveUnshelveShelves(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -957,7 +957,7 @@ func doShelveUnshelveShelves(
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     let notificationID = shelfBatchNotificationID(
         operation: .apply,
@@ -1357,7 +1357,7 @@ func doShelveUnshelveIntoChangeList(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1370,7 +1370,7 @@ func doShelveUnshelveIntoChangeList(
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     beginFeedbackOperation("Unshelve changes")
     Task.detached(priority: .userInitiated) {

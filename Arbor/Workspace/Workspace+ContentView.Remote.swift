@@ -1344,7 +1344,7 @@ func deleteRemoteTagsFromRecovery(_ contexts: [TagDeleteRecoveryContext]) {
         feedbackCenter.warning("No remotes configured", detail: contexts.first?.tag.name ?? "")
         return
     }
-    multiRootTagDeleteRecovery = nil
+    tagWorkspace.multiRootDeleteRecovery = nil
     let cancel = GitCancelHandle()
     beginFeedbackOperation("Delete multi-root remote tags", cancelHandle: cancel)
     let broker = credentialAuth.broker
@@ -1401,7 +1401,7 @@ func deleteRemoteTagsFromRecovery(_ contexts: [TagDeleteRecoveryContext]) {
                     self.feedbackCenter.success("Multi-root remote tag deletion completed", detail: detail)
                 }
             } else if wasCancelled {
-                self.multiRootTagDeleteRecovery = MultiRootTagDeleteRecoveryContext(
+                self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
                     tagName: contexts.first?.tag.name ?? "",
                     contexts: contexts
                 )
@@ -1413,7 +1413,7 @@ func deleteRemoteTagsFromRecovery(_ contexts: [TagDeleteRecoveryContext]) {
                     nextStep: "Retry the recovery action to process the remaining remotes."
                 )
             } else {
-                self.multiRootTagDeleteRecovery = MultiRootTagDeleteRecoveryContext(
+                self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
                     tagName: contexts.first?.tag.name ?? "",
                     contexts: contexts
                 )
@@ -1601,7 +1601,7 @@ func deleteRemoteTagFromRecovery(_ context: TagDeleteRecoveryContext) {
         let wasCancelled = cancelled
         await MainActor.run {
             if failuresToReport.isEmpty && !wasCancelled {
-                self.tagDeleteRecovery = nil
+                self.tagWorkspace.deleteRecovery = nil
                 self.refreshAll(showFeedback: false)
                 let detail = deletedRemotes.isEmpty
                     ? "\(context.tag.name) was not present on configured remotes"

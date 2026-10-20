@@ -532,7 +532,7 @@ func stashClearAll() {
             try repo.stashClear()
             let ss = try repo.stashList()
             await MainActor.run {
-                self.stashes = ss
+                self.stashUI.stashes = ss
                 self.stashUI.showDiff = false
                 self.stashUI.diffText = nil
                 self.stashUI.diffStashID = nil
@@ -610,7 +610,7 @@ func stashSave(rootPath requestedRootPath: String? = nil) {
             let staging = try? targetRepo.stagingModel()
             await MainActor.run {
                 if currentRootPath == targetRootKey {
-                    self.stashes = ss
+                    self.stashUI.stashes = ss
                     self.entries = st
                     self.stashUI.previewStashID = nil
                     self.stashUI.previewText = nil
@@ -650,7 +650,7 @@ func showStashFiles(paths: [String]) {
 /// The stash ID is retained instead of its stack index because another refresh
 /// can reorder the stash list while the dialog is open.
 func presentUnstashAsDialog(stashID: String) {
-    guard stashes.contains(where: { $0.id == stashID }) else { return }
+    guard stashUI.stashes.contains(where: { $0.id == stashID }) else { return }
     stashUI.unstashAsStashID = stashID
     stashUI.showUnstashAsDialog = true
 }
@@ -661,7 +661,7 @@ func presentUnstashAsDialog(stashID: String) {
 /// so the dialog is immediately useful while discovery is in flight.
 func presentUnstashDialog() {
     guard let rootPath = repo?.workdir() else { return }
-    stashUI.beginUnstash(rootPath: rootPath, stashes: stashes, currentBranch: currentBranchName)
+    stashUI.beginUnstash(rootPath: rootPath, stashes: stashUI.stashes, currentBranch: currentBranchName)
     loadMultiRoots()
 }
 
@@ -719,7 +719,7 @@ func stashSelectedFiles(_ paths: [String]) {
             let st = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.stashes = ss
+                self.stashUI.stashes = ss
                 self.entries = st
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
@@ -754,7 +754,7 @@ func stashSilently() {
             let st = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.stashes = ss
+                self.stashUI.stashes = ss
                 self.entries = st
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
@@ -781,7 +781,7 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
             let st = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.stashes = ss; self.entries = st
+                self.stashUI.stashes = ss; self.entries = st
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
                 // Pop removes the selected stash. Close the split preview
                 // rather than leaving it bound to the next row at the same
@@ -800,7 +800,7 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
                     self.stashRecovery.popConflictInProgress = true
                     self.stashRecovery.applyConflictInProgress = false
                     self.stashRecovery.pendingConflictNotificationID = nil
-                    self.stashRecovery.pendingPopIndex = self.stashes.firstIndex(
+                    self.stashRecovery.pendingPopIndex = self.stashUI.stashes.firstIndex(
                         where: { $0.id == (conflictStashID ?? stashID) }
                     ) ?? 0
                     self.stashRecovery.pendingPopID = conflictStashID ?? stashID
@@ -890,7 +890,7 @@ func stashDrop(stashID: String) {
             try repo.stashDrop(index: currentIndex)
             let ss = try repo.stashList()
             await MainActor.run {
-                self.stashes = ss
+                self.stashUI.stashes = ss
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
                 // Dropping any row can shift every following stash index;
                 // close the preview instead of showing another stash's patch.
@@ -945,7 +945,7 @@ func stashBranch(stashID: String, branch: String) {
             try repo.stashBranch(index: currentIndex, branch: branch)
             let ss = try repo.stashList()
             await MainActor.run {
-                self.stashes = ss
+                self.stashUI.stashes = ss
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
                 self.stashUI.previewStashID = nil
                 self.stashUI.previewText = nil
@@ -1011,9 +1011,9 @@ func showStashDiffFor(stashID: String) {
 /// 这样 Commit/Stash 左工作区不会因为查看 diff 而遮住右侧 Log。
 func showStashPreviewFor(stashID: String) {
     guard let repo else { return }
-    shelfPreviewName = nil
-    shelfPreviewText = nil
-    showShelfPreview = false
+    shelfWorkspace.previewName = nil
+    shelfWorkspace.previewText = nil
+    shelfWorkspace.showPreview = false
     stashUI.previewStashID = stashID
     stashUI.previewText = nil
     stashUI.showPreview = true

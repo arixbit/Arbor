@@ -309,10 +309,10 @@ func pushTag(_ tag: String, remote selectedRemote: String? = nil) {
                 broker: broker,
                 cancel: cancel
             )
-            await MainActor.run { self.tagFeedback = "已推送 \(tag)" }
+            await MainActor.run { self.tagWorkspace.feedback = "已推送 \(tag)" }
         } catch {
             await MainActor.run {
-                self.tagFeedback = friendlyRemoteError(error)
+                self.tagWorkspace.feedback = friendlyRemoteError(error)
                 if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
             }
         }

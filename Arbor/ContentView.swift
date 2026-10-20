@@ -11,6 +11,12 @@ struct ContentView: View {
     /// Stash 恢复与冲突状态（multi-root stash、pull 现场保存）。
     @StateObject var stashRecovery = StashRecoveryState()
 
+    /// Tag 列表与创建/删除状态。
+    @StateObject var tagWorkspace = TagWorkspaceState()
+
+    /// Shelf 列表、预览、按 root 加载与冲突恢复状态。
+    @StateObject var shelfWorkspace = ShelfWorkspaceState()
+
     /// Log 列表与过滤状态（过滤条件、分页、当前 root）。
     @StateObject var logList = LogListState()
 
@@ -155,7 +161,7 @@ struct ContentView: View {
             relativePath: ".",
             branches: branches,
             remoteBranches: remoteBranches,
-            tags: tags
+            tags: tagWorkspace.tags
         )]
     }
 
@@ -240,22 +246,22 @@ struct ContentView: View {
     }
 
     var activeShelfRootPath: String? {
-        if let shelfRootPath, !shelfRootPath.isEmpty {
-            return canonicalExternalLogPath(shelfRootPath)
+        if let rootPath = shelfWorkspace.rootPath, !rootPath.isEmpty {
+            return canonicalExternalLogPath(rootPath)
         }
         return primaryShelfRootPath
     }
 
     var isShelfRootReadOnly: Bool {
         !shelfRootSelectionIsPrimary(
-            selectedRootPath: shelfRootPath,
+            selectedRootPath: shelfWorkspace.rootPath,
             primaryRootPath: primaryShelfRootPath
         )
     }
 
     var canApplyShelfWorktree: Bool {
-        !shelfRootLoading
-            && shelfRootError == nil
+        !shelfWorkspace.rootLoading
+            && shelfWorkspace.rootError == nil
             && activeShelfRootPath != nil
             && activeShelfRepository != nil
     }
@@ -270,7 +276,7 @@ struct ContentView: View {
                   selectedRootPath: rootPath,
                   primaryRootPath: primaryShelfRootPath
               ) else { return nil }
-        return shelfRootSnapshots[rootPath]
+        return shelfWorkspace.rootSnapshots[rootPath]
             ?? multiRootBranchSnapshots.first(where: {
                 canonicalExternalLogPath($0.rootPath) == rootPath
             }).map {
@@ -287,7 +293,7 @@ struct ContentView: View {
               !shelfRootSelectionIsPrimary(
                   selectedRootPath: activeRoot,
                   primaryRootPath: primaryShelfRootPath
-              ) else { return shelves }
+              ) else { return shelfWorkspace.shelves }
         return activeShelfSnapshot?.shelves ?? []
     }
 
@@ -305,7 +311,7 @@ struct ContentView: View {
               !shelfRootSelectionIsPrimary(
                   selectedRootPath: activeRoot,
                   primaryRootPath: primaryShelfRootPath
-              ) else { return deletedShelves }
+              ) else { return shelfWorkspace.deletedShelves }
         return activeShelfSnapshot?.deletedShelves ?? []
     }
 
@@ -315,7 +321,7 @@ struct ContentView: View {
             selectedRootPath: rootPath,
             primaryRootPath: primaryShelfRootPath
         ) { return repo }
-        return shelfRootRepository
+        return shelfWorkspace.rootRepository
     }
 
     var reflogRootTitle: String {
@@ -645,9 +651,6 @@ struct ContentView: View {
     @State var multiRootMergeMergedBranchesByRoot: [String: Set<String>] = [:]
     @State var multiRootMergeDialogGeneration = 0
     @State var multiRootMergeRollbackContext: MultiRootMergeRollbackContext?
-    @State var showMultiRootDeleteTagDialog = false
-    @State var multiRootDeleteTagName = ""
-    @State var multiRootDeleteTagSelectedRootPaths: Set<String> = []
     @State var showMultiRootRemoteDeleteDialog = false
     @State var multiRootRemoteDeleteBranchName = ""
     @State var multiRootRemoteDeleteSelectedRootPaths: Set<String> = []
@@ -789,21 +792,6 @@ struct ContentView: View {
     @State var renameNew: String = ""
     @State var branches: [BranchInfo] = []
     @State var branchComparisons: [String: BranchCompare] = [:]
-    @State var shelveName: String = ""
-    @State var shelves: [ShelveInfo] = []
-    @State var deletedShelves: [ShelveInfo] = []
-    /// Monotonic request used by VCS > Git > Local Changes > Show Shelf/Stash.
-    /// RebasedCommitWorkspace owns the tab state, so the request crosses the
-    /// workspace boundary without making the parent duplicate that state.
-    @State var shelfTabRequestID = 0
-    @State var isShelfWorkspaceTabActive = false
-    @State var shelfRootPath: String?
-    @State var shelfRootSnapshots: [String: ShelfRootSnapshot] = [:]
-    @State var shelfRootRepository: Repository?
-    @State var shelfRootLoading = false
-    @State var shelfRootError: String?
-    @State var shelfRootLoadGeneration = 0
-    @State var stashes: [StashInfo] = []
     // 远程
     @State var remotes: [RemoteInfo] = []
     @State var isShallowRepository = false
@@ -872,15 +860,6 @@ struct ContentView: View {
     @State var rebaseUndoSeed: RebaseUndoSeed?
     @State var rebaseUndoTarget: RebaseUndoTarget?
     @State var rebaseFeedback: String?
-    @State var tags: [TagInfo] = []
-    @State var tagName: String = ""
-    @State var tagAt: String = ""
-    @State var tagMessage: String = ""
-    @State var tagSignKey: String = ""
-    @State var tagAnnotated = false
-    @State var tagForce = false
-    @State var tagFeedback: String?
-    @State var tagRepositoryOverride: Repository?
     @State var submoduleUrl: String = ""
     @State var submodulePath: String = ""
     @State var submodules: [SubmoduleInfo] = []
@@ -889,11 +868,6 @@ struct ContentView: View {
     @State var submoduleLogPath = ""
     @State var submoduleLogEntries: [CommitInfo] = []
     @State var submoduleLogError: String?
-    @State var shelfPreviewName: String?
-    @State var shelfPreviewIsDeleted = false
-    @State var shelfPreviewText: String?
-    @State var showShelfPreview = false
-    @State var shelfPreviewRootPath: String?
     @State var worktrees: [WorktreeInfo] = []
     @State var worktreeFeedback: String?
     @State var showNewWorktreeDialog = false
@@ -961,20 +935,6 @@ struct ContentView: View {
     /// ORIG_HEAD fallback covers a merge resumed after the view was recreated;
     /// the in-memory value is preferred while this session owns the boundary.
     @State var mergeInitialHead: String?
-    @State var shelveConflictInProgress = false
-    @State var shelveConflictIsPop = false
-    @State var shelveConflictIsDirectPatch = false
-    @State var pendingShelveConflictName: String?
-    @State var pendingShelveConflictRepository: Repository?
-    @State var pendingShelveConflictChangeList: String?
-    @State var pendingShelveConflictPatch: String?
-    @State var pendingShelveConflictNotificationID: String?
-    /// Legacy stack position retained for compatibility with the multi-root
-    /// resolver. Single-root conflict completion prefers the stable stash ID.
-    /// Stable stash object identity retained while a pop restore is paused.
-    /// The stash stack can be reordered while the conflict resolver is open.
-    /// Stable identity for the temporary Pull stash. The message remains as
-    /// a compatibility fallback for markers written by older builds.
     @State var showHostingSettings = false
     @State var showHostingHub = false
     @State var showHostingAuthPrompt = false
@@ -998,14 +958,6 @@ struct ContentView: View {
     @State var pullDialogRebase = false
     @State var pullDialogGeneration = 0
     @State var uncommitRequest: RebasedUncommitRequest?
-    @State var showNewTagDialog = false
-    @State var showRemoteTagsDialog = false
-    @State var showMultiRootRemoteTagsDialog = false
-    @State var showShelveDialog = false
-    @State var showShelfLocationDialog = false
-    @State var shelfLocationValue = ""
-    @State var shelfLocationCurrent = ""
-    @State var shelfLocationMigrateExisting = true
     @State var pendingApplyPatch: RebasedApplyPatchRequest?
     @State var patchExportRequest: PatchExportRequest?
     @State var pendingIgnoreFileCreation: IgnoreFileCreationRequest?
@@ -1027,8 +979,6 @@ struct ContentView: View {
     @State var feedbackDetailMessage: FeedbackMessage?
     @State var branchDeleteRecovery: BranchDeleteRecoveryContext?
     @State var multiRootBranchDeleteRecovery: MultiRootBranchDeleteRecoveryContext?
-    @State var tagDeleteRecovery: TagDeleteRecoveryContext?
-    @State var multiRootTagDeleteRecovery: MultiRootTagDeleteRecoveryContext?
 
     init(
         projectPath: String? = nil,
@@ -1193,7 +1143,7 @@ struct ContentView: View {
         // `restore --source HEAD --staged --worktree` is only valid when the
         // selected path exists in HEAD. Until the asynchronous staging model
         // has supplied that fact, keep the destructive main-menu action off.
-        guard !isShelfWorkspaceTabActive, stagingModel != nil else { return nil }
+        guard !shelfWorkspace.isWorkspaceTabActive, stagingModel != nil else { return nil }
         return arborSelectedRevertPath(
             entries: entries,
             candidates: [commitPreviewPath, selection, fileSelection],
@@ -1201,7 +1151,7 @@ struct ContentView: View {
         )
     }
     var selectedWorkspacePath: String? {
-        guard !isShelfWorkspaceTabActive else { return nil }
+        guard !shelfWorkspace.isWorkspaceTabActive else { return nil }
         return [commitPreviewPath, selection, fileSelection]
             .compactMap { $0 }
             .first { !$0.isEmpty }
@@ -1704,7 +1654,7 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(item: $tagDeleteRecovery) { context in
+        .sheet(item: $tagWorkspace.deleteRecovery) { context in
             TagDeleteRecoveryView(
                 tag: context.tag,
                 rootPath: context.rootPath,
@@ -1716,11 +1666,11 @@ struct ContentView: View {
                     deleteRemoteTagFromRecovery(context)
                 },
                 onDone: {
-                    tagDeleteRecovery = nil
+                    tagWorkspace.deleteRecovery = nil
                 }
             )
         }
-        .sheet(isPresented: $showRemoteTagsDialog) {
+        .sheet(isPresented: $tagWorkspace.showRemoteTagsDialog) {
             if let repo {
                 RemoteTagsDialogView(
                     repo: repo,
@@ -1731,7 +1681,7 @@ struct ContentView: View {
                         refreshAll(showFeedback: false)
                     },
                     onDone: {
-                        showRemoteTagsDialog = false
+                        tagWorkspace.showRemoteTagsDialog = false
                     }
                 )
             } else {
@@ -1739,7 +1689,7 @@ struct ContentView: View {
                     .frame(width: 640, height: 500)
             }
         }
-        .sheet(isPresented: $showMultiRootRemoteTagsDialog) {
+        .sheet(isPresented: $tagWorkspace.showMultiRootRemoteTagsDialog) {
             MultiRootRemoteTagsDialogView(
                 roots: multiRoots,
                 broker: credentialAuth.broker,
@@ -1761,16 +1711,16 @@ struct ContentView: View {
                             "Remote tag deletion partially completed",
                             detail: "Deleted \(successes.count); failed \(failures.count)",
                             actionTitle: "Open Remote Tags",
-                            action: { showMultiRootRemoteTagsDialog = true }
+                            action: { tagWorkspace.showMultiRootRemoteTagsDialog = true }
                         )
                     }
                 },
                 onDone: {
-                    showMultiRootRemoteTagsDialog = false
+                    tagWorkspace.showMultiRootRemoteTagsDialog = false
                 }
             )
         }
-        .sheet(item: $multiRootTagDeleteRecovery) { context in
+        .sheet(item: $tagWorkspace.multiRootDeleteRecovery) { context in
             RebasedMultiRootTagDeleteRecoveryView(
                 tagName: context.tagName,
                 contexts: context.contexts,
@@ -1781,7 +1731,7 @@ struct ContentView: View {
                     deleteRemoteTagsFromRecovery(context.contexts)
                 },
                 onDone: {
-                    multiRootTagDeleteRecovery = nil
+                    tagWorkspace.multiRootDeleteRecovery = nil
                 }
             )
         }
@@ -2958,15 +2908,15 @@ struct ContentView: View {
                 onCancel: dismissMultiRootDeleteBranchDialog
             )
         }
-        .sheet(isPresented: $showMultiRootDeleteTagDialog) {
+        .sheet(isPresented: $tagWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteTagDialog(
-                tagName: multiRootDeleteTagName,
-                selectedRootPaths: $multiRootDeleteTagSelectedRootPaths,
+                tagName: tagWorkspace.multiRootDeleteName,
+                selectedRootPaths: $tagWorkspace.multiRootDeleteSelectedRootPaths,
                 snapshots: multiRootBranchSnapshots,
                 onDelete: {
                     deleteMultiRootTag(
-                        name: multiRootDeleteTagName,
-                        selectedRootPaths: multiRootDeleteTagSelectedRootPaths
+                        name: tagWorkspace.multiRootDeleteName,
+                        selectedRootPaths: tagWorkspace.multiRootDeleteSelectedRootPaths
                     )
                 },
                 onCancel: dismissMultiRootDeleteTagDialog
@@ -3207,7 +3157,7 @@ struct ContentView: View {
             )
         }
         .sheet(isPresented: $stashUI.showUnstashAsDialog) {
-            if let stash = stashes.first(where: { $0.id == stashUI.unstashAsStashID }) {
+            if let stash = stashUI.stashes.first(where: { $0.id == stashUI.unstashAsStashID }) {
                 RebasedUnstashAsDialog(
                     stash: stash,
                     currentBranch: currentBranchName,
@@ -3280,55 +3230,55 @@ struct ContentView: View {
             )
             .interactiveDismissDisabled(cloneInProgress)
         }
-        .sheet(isPresented: $showNewTagDialog) {
+        .sheet(isPresented: $tagWorkspace.showCreateDialog) {
             RebasedTagDialog(
-                name: $tagName,
-                revision: $tagAt,
-                message: $tagMessage,
-                signKey: $tagSignKey,
-                annotated: $tagAnnotated,
-                force: $tagForce,
+                name: $tagWorkspace.name,
+                revision: $tagWorkspace.at,
+                message: $tagWorkspace.message,
+                signKey: $tagWorkspace.signKey,
+                annotated: $tagWorkspace.annotated,
+                force: $tagWorkspace.force,
                 onCreate: {
-                    showNewTagDialog = false
+                    tagWorkspace.showCreateDialog = false
                     createTag()
                 },
                 onCancel: {
-                    showNewTagDialog = false
-                    tagRepositoryOverride = nil
-                    tagForce = false
+                    tagWorkspace.showCreateDialog = false
+                    tagWorkspace.repositoryOverride = nil
+                    tagWorkspace.force = false
                 }
             )
         }
-        .sheet(isPresented: $showShelveDialog) {
+        .sheet(isPresented: $shelfWorkspace.showCreateDialog) {
             RebasedShelveDialog(
-                name: $shelveName,
+                name: $shelfWorkspace.name,
                 repo: repo,
                 entries: entries,
                 onShelve: { paths, includeUntracked, includeIgnored in
-                    showShelveDialog = false
+                    shelfWorkspace.showCreateDialog = false
                     doShelve(
                         paths: paths,
                         includeUntracked: includeUntracked,
                         includeIgnored: includeIgnored
                     )
                 },
-                onCancel: { showShelveDialog = false }
+                onCancel: { shelfWorkspace.showCreateDialog = false }
             )
         }
-        .sheet(isPresented: $showShelfLocationDialog) {
+        .sheet(isPresented: $shelfWorkspace.showLocationDialog) {
             RebasedShelfLocationDialog(
-                location: $shelfLocationValue,
-                migrateExisting: $shelfLocationMigrateExisting,
-                currentLocation: shelfLocationCurrent,
+                location: $shelfWorkspace.locationValue,
+                migrateExisting: $shelfWorkspace.locationMigrateExisting,
+                currentLocation: shelfWorkspace.locationCurrent,
                 onSave: {
-                    showShelfLocationDialog = false
+                    shelfWorkspace.showLocationDialog = false
                     setShelfLocation(
-                        shelfLocationValue,
-                        migrateExisting: shelfLocationMigrateExisting,
+                        shelfWorkspace.locationValue,
+                        migrateExisting: shelfWorkspace.locationMigrateExisting,
                         rootPath: activeShelfRootPath
                     )
                 },
-                onCancel: { showShelfLocationDialog = false }
+                onCancel: { shelfWorkspace.showLocationDialog = false }
             )
         }
         .sheet(item: $pendingApplyPatch) { request in
@@ -3624,20 +3574,20 @@ struct ContentView: View {
                 changeLists: changeLists,
                 untrackedEntries: untrackedEntries,
                 ignoredRules: ignoredRules,
-                stashes: stashes,
+                stashes: stashUI.stashes,
                 shelves: activeShelfList,
                 deletedShelves: activeDeletedShelfList,
                 shelfChangeLists: activeShelfChangeLists,
-                showShelfRequestID: shelfTabRequestID,
-                onWorkspaceTabChange: { isShelfWorkspaceTabActive = $0 },
+                showShelfRequestID: shelfWorkspace.tabRequestID,
+                onWorkspaceTabChange: { shelfWorkspace.isWorkspaceTabActive = $0 },
                 shelfRootPath: activeShelfRootPath,
                 shelfRootOptions: availableShelfRoots,
                 selectedShelfRootPath: activeShelfRootPath ?? "",
                 isShelfRootReadOnly: isShelfRootReadOnly,
                 canMutateShelfMetadata: canMutateShelfMetadata,
                 canApplyShelfWorktree: canApplyShelfWorktree,
-                isShelfRootLoading: shelfRootLoading,
-                shelfRootError: shelfRootError,
+                isShelfRootLoading: shelfWorkspace.rootLoading,
+                shelfRootError: shelfWorkspace.rootError,
                 onShelfRootChange: setShelfRoot,
                 isLoading: isLoading,
                 isShowingCachedStatusSnapshot: isShowingCachedStatusSnapshot,
@@ -3694,7 +3644,7 @@ struct ContentView: View {
                 onOperationSkip: doOperationSkip,
                 onOperationAbort: doOperationAbort,
                 onOpenConflictResolver: openActiveOperationConflictResolver,
-                onShelve: { showShelveDialog = true },
+                onShelve: { shelfWorkspace.showCreateDialog = true },
                 onShelfSettings: presentShelfLocationSettings,
                 onShelvePaths: shelveDraggedPaths,
                 onImportShelve: { rootPath in
@@ -3715,10 +3665,10 @@ struct ContentView: View {
                 isStashPreviewVisible: $stashUI.showPreview,
                 onStashClear: stashClearAll,
                 onShelveDiffPreview: showShelvePreviewFor,
-                shelfDiffText: shelfPreviewText,
-                shelfPreviewName: $shelfPreviewName,
-                shelfPreviewIsDeleted: $shelfPreviewIsDeleted,
-                isShelfPreviewVisible: $showShelfPreview,
+                shelfDiffText: shelfWorkspace.previewText,
+                shelfPreviewName: $shelfWorkspace.previewName,
+                shelfPreviewIsDeleted: $shelfWorkspace.previewIsDeleted,
+                isShelfPreviewVisible: $shelfWorkspace.showPreview,
                 onRenameShelve: { name, description in
                     renameShelve(
                         name,
@@ -4577,7 +4527,7 @@ struct ContentView: View {
                     },
                     onRemoteTags: {
                         showBranchesPopover = false
-                        showMultiRootRemoteTagsDialog = true
+                        tagWorkspace.showMultiRootRemoteTagsDialog = true
                     },
                     onCheckout: { rootPath, reference, isRemote in
                         checkoutBranchInRoot(
@@ -4810,11 +4760,11 @@ struct ContentView: View {
                 branches: branches,
                 remoteBranches: remoteBranches,
                 recentBranches: recentBranches,
-                tags: tags,
+                tags: tagWorkspace.tags,
                 comparisons: branchComparisons,
                 syncStatuses: syncStatuses,
                 incomingBranches: autoFetchIncomingBranches,
-                stashes: stashes,
+                stashes: stashUI.stashes,
                 worktrees: worktrees,
                 hasRemote: !remotes.isEmpty,
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
@@ -4855,7 +4805,7 @@ struct ContentView: View {
                 },
                 onRemoteTags: {
                     showBranchesPopover = false
-                    showRemoteTagsDialog = true
+                    tagWorkspace.showRemoteTagsDialog = true
                 },
                 onCheckoutAndUpdate: { branch, rebase in checkoutAndUpdate(branch, rebase: rebase) },
                 onUpdateBranch: updateSelectedBranch,
@@ -4897,7 +4847,7 @@ struct ContentView: View {
                 onStashDiff: showStashDiffFor(stashID:),
                 onStashClear: stashClearAll,
                 onNewTag: beginNewTagDialog,
-                onShelve: { showShelveDialog = true },
+                onShelve: { shelfWorkspace.showCreateDialog = true },
                 onUpdate: { doPull(nil, rebase: $0) },
                 onPush: { beginPushDialog() },
                 onFetch: { doFetch(nil) },
@@ -5026,11 +4976,11 @@ struct ContentView: View {
         if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
             return .stashRestore
         }
-        if shelveConflictInProgress {
-            if shelveConflictIsDirectPatch {
+        if shelfWorkspace.conflictInProgress {
+            if shelfWorkspace.conflictIsDirectPatch {
                 return .applyPatch
             }
-            return .shelveRestore(isPop: shelveConflictIsPop)
+            return .shelveRestore(isPop: shelfWorkspace.conflictIsPop)
         }
         switch operationState?.kind {
         case .rebase: return .rebase
@@ -5041,7 +4991,7 @@ struct ContentView: View {
     }
 
     private var mergeRevisionsAbortAction: (() -> Void)? {
-        if shelveConflictInProgress {
+        if shelfWorkspace.conflictInProgress {
             return { abortShelveConflict() }
         }
         if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
@@ -5071,7 +5021,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var singleRootConflictResolverPanel: some View {
-        if let repo = pendingShelveConflictRepository ?? self.repo {
+        if let repo = shelfWorkspace.pendingConflictRepository ?? self.repo {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -5095,17 +5045,17 @@ struct ContentView: View {
                     entries: $entries,
                     initialPath: mergeInitialPath ?? selection,
                     mode: mergeRevisionsMode,
-                    directPatchText: shelveConflictIsDirectPatch ? pendingShelveConflictPatch : nil,
-                    directPatchRestoreName: shelveConflictIsDirectPatch ? pendingShelveConflictName : nil,
+                    directPatchText: shelfWorkspace.conflictIsDirectPatch ? shelfWorkspace.pendingConflictPatch : nil,
+                    directPatchRestoreName: shelfWorkspace.conflictIsDirectPatch ? shelfWorkspace.pendingConflictName : nil,
                     onChanged: {
-                        if shelveConflictInProgress {
+                        if shelfWorkspace.conflictInProgress {
                             refreshShelveConflictStatus()
                         } else {
                             refreshAll()
                         }
                     },
                     onComplete: {
-                        if shelveConflictInProgress {
+                        if shelfWorkspace.conflictInProgress {
                             finishShelveConflict()
                         } else {
                             doOperationContinue()

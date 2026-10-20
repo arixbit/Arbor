@@ -69,9 +69,9 @@ func stageEverything() {
 }
 
 func beginNewTagDialog() {
-    tagRepositoryOverride = nil
-    tagForce = false
-    showNewTagDialog = true
+    tagWorkspace.repositoryOverride = nil
+    tagWorkspace.force = false
+    tagWorkspace.showCreateDialog = true
 }
 
 /// Open the shared Tag dialog for a Log commit, retaining the commit's own
@@ -85,21 +85,21 @@ func beginCreateTagFromLog(_ commit: CommitInfo) {
         )
         return
     }
-    tagRepositoryOverride = targetRepo
-    tagAt = commit.id
-    tagForce = false
-    showNewTagDialog = true
+    tagWorkspace.repositoryOverride = targetRepo
+    tagWorkspace.at = commit.id
+    tagWorkspace.force = false
+    tagWorkspace.showCreateDialog = true
 }
 
 func createTag() {
-    guard let targetRepo = tagRepositoryOverride ?? repo else { return }
-    let name = tagName.trimmingCharacters(in: .whitespaces)
+    guard let targetRepo = tagWorkspace.repositoryOverride ?? repo else { return }
+    let name = tagWorkspace.name.trimmingCharacters(in: .whitespaces)
     guard !name.isEmpty else { return }
-    let at = tagAt.trimmingCharacters(in: .whitespaces)
-    let annotated = tagAnnotated
-    let force = tagForce
-    let message = tagMessage
-    let signKey = tagSignKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    let at = tagWorkspace.at.trimmingCharacters(in: .whitespaces)
+    let annotated = tagWorkspace.annotated
+    let force = tagWorkspace.force
+    let message = tagWorkspace.message
+    let signKey = tagWorkspace.signKey.trimmingCharacters(in: .whitespacesAndNewlines)
     let targetRootPath = targetRepo.workdir()
     beginFeedbackOperation("Create tag")
     Task.detached(priority: .userInitiated) {
@@ -134,16 +134,16 @@ func createTag() {
             let tags = try targetRepo.tagList()
             await MainActor.run {
                 if targetRootPath == self.repo?.workdir() {
-                    self.tags = tags
+                    self.tagWorkspace.tags = tags
                 }
-                self.tagName = ""
-                self.tagAt = ""
-                self.tagMessage = ""
-                self.tagSignKey = ""
-                self.tagAnnotated = false
-                self.tagForce = false
-                self.tagRepositoryOverride = nil
-                self.tagFeedback = "已创建 \(name)"
+                self.tagWorkspace.name = ""
+                self.tagWorkspace.at = ""
+                self.tagWorkspace.message = ""
+                self.tagWorkspace.signKey = ""
+                self.tagWorkspace.annotated = false
+                self.tagWorkspace.force = false
+                self.tagWorkspace.repositoryOverride = nil
+                self.tagWorkspace.feedback = "已创建 \(name)"
                 self.feedbackCenter.success(
                     "Tag created",
                     detail: targetRootPath.map { "\(name) @ \($0)" } ?? name
@@ -153,7 +153,7 @@ func createTag() {
         } catch {
             await MainActor.run {
                 let detail = friendlyRemoteError(error)
-                self.tagFeedback = detail
+                self.tagWorkspace.feedback = detail
                 let signingAction = !signKey.isEmpty
                     || gitCommitSigningFailureNeedsGPGConfiguration(detail)
                     ? [self.gpgAgentSettingsFeedbackAction()]
@@ -186,13 +186,13 @@ func deleteTag(_ name: String) {
             try repo.tagDelete(name: name)
             let tags = try repo.tagList()
             await MainActor.run {
-                self.tags = tags
-                self.tagFeedback = "已删除 \(name)"
-                self.tagDeleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
+                self.tagWorkspace.tags = tags
+                self.tagWorkspace.feedback = "已删除 \(name)"
+                self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
                 if self.toolWindowMode == .log { self.loadLog() }
             }
         } catch {
-            await MainActor.run { self.tagFeedback = errorMessage(error) }
+            await MainActor.run { self.tagWorkspace.feedback = errorMessage(error) }
         }
     }
 }
@@ -750,7 +750,7 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
             self.multiRootResults = completedResults
             self.loadMultiRoots()
             if !completedContexts.isEmpty {
-                self.multiRootTagDeleteRecovery = MultiRootTagDeleteRecoveryContext(
+                self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
                     tagName: "selected tags",
                     contexts: completedContexts
                 )
@@ -798,7 +798,7 @@ func deleteTagInRoot(rootPath: String, name: String) {
             await MainActor.run {
                 self.loadMultiRoots()
                 self.feedbackCenter.success("Tag deleted", detail: "\(name) · \(rootPath)")
-                self.tagDeleteRecovery = TagDeleteRecoveryContext(
+                self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(
                     repo: rootRepo,
                     tag: tag,
                     rootPath: rootPath
@@ -824,15 +824,15 @@ func presentMultiRootDeleteTagDialog(name: String) {
         )
         return
     }
-    multiRootDeleteTagName = name
-    multiRootDeleteTagSelectedRootPaths = Set(eligible.map(\.rootPath))
-    showMultiRootDeleteTagDialog = true
+    tagWorkspace.multiRootDeleteName = name
+    tagWorkspace.multiRootDeleteSelectedRootPaths = Set(eligible.map(\.rootPath))
+    tagWorkspace.showMultiRootDeleteDialog = true
 }
 
 func dismissMultiRootDeleteTagDialog() {
-    showMultiRootDeleteTagDialog = false
-    multiRootDeleteTagName = ""
-    multiRootDeleteTagSelectedRootPaths = []
+    tagWorkspace.showMultiRootDeleteDialog = false
+    tagWorkspace.multiRootDeleteName = ""
+    tagWorkspace.multiRootDeleteSelectedRootPaths = []
 }
 
 /// Delete one local tag from selected Git roots while retaining the exact
@@ -900,11 +900,11 @@ func deleteMultiRootTag(name: String, selectedRootPaths: Set<String>) {
         let failuresToReport = failures
         await MainActor.run {
             self.multiRootRunning = false
-            self.showMultiRootDeleteTagDialog = false
+            self.tagWorkspace.showMultiRootDeleteDialog = false
             self.multiRootResults = resultsToApply
             self.loadMultiRoots()
             if !contextsToOffer.isEmpty {
-                self.multiRootTagDeleteRecovery = MultiRootTagDeleteRecoveryContext(
+                self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
                     tagName: tagName,
                     contexts: contextsToOffer
                 )
@@ -993,7 +993,7 @@ func tagDelete(_ name: String) {
             try repo.tagDelete(name: name)
             await MainActor.run {
                 self.feedbackCenter.success("Tag deleted", detail: name)
-                self.tagDeleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
+                self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
                 self.refreshAll(showFeedback: false)
             }
         } catch {

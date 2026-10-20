@@ -2683,9 +2683,9 @@ var logStartRevisionMenu: some View {
                     }
                 }
             }
-            if !tags.isEmpty {
+            if !tagWorkspace.tags.isEmpty {
                 Section("Tags") {
-                    ForEach(tags, id: \.name) { tag in
+                    ForEach(tagWorkspace.tags, id: \.name) { tag in
                         Toggle(
                             isOn: logStartRevisionBinding(for: tag.name)
                         ) {
@@ -3067,19 +3067,19 @@ VStack(spacing: 0) {
     case .tags:
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("tag 名称", text: $tagName)
+                TextField("tag 名称", text: $tagWorkspace.name)
                     .textFieldStyle(.roundedBorder)
-                TextField("指向 rev（空=HEAD）", text: $tagAt)
+                TextField("指向 rev（空=HEAD）", text: $tagWorkspace.at)
                     .textFieldStyle(.roundedBorder)
                 Button("创建") { createTag() }
             }
             .padding(.horizontal, 8)
-            if let tagFeedback {
-                Text(tagFeedback).font(.caption)
-                    .foregroundStyle(tagFeedback.hasPrefix("已") ? .green : .red)
+            if let feedback = tagWorkspace.feedback {
+                Text(feedback).font(.caption)
+                    .foregroundStyle(feedback.hasPrefix("已") ? .green : .red)
                     .padding(.horizontal, 8)
             }
-            List(tags, id: \.name) { tag in
+            List(tagWorkspace.tags, id: \.name) { tag in
                 HStack {
                     Text(tag.name).font(.system(.body, design: .monospaced))
                     Text(tag.shortId).font(.caption).foregroundStyle(.secondary)

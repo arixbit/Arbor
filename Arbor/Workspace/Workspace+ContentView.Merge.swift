@@ -1955,18 +1955,18 @@ func presentShelveConflict(
     additionalActions: [FeedbackAction] = [],
     notificationID: String? = nil
 ) {
-    pendingShelveConflictName = name
-    pendingShelveConflictRepository = repository ?? repo
-    pendingShelveConflictChangeList = changeListName
+    shelfWorkspace.pendingConflictName = name
+    shelfWorkspace.pendingConflictRepository = repository ?? repo
+    shelfWorkspace.pendingConflictChangeList = changeListName
     let conflictNotificationID = notificationID
         ?? (isDirectPatch
-            ? pendingShelveConflictRepository?.workdir().map(directPatchNotificationID(rootPath:))
+            ? shelfWorkspace.pendingConflictRepository?.workdir().map(directPatchNotificationID(rootPath:))
             : nil)
-    pendingShelveConflictNotificationID = conflictNotificationID
-    shelveConflictIsPop = isPop
-    shelveConflictIsDirectPatch = isDirectPatch
-    pendingShelveConflictPatch = patchText
-    shelveConflictInProgress = true
+    shelfWorkspace.pendingConflictNotificationID = conflictNotificationID
+    shelfWorkspace.conflictIsPop = isPop
+    shelfWorkspace.conflictIsDirectPatch = isDirectPatch
+    shelfWorkspace.pendingConflictPatch = patchText
+    shelfWorkspace.conflictInProgress = true
     mergeInitialPath = paths.first
     if toolWindowMode != .log {
         selection = paths.first
@@ -1976,7 +1976,7 @@ func presentShelveConflict(
     commitPreviewPath = nil
     commitPreviewVisible = false
     showMergeRevisionsDialog = true
-    if let conflictRepository = pendingShelveConflictRepository {
+    if let conflictRepository = shelfWorkspace.pendingConflictRepository {
         if conflictRepository === self.repo {
             refreshAll(showFeedback: false)
         } else {
@@ -1985,7 +1985,7 @@ func presentShelveConflict(
     } else {
         refreshAll(showFeedback: false)
     }
-    let conflictRootDetail = pendingShelveConflictRepository?.workdir()
+    let conflictRootDetail = shelfWorkspace.pendingConflictRepository?.workdir()
         .map { " · Git root: \($0)" } ?? ""
     let conflictDetail = paths.joined(separator: ", ") + conflictRootDetail
     mergeFeedback = if isDirectPatch {
@@ -2009,12 +2009,12 @@ func presentShelveConflict(
 }
 
 func refreshShelveConflictStatus(repository: Repository? = nil) {
-    guard let conflictRepository = repository ?? pendingShelveConflictRepository else { return }
+    guard let conflictRepository = repository ?? shelfWorkspace.pendingConflictRepository else { return }
     Task.detached(priority: .userInitiated) {
         let conflictEntries = (try? conflictRepository.status()) ?? []
         let conflictChangeLists = (try? conflictRepository.changelistList()) ?? []
         await MainActor.run {
-            guard self.pendingShelveConflictRepository === conflictRepository else { return }
+            guard self.shelfWorkspace.pendingConflictRepository === conflictRepository else { return }
             self.entries = conflictEntries
             self.changeLists = conflictChangeLists
             self.fileContentRefreshToken &+= 1
@@ -2023,14 +2023,14 @@ func refreshShelveConflictStatus(repository: Repository? = nil) {
 }
 
 func clearShelveConflictState() {
-    shelveConflictInProgress = false
-    shelveConflictIsPop = false
-    shelveConflictIsDirectPatch = false
-    pendingShelveConflictName = nil
-    pendingShelveConflictRepository = nil
-    pendingShelveConflictChangeList = nil
-    pendingShelveConflictPatch = nil
-    pendingShelveConflictNotificationID = nil
+    shelfWorkspace.conflictInProgress = false
+    shelfWorkspace.conflictIsPop = false
+    shelfWorkspace.conflictIsDirectPatch = false
+    shelfWorkspace.pendingConflictName = nil
+    shelfWorkspace.pendingConflictRepository = nil
+    shelfWorkspace.pendingConflictChangeList = nil
+    shelfWorkspace.pendingConflictPatch = nil
+    shelfWorkspace.pendingConflictNotificationID = nil
     mergeInProgress = false
     showMergeRevisionsDialog = false
     mergeInitialPath = nil
@@ -2040,11 +2040,11 @@ func clearShelveConflictState() {
 /// removed only after the engine confirms that no conflict stages remain;
 /// Unshelve keeps the shelf available for reuse.
 func finishShelveConflict() {
-    guard let repo = pendingShelveConflictRepository ?? self.repo,
-          shelveConflictInProgress,
-          let name = pendingShelveConflictName else { return }
-    let isPop = shelveConflictIsPop
-    let isDirectPatch = shelveConflictIsDirectPatch
+    guard let repo = shelfWorkspace.pendingConflictRepository ?? self.repo,
+          shelfWorkspace.conflictInProgress,
+          let name = shelfWorkspace.pendingConflictName else { return }
+    let isPop = shelfWorkspace.conflictIsPop
+    let isDirectPatch = shelfWorkspace.conflictIsDirectPatch
     guard let repositoryPath = repo.workdir() else { return }
     let resolvedRootPath = canonicalExternalLogPath(repositoryPath)
     let isPrimaryRoot = shelfRootSelectionIsPrimary(
@@ -2053,7 +2053,7 @@ func finishShelveConflict() {
     )
     let pullRebaseSeed = rebaseUndoSeed
     let restoreInfo = (try? repo.shelveRestoreInfo()) ?? nil
-    let targetChangeList = pendingShelveConflictChangeList ?? restoreInfo?.targetChangeList
+    let targetChangeList = shelfWorkspace.pendingConflictChangeList ?? restoreInfo?.targetChangeList
     let restorePaths: [String] = if let restoreInfo,
                                     !restoreInfo.appliedPaths.isEmpty
                                         || !restoreInfo.conflictPaths.isEmpty {
@@ -2063,9 +2063,9 @@ func finishShelveConflict() {
     }
     let removeApplied = restoreInfo?.removeApplied ?? false
     let deletedShelfNamesBefore = Set(
-        (isPrimaryRoot ? deletedShelves : activeDeletedShelfList).map(\.name)
+        (isPrimaryRoot ? shelfWorkspace.deletedShelves : activeDeletedShelfList).map(\.name)
     )
-    let conflictNotificationID = pendingShelveConflictNotificationID
+    let conflictNotificationID = shelfWorkspace.pendingConflictNotificationID
         ?? (isDirectPatch
             ? directPatchNotificationID(rootPath: resolvedRootPath)
             : shelfBatchNotificationID(
@@ -2239,11 +2239,11 @@ func finishShelveConflict() {
 /// Roll back the exact worktree/index snapshot captured before the shelf was
 /// applied. The shelf is intentionally kept for a later retry.
 func abortShelveConflict() {
-    guard let repo = pendingShelveConflictRepository ?? self.repo,
-          shelveConflictInProgress,
-          let name = pendingShelveConflictName else { return }
-    let isDirectPatch = shelveConflictIsDirectPatch
-    let isPop = shelveConflictIsPop
+    guard let repo = shelfWorkspace.pendingConflictRepository ?? self.repo,
+          shelfWorkspace.conflictInProgress,
+          let name = shelfWorkspace.pendingConflictName else { return }
+    let isDirectPatch = shelfWorkspace.conflictIsDirectPatch
+    let isPop = shelfWorkspace.conflictIsPop
     guard let repositoryPath = repo.workdir() else { return }
     let resolvedRootPath = canonicalExternalLogPath(repositoryPath)
     let isPrimaryRoot = shelfRootSelectionIsPrimary(
@@ -2251,7 +2251,7 @@ func abortShelveConflict() {
         primaryRootPath: primaryShelfRootPath
     )
     let restorePaths = (try? repo.shelveRestoreInfo())?.paths ?? []
-    let conflictNotificationID = pendingShelveConflictNotificationID
+    let conflictNotificationID = shelfWorkspace.pendingConflictNotificationID
         ?? (isDirectPatch
             ? directPatchNotificationID(rootPath: resolvedRootPath)
             : shelfBatchNotificationID(

@@ -21,12 +21,18 @@ final class StashRecoveryState: ObservableObject {
     @Published var popConflictInProgress = false
     @Published var applyConflictInProgress = false
     @Published var pendingConflictNotificationID: String?
+    /// Legacy stack position retained for compatibility with the multi-root
+    /// resolver. Single-root conflict completion prefers the stable stash ID.
     @Published var pendingPopIndex: Int?
+    /// Stable stash object identity retained while a pop restore is paused.
+    /// The stash stack can be reordered while the conflict resolver is open.
     @Published var pendingPopID: String?
 
     // MARK: - Pull 现场保存 / 恢复
 
     @Published var pendingPullStashPop = false
+    /// Stable identity for the temporary Pull stash. The message remains as
+    /// a compatibility fallback for markers written by older builds.
     @Published var pendingPullStashID: String?
     @Published var pendingPullStashMessage: String?
     @Published var pendingPullShelfName: String?

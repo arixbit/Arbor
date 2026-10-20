@@ -15,40 +15,40 @@ func showShelvePreviewFor(_ name: String) {
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
-    shelfPreviewName = name
-    shelfPreviewRootPath = rootPath
-    shelfPreviewIsDeleted = isDeleted
-    shelfPreviewText = nil
-    showShelfPreview = true
+    shelfWorkspace.previewName = name
+    shelfWorkspace.previewRootPath = rootPath
+    shelfWorkspace.previewIsDeleted = isDeleted
+    shelfWorkspace.previewText = nil
+    shelfWorkspace.showPreview = true
     Task.detached(priority: .userInitiated) {
         do {
             let diff = try isDeleted
                 ? shelfRepo.shelveDeletedDiff(name: name)
                 : shelfRepo.shelveDiff(name: name)
             await MainActor.run {
-                guard self.showShelfPreview,
+                guard self.shelfWorkspace.showPreview,
                       shelfPreviewRequestMatches(
                           requestedRootPath: rootPath,
-                          currentRootPath: self.shelfPreviewRootPath,
+                          currentRootPath: self.shelfWorkspace.previewRootPath,
                           requestedName: name,
-                          currentName: self.shelfPreviewName,
+                          currentName: self.shelfWorkspace.previewName,
                           requestedIsDeleted: isDeleted,
-                          currentIsDeleted: self.shelfPreviewIsDeleted
+                          currentIsDeleted: self.shelfWorkspace.previewIsDeleted
                       ) else { return }
-                self.shelfPreviewText = diff
+                self.shelfWorkspace.previewText = diff
             }
         } catch {
             await MainActor.run {
-                guard self.showShelfPreview,
+                guard self.shelfWorkspace.showPreview,
                       shelfPreviewRequestMatches(
                           requestedRootPath: rootPath,
-                          currentRootPath: self.shelfPreviewRootPath,
+                          currentRootPath: self.shelfWorkspace.previewRootPath,
                           requestedName: name,
-                          currentName: self.shelfPreviewName,
+                          currentName: self.shelfWorkspace.previewName,
                           requestedIsDeleted: isDeleted,
-                          currentIsDeleted: self.shelfPreviewIsDeleted
+                          currentIsDeleted: self.shelfWorkspace.previewIsDeleted
                       ) else { return }
-                self.shelfPreviewText = "Load shelf diff failed: \(errorMessage(error))"
+                self.shelfWorkspace.previewText = "Load shelf diff failed: \(errorMessage(error))"
             }
         }
     }
@@ -86,8 +86,8 @@ func shelveDraggedPaths(_ paths: [String]) {
             await MainActor.run {
                 self.entries = status
                 self.changeLists = nextChangeLists
-                self.shelves = nextShelves
-                self.deletedShelves = nextDeletedShelves
+                self.shelfWorkspace.shelves = nextShelves
+                self.shelfWorkspace.deletedShelves = nextDeletedShelves
                 self.refreshAfterShelfMutation(repo: repo, paths: paths)
                 self.feedbackCenter.success("Changes shelved", detail: createdDetail)
             }
@@ -112,7 +112,7 @@ func importShelvePatches(rootPath: String? = nil) {
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -197,7 +197,7 @@ func exportShelve(_ name: String, rootPath: String? = nil) {
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -256,15 +256,15 @@ func loadShelves() {
             let ss = try repo.shelveList()
             let dsh = (try? repo.shelveDeletedList()) ?? []
             await MainActor.run {
-                self.shelves = ss
-                self.deletedShelves = dsh
-                if let name = self.shelfPreviewName,
+                self.shelfWorkspace.shelves = ss
+                self.shelfWorkspace.deletedShelves = dsh
+                if let name = self.shelfWorkspace.previewName,
                    !ss.contains(where: { $0.name == name }),
                    !dsh.contains(where: { $0.name == name }) {
-                    self.shelfPreviewName = nil
-                    self.shelfPreviewIsDeleted = false
-                    self.shelfPreviewText = nil
-                    self.showShelfPreview = false
+                    self.shelfWorkspace.previewName = nil
+                    self.shelfWorkspace.previewIsDeleted = false
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.showPreview = false
                 }
             }
         } catch { await MainActor.run { self.loadError = errorMessage(error) } }
@@ -277,8 +277,8 @@ func doShelve(
     includeUntracked: Bool = false,
     includeIgnored: Bool = false
 ) {
-    guard let repo, !shelveName.isEmpty else { return }
-    let name = shelveName
+    guard let repo, !shelfWorkspace.name.isEmpty else { return }
+    let name = shelfWorkspace.name
     let paths = selectedPaths ?? entries.compactMap { entry in
         if entry.unstaged == .ignored && !includeIgnored { return nil }
         if entry.unstaged == .untracked && !includeUntracked { return nil }
@@ -299,7 +299,7 @@ func doShelve(
             let ss = try repo.shelveList()
             let dsh = (try? repo.shelveDeletedList()) ?? []
             await MainActor.run {
-                self.entries = st; self.changeLists = cls; self.shelves = ss; self.deletedShelves = dsh; self.shelveName = ""
+                self.entries = st; self.changeLists = cls; self.shelfWorkspace.shelves = ss; self.shelfWorkspace.deletedShelves = dsh; self.shelfWorkspace.name = ""
                 self.refreshAfterShelfMutation(repo: repo, paths: paths)
                 self.feedbackCenter.success("Changes shelved")
             }
@@ -337,7 +337,7 @@ func renameShelveDescription(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -391,7 +391,7 @@ func doShelvePop(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -441,15 +441,15 @@ func doShelvePop(
                     deletedShelves: dsh
                 )
                 self.refreshAfterShelfMutation(repo: shelfRepository, paths: appliedPaths)
-                if self.shelfPreviewName == name,
+                if self.shelfWorkspace.previewName == name,
                    !ss.contains(where: { $0.name == name }),
                    shelfActionRootMatchesCurrentRoot(
                        requestedRootPath: resolvedRootPath,
-                       currentRootPath: self.shelfPreviewRootPath ?? self.primaryShelfRootPath
+                       currentRootPath: self.shelfWorkspace.previewRootPath ?? self.primaryShelfRootPath
                    ) {
-                    self.shelfPreviewName = nil
-                    self.shelfPreviewText = nil
-                    self.showShelfPreview = false
+                    self.shelfWorkspace.previewName = nil
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.showPreview = false
                 }
                 let operationItem = FeedbackOperationItem(
                     scope: resolvedRootPath,
@@ -538,7 +538,7 @@ func doShelvePopShelves(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -724,12 +724,12 @@ func doShelvePopShelves(
             if !isPrimaryRoot {
                 self.refreshAll(showFeedback: false)
             }
-            if let previewName = self.shelfPreviewName,
+            if let previewName = self.shelfWorkspace.previewName,
                uniqueNames.contains(previewName),
                !nextShelves.contains(where: { $0.name == previewName }) {
-                self.shelfPreviewName = nil
-                self.shelfPreviewText = nil
-                self.showShelfPreview = false
+                self.shelfWorkspace.previewName = nil
+                self.shelfWorkspace.previewText = nil
+                self.shelfWorkspace.showPreview = false
             }
 
             let retryNames = uniqueNames.filter {
@@ -820,7 +820,7 @@ func doShelveDropShelves(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -915,11 +915,11 @@ func doShelveDropShelves(
                 shelves: nextShelves,
                 deletedShelves: nextDeletedShelves
             )
-            if let previewName = self.shelfPreviewName,
+            if let previewName = self.shelfWorkspace.previewName,
                droppedNamesSnapshot.contains(previewName) {
-                self.shelfPreviewName = nil
-                self.shelfPreviewText = nil
-                self.showShelfPreview = false
+                self.shelfWorkspace.previewName = nil
+                self.shelfWorkspace.previewText = nil
+                self.shelfWorkspace.showPreview = false
             }
 
             let batchUndoAction = self.shelfUndoDeletionsFeedbackAction(
@@ -997,7 +997,7 @@ func doShelveDropPathGroups(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1092,11 +1092,11 @@ func doShelveDropPathGroups(
                 shelves: nextShelves,
                 deletedShelves: nextDeletedShelves
             )
-            if let previewName = self.shelfPreviewName,
+            if let previewName = self.shelfWorkspace.previewName,
                droppedNamesSnapshot.contains(previewName) {
-                self.shelfPreviewName = nil
-                self.shelfPreviewText = nil
-                self.showShelfPreview = false
+                self.shelfWorkspace.previewName = nil
+                self.shelfWorkspace.previewText = nil
+                self.shelfWorkspace.showPreview = false
             }
             let retryAction = self.shelfMemberBatchRetryFeedbackAction(
                 groups: retryGroups,
@@ -1166,7 +1166,7 @@ func doShelveDeleteDeletedPathGroups(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1304,7 +1304,7 @@ func cleanRecycledShelves(rootPath: String? = nil) {
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1381,18 +1381,18 @@ func doShelveDropPaths(
               activeRootPath: activeShelfRootPath,
               primaryRootPath: primaryShelfRootPath,
               primaryRepository: repo,
-              secondaryRepository: shelfRootRepository
+              secondaryRepository: shelfWorkspace.rootRepository
           ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
     let scopedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? shelves : activeShelfList
+    ) ? shelfWorkspace.shelves : activeShelfList
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map { $0.name })
     let originalShelfTimestamp = scopedShelves.first(where: { $0.name == name })?.timestamp
     beginFeedbackOperation("Drop shelve changes")
@@ -1411,13 +1411,13 @@ func doShelveDropPaths(
                     shelves: ss,
                     deletedShelves: dsh
                 )
-                if self.shelfPreviewName == name,
+                if self.shelfWorkspace.previewName == name,
                    shelfActionRootMatchesCurrentRoot(
                        requestedRootPath: resolvedRootPath,
-                       currentRootPath: self.shelfPreviewRootPath ?? self.primaryShelfRootPath
+                       currentRootPath: self.shelfWorkspace.previewRootPath ?? self.primaryShelfRootPath
                    ) {
-                    self.shelfPreviewText = nil
-                    self.showShelfPreview = false
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.showPreview = false
                 }
                 let restoredName = dsh.first(where: { !deletedShelfNamesBefore.contains($0.name) })?.name
                 if let restoredName {
@@ -1478,18 +1478,18 @@ func doShelveDrop(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
     let scopedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? shelves : activeShelfList
+    ) ? shelfWorkspace.shelves : activeShelfList
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
-    ) ? deletedShelves : activeDeletedShelfList
+    ) ? shelfWorkspace.deletedShelves : activeDeletedShelfList
     let deletedShelfNamesBefore = Set(scopedDeletedShelves.map(\.name))
     let originalShelfTimestamp = scopedShelves.first(where: { $0.name == name })?.timestamp
     let originalShelfPaths = scopedShelves.first(where: { $0.name == name })?.paths ?? []
@@ -1517,14 +1517,14 @@ func doShelveDrop(
                     shelves: ss,
                     deletedShelves: dsh
                 )
-                if self.shelfPreviewName == name,
+                if self.shelfWorkspace.previewName == name,
                    shelfActionRootMatchesCurrentRoot(
                        requestedRootPath: resolvedRootPath,
-                       currentRootPath: self.shelfPreviewRootPath ?? self.primaryShelfRootPath
+                       currentRootPath: self.shelfWorkspace.previewRootPath ?? self.primaryShelfRootPath
                    ) {
-                    self.shelfPreviewName = nil
-                    self.shelfPreviewText = nil
-                    self.showShelfPreview = false
+                    self.shelfWorkspace.previewName = nil
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.showPreview = false
                 }
                 let restoredName = dsh.first(where: { !deletedShelfNamesBefore.contains($0.name) })?.name
                 if let restoredName {
@@ -1622,7 +1622,7 @@ func doShelveDeleteDeletedPaths(
               activeRootPath: activeShelfRootPath,
               primaryRootPath: primaryShelfRootPath,
               primaryRepository: repo,
-              secondaryRepository: shelfRootRepository
+              secondaryRepository: shelfWorkspace.rootRepository
           ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1691,7 +1691,7 @@ func deleteDeletedShelves(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1790,7 +1790,7 @@ func deleteDeletedShelves(
                 let currentShelves = shelfRootSelectionIsPrimary(
                     selectedRootPath: resolvedRootPath,
                     primaryRootPath: self.primaryShelfRootPath
-                ) ? self.shelves : self.activeShelfList
+                ) ? self.shelfWorkspace.shelves : self.activeShelfList
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
                     shelves: currentShelves,

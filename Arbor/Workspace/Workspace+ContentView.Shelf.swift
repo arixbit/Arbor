@@ -14,9 +14,9 @@ func reloadSecondaryShelfSnapshot(rootPath: String) {
               primaryRootPath: primaryShelfRootPath
           ) else { return }
 
-    shelfRootLoadGeneration += 1
-    let generation = shelfRootLoadGeneration
-    shelfRootLoading = true
+    shelfWorkspace.rootLoadGeneration += 1
+    let generation = shelfWorkspace.rootLoadGeneration
+    shelfWorkspace.rootLoading = true
     Task.detached(priority: .utility) {
         do {
             let rootRepo = try openRepository(path: normalizedRootPath)
@@ -24,27 +24,27 @@ func reloadSecondaryShelfSnapshot(rootPath: String) {
             let rootDeletedShelves = (try? rootRepo.shelveDeletedList()) ?? []
             let rootChangeLists = (try? rootRepo.changelistList()) ?? []
             await MainActor.run {
-                guard self.shelfRootLoadGeneration == generation,
+                guard self.shelfWorkspace.rootLoadGeneration == generation,
                       self.activeShelfRootPath == normalizedRootPath else { return }
-                self.shelfRootRepository = rootRepo
-                self.shelfRootSnapshots[normalizedRootPath] = ShelfRootSnapshot(
+                self.shelfWorkspace.rootRepository = rootRepo
+                self.shelfWorkspace.rootSnapshots[normalizedRootPath] = ShelfRootSnapshot(
                     rootPath: normalizedRootPath,
                     shelves: rootShelves,
                     deletedShelves: rootDeletedShelves,
                     changeLists: rootChangeLists
                 )
-                self.shelfRootError = nil
-                self.shelfRootLoading = false
+                self.shelfWorkspace.rootError = nil
+                self.shelfWorkspace.rootLoading = false
             }
         } catch {
             await MainActor.run {
-                guard self.shelfRootLoadGeneration == generation,
+                guard self.shelfWorkspace.rootLoadGeneration == generation,
                       self.activeShelfRootPath == normalizedRootPath else { return }
-                self.shelfRootError = "Refresh Shelf for "
+                self.shelfWorkspace.rootError = "Refresh Shelf for "
                     + normalizedRootPath
                     + " failed: "
                     + errorMessage(error)
-                self.shelfRootLoading = false
+                self.shelfWorkspace.rootLoading = false
             }
         }
     }
@@ -262,14 +262,14 @@ func publishShelfSnapshot(
         selectedRootPath: normalizedRootPath,
         primaryRootPath: primaryShelfRootPath
     ) {
-        self.shelves = shelves
-        self.deletedShelves = deletedShelves
+        self.shelfWorkspace.shelves = shelves
+        self.shelfWorkspace.deletedShelves = deletedShelves
         if let changeLists {
             self.changeLists = changeLists
         }
     } else if activeShelfRootPath == normalizedRootPath {
-        let previousChangeLists = shelfRootSnapshots[normalizedRootPath]?.changeLists ?? []
-        shelfRootSnapshots[normalizedRootPath] = ShelfRootSnapshot(
+        let previousChangeLists = shelfWorkspace.rootSnapshots[normalizedRootPath]?.changeLists ?? []
+        shelfWorkspace.rootSnapshots[normalizedRootPath] = ShelfRootSnapshot(
             rootPath: normalizedRootPath,
             shelves: shelves,
             deletedShelves: deletedShelves,
@@ -290,30 +290,30 @@ func setShelfRoot(_ rootPath: String) {
         return
     }
 
-    shelfRootLoadGeneration += 1
-    let generation = shelfRootLoadGeneration
-    shelfRootError = nil
-    shelfPreviewName = nil
-    shelfPreviewRootPath = nil
-    shelfPreviewText = nil
-    shelfPreviewIsDeleted = false
-    showShelfPreview = false
+    shelfWorkspace.rootLoadGeneration += 1
+    let generation = shelfWorkspace.rootLoadGeneration
+    shelfWorkspace.rootError = nil
+    shelfWorkspace.previewName = nil
+    shelfWorkspace.previewRootPath = nil
+    shelfWorkspace.previewText = nil
+    shelfWorkspace.previewIsDeleted = false
+    shelfWorkspace.showPreview = false
 
     if normalizedPath == primaryPath {
-        shelfRootPath = nil
-        shelfRootRepository = nil
-        shelfRootLoading = false
+        shelfWorkspace.rootPath = nil
+        shelfWorkspace.rootRepository = nil
+        shelfWorkspace.rootLoading = false
         return
     }
 
-    shelfRootPath = normalizedPath
-    shelfRootRepository = nil
-    shelfRootLoading = true
-    if shelfRootSnapshots[normalizedPath] == nil,
+    shelfWorkspace.rootPath = normalizedPath
+    shelfWorkspace.rootRepository = nil
+    shelfWorkspace.rootLoading = true
+    if shelfWorkspace.rootSnapshots[normalizedPath] == nil,
        let snapshot = multiRootBranchSnapshots.first(where: {
            canonicalExternalLogPath($0.rootPath) == normalizedPath
        }) {
-        shelfRootSnapshots[normalizedPath] = ShelfRootSnapshot(
+        shelfWorkspace.rootSnapshots[normalizedPath] = ShelfRootSnapshot(
             rootPath: normalizedPath,
             shelves: snapshot.shelves,
             deletedShelves: [],
@@ -328,24 +328,24 @@ func setShelfRoot(_ rootPath: String) {
             let rootDeletedShelves = (try? rootRepo.shelveDeletedList()) ?? []
             let rootChangeLists = (try? rootRepo.changelistList()) ?? []
             await MainActor.run {
-                guard self.shelfRootLoadGeneration == generation,
+                guard self.shelfWorkspace.rootLoadGeneration == generation,
                       self.activeShelfRootPath == normalizedPath else { return }
-                self.shelfRootRepository = rootRepo
-                self.shelfRootSnapshots[normalizedPath] = ShelfRootSnapshot(
+                self.shelfWorkspace.rootRepository = rootRepo
+                self.shelfWorkspace.rootSnapshots[normalizedPath] = ShelfRootSnapshot(
                     rootPath: normalizedPath,
                     shelves: rootShelves,
                     deletedShelves: rootDeletedShelves,
                     changeLists: rootChangeLists
                 )
-                self.shelfRootLoading = false
+                self.shelfWorkspace.rootLoading = false
             }
         } catch {
             await MainActor.run {
-                guard self.shelfRootLoadGeneration == generation,
+                guard self.shelfWorkspace.rootLoadGeneration == generation,
                       self.activeShelfRootPath == normalizedPath else { return }
-                self.shelfRootRepository = nil
-                self.shelfRootLoading = false
-                self.shelfRootError = "Load Shelf for "
+                self.shelfWorkspace.rootRepository = nil
+                self.shelfWorkspace.rootLoading = false
+                self.shelfWorkspace.rootError = "Load Shelf for "
                     + normalizedPath
                     + " failed: "
                     + errorMessage(error)
@@ -363,10 +363,10 @@ func presentShelfLocationSettings() {
           canMutateShelfMetadata else { return }
     do {
         let location = try shelfRepo.shelveLocation()
-        shelfLocationCurrent = location
-        shelfLocationValue = location
-        shelfLocationMigrateExisting = true
-        showShelfLocationDialog = true
+        shelfWorkspace.locationCurrent = location
+        shelfWorkspace.locationValue = location
+        shelfWorkspace.locationMigrateExisting = true
+        shelfWorkspace.showLocationDialog = true
     } catch {
         feedbackCenter.error(
             "Load Shelf location failed",
@@ -389,7 +389,7 @@ func setShelfLocation(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepo = context.repository
     let resolvedRootPath = context.rootPath
@@ -410,8 +410,8 @@ func setShelfLocation(
                     requestedRootPath: resolvedRootPath,
                     currentRootPath: self.activeShelfRootPath
                 ) else { return }
-                self.shelfLocationCurrent = resolved
-                self.shelfLocationValue = resolved
+                self.shelfWorkspace.locationCurrent = resolved
+                self.shelfWorkspace.locationValue = resolved
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
                     shelves: nextShelves,
@@ -1400,7 +1400,7 @@ func showStashRestoreConflict(
 
 func restoreDeletedTags(_ contexts: [TagDeleteRecoveryContext]) {
     guard !contexts.isEmpty else { return }
-    multiRootTagDeleteRecovery = nil
+    tagWorkspace.multiRootDeleteRecovery = nil
     beginFeedbackOperation("Restore multi-root tags")
     Task.detached(priority: .userInitiated) {
         var failures: [String] = []
@@ -1425,7 +1425,7 @@ func restoreDeletedTags(_ contexts: [TagDeleteRecoveryContext]) {
                     detail: contexts.first?.tag.name ?? ""
                 )
             } else {
-                self.multiRootTagDeleteRecovery = remainingContexts.isEmpty
+                self.tagWorkspace.multiRootDeleteRecovery = remainingContexts.isEmpty
                     ? nil
                     : MultiRootTagDeleteRecoveryContext(
                         tagName: contexts.first?.tag.name ?? "",
@@ -1507,7 +1507,7 @@ func deleteShelfPlan(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -1713,17 +1713,17 @@ func deleteShelfPlan(
                 shelves: nextShelves,
                 deletedShelves: nextDeletedShelves
             )
-            if let previewName = self.shelfPreviewName,
+            if let previewName = self.shelfWorkspace.previewName,
                let previewOperation = operations.first(where: {
                    $0.shelfName == previewName
                        && (($0.kind == .deletedShelf || $0.kind == .deletedPaths)
-                           == self.shelfPreviewIsDeleted)
+                           == self.shelfWorkspace.previewIsDeleted)
                        && completedKeysSnapshot.contains($0.key)
                }) {
                 _ = previewOperation
-                self.shelfPreviewName = nil
-                self.shelfPreviewText = nil
-                self.showShelfPreview = false
+                self.shelfWorkspace.previewName = nil
+                self.shelfWorkspace.previewText = nil
+                self.shelfWorkspace.showPreview = false
             }
 
             let undoAction = self.shelfUndoDeletionsFeedbackAction(
@@ -1951,7 +1951,7 @@ func moveShelfPaths(
               activeRootPath: activeShelfRootPath,
               primaryRootPath: primaryShelfRootPath,
               primaryRepository: repo,
-              secondaryRepository: shelfRootRepository
+              secondaryRepository: shelfWorkspace.rootRepository
           ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -2038,12 +2038,12 @@ func showSavedChanges(_ request: ArborVCSActionRequest) {
                 }
                 let diff = try savedChangesRepo.shelveDiff(name: savedChangesID)
                 await MainActor.run {
-                    self.shelves = shelves
+                    self.shelfWorkspace.shelves = shelves
                     self.stashUI.clearPreview()
-                    self.shelfPreviewName = savedChangesID
-                    self.shelfPreviewIsDeleted = false
-                    self.shelfPreviewText = diff
-                    self.showShelfPreview = true
+                    self.shelfWorkspace.previewName = savedChangesID
+                    self.shelfWorkspace.previewIsDeleted = false
+                    self.shelfWorkspace.previewText = diff
+                    self.shelfWorkspace.showPreview = true
                 }
             case .stash:
                 let stashes = try savedChangesRepo.stashList()
@@ -2058,10 +2058,10 @@ func showSavedChanges(_ request: ArborVCSActionRequest) {
                     index: try currentStashIndex(repo: savedChangesRepo, stashID: savedChangesID)
                 )
                 await MainActor.run {
-                    self.stashes = stashes
-                    self.shelfPreviewName = nil
-                    self.shelfPreviewText = nil
-                    self.showShelfPreview = false
+                    self.stashUI.stashes = stashes
+                    self.shelfWorkspace.previewName = nil
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.showPreview = false
                     self.stashUI.previewStashID = stashes[index].id
                     self.stashUI.previewText = diff
                     self.stashUI.showPreview = true
@@ -2426,7 +2426,7 @@ func undoShelfDeletion(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -2489,7 +2489,7 @@ func undoShelfDeletions(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -2599,7 +2599,7 @@ func restoreDeletedShelves(
         activeRootPath: activeShelfRootPath,
         primaryRootPath: primaryShelfRootPath,
         primaryRepository: repo,
-        secondaryRepository: shelfRootRepository
+        secondaryRepository: shelfWorkspace.rootRepository
     ) else { return }
     let shelfRepository = context.repository
     let resolvedRootPath = context.rootPath
@@ -2806,7 +2806,7 @@ func restoreDeletedTag(_ context: TagDeleteRecoveryContext) {
             // using the full peeled id avoids dependence on reflog retention.
             try context.repo.tagCreate(name: context.tag.name, at: context.tag.id)
             await MainActor.run {
-                self.tagDeleteRecovery = nil
+                self.tagWorkspace.deleteRecovery = nil
                 if let rootPath = context.rootPath {
                     self.loadMultiRoots()
                     self.feedbackCenter.success("Tag restored", detail: "\(context.tag.name) · \(rootPath)")

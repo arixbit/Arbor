@@ -895,7 +895,7 @@ func beginFileCheckin(_ path: String) {
     toolWindowMode = .commit
     toolWindowExpanded = true
     projectPanelExpanded = false
-    isShelfWorkspaceTabActive = false
+    shelfWorkspace.isWorkspaceTabActive = false
     commitPreviewPath = normalizedPath
     commitPreviewMode = .unstaged
     commitPreviewComparisonMode = nil

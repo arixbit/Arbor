@@ -393,7 +393,7 @@ func refreshAll(
                           self.refreshGate.isCurrent(refreshTicket) else { return }
                     self.ignoredRules = ignoredRules
                     self.recentMessages = recent
-                    self.tags = tags
+                    self.tagWorkspace.tags = tags
                     self.submodules = submodules
                     self.worktrees = worktrees
                     self.isShallowRepository = isShallow
@@ -535,14 +535,14 @@ func openProjectPath(_ projectPath: String) {
     commitFeedback = nil
     stashRecovery.popConflictInProgress = false
     stashRecovery.applyConflictInProgress = false
-    shelveConflictInProgress = false
-    shelveConflictIsPop = false
-    shelveConflictIsDirectPatch = false
-    pendingShelveConflictName = nil
-    pendingShelveConflictRepository = nil
-    pendingShelveConflictChangeList = nil
-    pendingShelveConflictPatch = nil
-    pendingShelveConflictNotificationID = nil
+    shelfWorkspace.conflictInProgress = false
+    shelfWorkspace.conflictIsPop = false
+    shelfWorkspace.conflictIsDirectPatch = false
+    shelfWorkspace.pendingConflictName = nil
+    shelfWorkspace.pendingConflictRepository = nil
+    shelfWorkspace.pendingConflictChangeList = nil
+    shelfWorkspace.pendingConflictPatch = nil
+    shelfWorkspace.pendingConflictNotificationID = nil
     stashRecovery.pendingConflictNotificationID = nil
     stashRecovery.pendingPopIndex = nil
     stashRecovery.pendingPopID = nil
@@ -568,9 +568,9 @@ func openProjectPath(_ projectPath: String) {
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
-    shelfPreviewName = nil
-    shelfPreviewText = nil
-    showShelfPreview = false
+    shelfWorkspace.previewName = nil
+    shelfWorkspace.previewText = nil
+    shelfWorkspace.showPreview = false
     remoteProtectedBranchPatterns = []
     remoteProtectedBranchPatternsByRoot = [:]
     isShallowRepository = false
@@ -735,13 +735,13 @@ func openProjectPath(_ projectPath: String) {
                                 $0.staged == .conflicted || $0.unstaged == .conflicted
                             }
                         } else if let shelveRestore {
-                            self.pendingShelveConflictName = shelveRestore.name
-                            self.pendingShelveConflictRepository = r
-                            self.pendingShelveConflictChangeList = shelveRestore.targetChangeList
-                            self.shelveConflictIsPop = shelveRestore.isPop
-                            self.shelveConflictIsDirectPatch = shelveRestore.isDirectPatch
-                            self.pendingShelveConflictPatch = shelveRestore.patch
-                            self.shelveConflictInProgress = true
+                            self.shelfWorkspace.pendingConflictName = shelveRestore.name
+                            self.shelfWorkspace.pendingConflictRepository = r
+                            self.shelfWorkspace.pendingConflictChangeList = shelveRestore.targetChangeList
+                            self.shelfWorkspace.conflictIsPop = shelveRestore.isPop
+                            self.shelfWorkspace.conflictIsDirectPatch = shelveRestore.isDirectPatch
+                            self.shelfWorkspace.pendingConflictPatch = shelveRestore.patch
+                            self.shelfWorkspace.conflictInProgress = true
                             self.mergeInitialPath = shelveRestore.paths.first
                             if self.toolWindowMode != .log {
                                 self.selection = shelveRestore.paths.first
@@ -792,12 +792,12 @@ func openProjectPath(_ projectPath: String) {
                                 self.lastIndexRevision = staging?.indexRevision
                         self.operationState = operationState
                         self.mergeInProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
-                                self.stashes = ss; self.remotes = rs
+                                self.stashUI.stashes = ss; self.remotes = rs
                                 self.isShallowRepository = isShallow
                                 self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
                                 self.remoteBranches = remoteBranches
                                 self.recentBranches = recentBranches; self.syncStatuses = syncStatuses
-                                self.shelves = sh; self.deletedShelves = dsh; self.tags = ts
+                                self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
                         self.submodules = submodules
                         self.worktrees = worktrees
                         if let operationState,
@@ -918,16 +918,16 @@ func resetProjectState() {
     logList.isShowingCachedSnapshot = false
     branches = []
     branchComparisons = [:]
-    stashes = []
-    shelves = []
-    deletedShelves = []
+    stashUI.stashes = []
+    shelfWorkspace.shelves = []
+    shelfWorkspace.deletedShelves = []
     remotes = []
     isShallowRepository = false
     remoteProtectedBranchPatterns = []
     remoteProtectedBranchPatternsByRoot = [:]
     remoteBranches = []
     syncStatuses = []
-    tags = []
+    tagWorkspace.tags = []
     worktrees = []
     worktreeFeedback = nil
     consoleResult = nil
@@ -945,9 +945,9 @@ func resetProjectState() {
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
-    shelfPreviewName = nil
-    shelfPreviewText = nil
-    showShelfPreview = false
+    shelfWorkspace.previewName = nil
+    shelfWorkspace.previewText = nil
+    shelfWorkspace.showPreview = false
     logSelectionState.selection = nil
     compareSelection = nil
     compareSelectedPaths = []
@@ -955,14 +955,14 @@ func resetProjectState() {
     mergeInitialHead = nil
     stashRecovery.popConflictInProgress = false
     stashRecovery.applyConflictInProgress = false
-    shelveConflictInProgress = false
-    shelveConflictIsPop = false
-    shelveConflictIsDirectPatch = false
-    pendingShelveConflictName = nil
-    pendingShelveConflictRepository = nil
-    pendingShelveConflictChangeList = nil
-    pendingShelveConflictPatch = nil
-    pendingShelveConflictNotificationID = nil
+    shelfWorkspace.conflictInProgress = false
+    shelfWorkspace.conflictIsPop = false
+    shelfWorkspace.conflictIsDirectPatch = false
+    shelfWorkspace.pendingConflictName = nil
+    shelfWorkspace.pendingConflictRepository = nil
+    shelfWorkspace.pendingConflictChangeList = nil
+    shelfWorkspace.pendingConflictPatch = nil
+    shelfWorkspace.pendingConflictNotificationID = nil
     stashRecovery.pendingConflictNotificationID = nil
     stashRecovery.pendingPopIndex = nil
     stashRecovery.pendingPopID = nil
@@ -1558,24 +1558,24 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         self.remoteProtectedBranchPatternsByRoot[primaryKey] ?? []
                 }
                 self.multiRootConflictGroups = conflictGroups
-                if let selectedShelfRoot = self.shelfRootPath,
+                if let selectedShelfRoot = self.shelfWorkspace.rootPath,
                    !rootsSnapshot.contains(where: {
                        canonicalExternalLogPath($0.path)
                            == canonicalExternalLogPath(selectedShelfRoot)
                    }) {
-                    self.shelfRootLoadGeneration += 1
-                    self.shelfRootPath = nil
-                    self.shelfRootLoading = false
-                    self.shelfRootRepository = nil
-                    self.shelfRootError = nil
-                    self.shelfRootSnapshots.removeValue(
+                    self.shelfWorkspace.rootLoadGeneration += 1
+                    self.shelfWorkspace.rootPath = nil
+                    self.shelfWorkspace.rootLoading = false
+                    self.shelfWorkspace.rootRepository = nil
+                    self.shelfWorkspace.rootError = nil
+                    self.shelfWorkspace.rootSnapshots.removeValue(
                         forKey: canonicalExternalLogPath(selectedShelfRoot)
                     )
-                    self.shelfPreviewName = nil
-                    self.shelfPreviewRootPath = nil
-                    self.shelfPreviewText = nil
-                    self.shelfPreviewIsDeleted = false
-                    self.showShelfPreview = false
+                    self.shelfWorkspace.previewName = nil
+                    self.shelfWorkspace.previewRootPath = nil
+                    self.shelfWorkspace.previewText = nil
+                    self.shelfWorkspace.previewIsDeleted = false
+                    self.shelfWorkspace.showPreview = false
                 }
                 if self.externalLogWindow {
                     self.logRuntime.aggregateRootPaths = externalLogSelection
@@ -1688,12 +1688,12 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.multiRootBranchSnapshots = []
                 self.multiRootConflictGroups = []
                 self.stashRecovery.multiRootUpdateStashedRoots = []
-                self.shelfRootLoadGeneration += 1
-                self.shelfRootPath = nil
-                self.shelfRootSnapshots = [:]
-                self.shelfRootRepository = nil
-                self.shelfRootLoading = false
-                self.shelfRootError = nil
+                self.shelfWorkspace.rootLoadGeneration += 1
+                self.shelfWorkspace.rootPath = nil
+                self.shelfWorkspace.rootSnapshots = [:]
+                self.shelfWorkspace.rootRepository = nil
+                self.shelfWorkspace.rootLoading = false
+                self.shelfWorkspace.rootError = nil
                 self.logList.activeRootPath = nil
                 self.logList.activeRepo = nil
                 self.logRuntime.activeBranches = []
@@ -3022,12 +3022,12 @@ func loadRepoData(includeComparisons: Bool = true) {
                 self.branches = bs; self.ignoredRules = ignoredRules
                 self.refreshLogMyBranches()
                 if let comparisons { self.branchComparisons = comparisons }
-                self.stashes = ss; self.remotes = rs
+                self.stashUI.stashes = ss; self.remotes = rs
                 self.isShallowRepository = isShallow
                 self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
                 self.remoteBranches = remoteBranches
                 self.recentBranches = recentBranches; self.syncStatuses = syncStatuses
-                self.shelves = sh; self.deletedShelves = dsh; self.tags = ts
+                self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
                 self.refreshLfsPathMarkers()
                 self.submodules = submodules
                 self.identityName = identity.name ?? ""

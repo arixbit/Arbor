@@ -1,9 +1,9 @@
 import Foundation
 import SwiftUI
 
-/// Stash / Unstash 工作页的视图状态。
+/// Stash / Unstash 工作页的列表与视图状态。
 ///
-/// 这里全是纯 UI 状态（对话框开关、当前选择、预览内容），没有 Git 语义，
+/// 这里集中保存列表缓存和 UI 状态（对话框开关、当前选择、预览内容），
 /// 所以从 `ContentView` 的 620 条 `@State` 里抽出来单独持有：
 ///
 /// - `ContentView` 只保留一个 `@StateObject`，新增 stash 交互不必再往主视图里
@@ -13,6 +13,8 @@ import SwiftUI
 /// - 预览/比较的「请求身份」也放在这里，切换 stash 时不会串到上一个请求。
 @MainActor
 final class StashWorkspaceState: ObservableObject {
+    @Published var stashes: [StashInfo] = []
+
     // MARK: - 创建 stash
 
     @Published var showCreateDialog = false

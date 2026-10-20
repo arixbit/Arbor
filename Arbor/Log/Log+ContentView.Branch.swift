@@ -157,7 +157,7 @@ var logBranchesPanelView: some View {
             branches: branches,
             remoteBranches: remoteBranches,
             remotes: remotes,
-            tags: tags,
+            tags: tagWorkspace.tags,
             hasHeadCommit: headId != nil,
             syncStatuses: syncStatuses,
             protectedBranchPatterns: effectiveProtectedBranchPatterns,
