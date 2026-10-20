@@ -48,12 +48,12 @@ python3 scripts/audit-git-actions.py --json     # 机器读
 
 | id | 内容 | Arbor 现状 |
 |---|---|---|
-| `Git.Branches.Popup.Settings` | 弹窗齿轮：filter by action/repository、group by directory、track repos synchronously、show recent、show tags、resize | 6 个里 5 个有（见下方「小差异」） |
+| `Git.Branches.Popup.Settings` | 弹窗齿轮：filter by action/repository、group by directory、track repos synchronously、show recent、show tags、resize | 全部具备（filter by repository 同 IntelliJ 仅 multi-root 可见；resize 已补齐） |
 | `git.branches.popup.filter.by.separator` | 该菜单里的「带文字分隔符」，纯视觉 | 不需要 |
 | `Git.Log.Branches.Settings` | Log 分支面板齿轮：on-selection 行为、GroupBy.Directory、show tags | Arbor 的 `On selection` picker + 分组开关对应 |
 | `Git.Log.Branches.Grouping.Settings` | 分组子菜单（GroupBy.Repository） | 已覆盖 |
 | `Git.Stage.Ui.Settings` | Stage 工具窗齿轮：GroupBy、ToggleIgnored | 已覆盖（`Show Ignored` + 分组） |
-| `Git.Stage.Configure` | Stage 工具窗齿轮：Enable / Disable（关掉整个 Stage 工具窗） | 架构性差异：Arbor 的暂存视图常驻 |
+| `Git.Stage.Configure` | Stage 工具窗齿轮：Enable / Disable（切换提交模式） | 已接受差异：Arbor 固定单一 staging-area 提交模式 |
 | `Git.Branches.Popup.SpeedSearch` | 只是把 `EditorCut` / `EditorPaste` 挂进 speed search 上下文 | IDE 平台动作 |
 
 ### 3. 工具栏 / 上下文菜单（内容全是已覆盖动作）
@@ -79,19 +79,42 @@ python3 scripts/audit-git-actions.py --json     # 机器读
 | `Vcs.ToolbarWidget.ShareProject` | IDE 的 Share Project 小部件 | 平台功能 |
 | `Vcs.ToolbarWidget.CreateRepository.LocalHistory` | IDE 的 Show Project History | 平台功能 |
 
-## 容器里发现的小差异（非功能缺失）
+## 容器里的三项差异：核实后的结论
 
-1. **`git.branches.popup.filter.by.repository`**：单 root 的分支弹窗齿轮菜单里只有
-   `Show Recent Branches` / `Show Actions in Search Results` / `Show Tags` /
-   `Group by Directory` 四项；`filterByRepository` 只在 multi-root popover 里实现
-   （`Dialogs+Branch.swift` 的 `repositoryFilter`）。属于「能力有、单 root 菜单没暴露」。
-2. **`git.branches.popup.resize`**：IntelliJ 允许在弹窗里直接拖拽调整尺寸；Arbor 用
-   固定布局 + 分隔条，无同名动作。
-3. **`Git.Stage.Configure`（Enable/Disable）**：IntelliJ 可以整块关闭 Stage 工具窗，
-   Arbor 的暂存视图是常驻工作页，没有「关闭工具窗」概念。
-4. 其余未覆盖子动作全部是 IDE 平台 id（`Diff.ShowDiff`、`ChangesView.Refresh`、
-   `EditorCut`、`LocalHistory`、`ContextHelp`、`Vcs.UpdateProject` …），不属于
-   Git 功能范围。
+上一版这几条写得不够准，逐条核实后如下。
+
+### 1. `filter by repository` —— 不是缺口
+
+IntelliJ 的实现里这个开关是 `GitBranchesTreePopupFilterByRepository :
+GitBranchesPopupSettingsToggleAction(requireMultiRoot = true)`，单仓库项目里
+`isEnabledAndVisible` 直接为 false，弹出菜单里根本不显示。Arbor 的 multi-root
+popover 齿轮菜单已经有 `Toggle("Filter by Repository", isOn: $filterByRepository)`
+并且有 root 级过滤，单 root 弹窗不显示它——与 IntelliJ 一致。
+
+### 2. 弹窗 resize —— 已补齐
+
+IntelliJ 的 `GitBranchesPopupKeys.POPUP` 支持拖拽调整尺寸，齿轮菜单里的
+`Git.Branches.Popup.Resize`（"Restore Size"）只在用户改过尺寸后可点。
+
+Arbor 现在同样具备：
+
+- 单 root（默认 350×560）与 multi-root（默认 700×560）弹窗右下角都有拖拽手柄，
+  拖拽结果按项目持久化（`GitBranchesPopupSettings.popupSize/savePopupSize`）；
+- 齿轮菜单新增 `Restore Default Size`，尺寸等于默认值时禁用，与 IntelliJ 的
+  `popup.userResized` 判断同义。
+
+### 3. `Git.Stage.Enable` / `Git.Stage.Disable` —— 架构性差异，已接受
+
+这两个动作切换的是 `GitVcsApplicationSettings.isStagingAreaEnabled`，也就是
+**提交模式**：Staging Area 模式 ↔ Changelist 模式。Arbor 的 `Git.Commit.Stage`
+矩阵行已经记录了产品决策——固定 staging-area 交互，不造第二套提交模式。
+强行加一个"关闭暂存区"开关会绕开这条决策并影响提交主链路，因此按已接受差异
+保留，不实现假开关。
+
+### 4. 其余未覆盖子动作
+
+全部是 IDE 平台 id（`Diff.ShowDiff`、`ChangesView.Refresh`、`EditorCut`、
+`LocalHistory`、`ContextHelp`、`Vcs.UpdateProject` …），不属于 Git 功能范围。
 
 ## 判定口径
 

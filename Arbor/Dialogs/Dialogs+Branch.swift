@@ -943,6 +943,41 @@ func visibleBranchDirectoryRows(
     }
     return visible
 }
+/// 分支弹窗右下角的拖拽手柄。尺寸在松手时写回项目级设置，等价于 IntelliJ
+/// 分支弹窗的 resize；齿轮菜单里的 `Restore Default Size` 恢复默认。
+struct BranchesPopupResizeHandle: View {
+    @Binding var size: CGSize
+    let minimum: CGSize
+    let maximum: CGSize
+    let onCommit: (CGSize) -> Void
+
+    @State private var dragStart: CGSize?
+
+    var body: some View {
+        Image(systemName: "arrow.down.right")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.tertiary)
+            .padding(5)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let base = dragStart ?? size
+                        if dragStart == nil { dragStart = base }
+                        size = CGSize(
+                            width: min(max(base.width + value.translation.width, minimum.width), maximum.width),
+                            height: min(max(base.height + value.translation.height, minimum.height), maximum.height)
+                        )
+                    }
+                    .onEnded { _ in
+                        dragStart = nil
+                        onCommit(size)
+                    }
+            )
+            .help("Drag to resize the popup")
+    }
+}
+
 struct RebasedBranchesPopover: View {
     var projectPath: String? = nil
     let branches: [BranchInfo]
@@ -1031,6 +1066,7 @@ struct RebasedBranchesPopover: View {
     @State private var collapsedDirectoryGroups: Set<String> = []
     @State private var selectedBranchTargetID: String?
     @State private var favoriteReferenceIDs: Set<String> = []
+    @State private var popupSize = GitBranchesPopupSettings.defaultPopupSize
 
     private var filteredBranches: [BranchInfo] {
         branches.filter { branchSearchMatches($0.name, query: query) }
@@ -1145,6 +1181,12 @@ struct RebasedBranchesPopover: View {
                     Toggle("Show Actions in Search Results", isOn: $filterByAction)
                     Toggle("Show Tags", isOn: $showTags)
                     Toggle("Group by Directory", isOn: $groupByDirectory)
+                    Divider()
+                    Button("Restore Default Size") {
+                        popupSize = GitBranchesPopupSettings.defaultPopupSize
+                        GitBranchesPopupSettings.savePopupSize(popupSize, for: projectPath)
+                    }
+                    .disabled(popupSize == GitBranchesPopupSettings.defaultPopupSize)
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
@@ -1581,8 +1623,18 @@ struct RebasedBranchesPopover: View {
             .controlSize(.small)
         }
         .padding(12)
-        .frame(width: 350)
+        .frame(width: popupSize.width, height: popupSize.height)
+        .overlay(alignment: .bottomTrailing) {
+            BranchesPopupResizeHandle(
+                size: $popupSize,
+                minimum: CGSize(width: 320, height: 360),
+                maximum: CGSize(width: 1100, height: 1000)
+            ) { size in
+                GitBranchesPopupSettings.savePopupSize(size, for: projectPath)
+            }
+        }
         .onAppear {
+            popupSize = GitBranchesPopupSettings.popupSize(for: projectPath)
             favoriteReferenceIDs = GitBranchesPopupSettings.favorites(for: projectPath)
             selectedBranchTargetID = bestBranchTreeTargetID(
                 query: query,
@@ -3298,6 +3350,7 @@ struct MultiRootBranchesPopover: View {
     @State private var collapsedDirectoryGroups: Set<String> = []
     @State private var selectedBranchTargetID: String?
     @State private var selectedBranchTargetIDs: Set<String> = []
+    @State private var popupSize = GitBranchesPopupSettings.defaultMultiRootPopupSize
     @State private var branchSelectionAnchorID: String?
     @State private var selectedRemoteGroupIDs: Set<String> = []
     @State private var favoriteReferenceIDs: Set<String> = []
@@ -3776,6 +3829,12 @@ struct MultiRootBranchesPopover: View {
                             Text(option.title).tag(option)
                         }
                     }
+                    Divider()
+                    Button("Restore Default Size") {
+                        popupSize = GitBranchesPopupSettings.defaultMultiRootPopupSize
+                        GitBranchesPopupSettings.savePopupSize(popupSize, multiRoot: true, for: projectPath)
+                    }
+                    .disabled(popupSize == GitBranchesPopupSettings.defaultMultiRootPopupSize)
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
@@ -4005,9 +4064,19 @@ struct MultiRootBranchesPopover: View {
             }
         }
         .padding(12)
-        .frame(width: 700, height: 560)
+        .frame(width: popupSize.width, height: popupSize.height)
+        .overlay(alignment: .bottomTrailing) {
+            BranchesPopupResizeHandle(
+                size: $popupSize,
+                minimum: CGSize(width: 560, height: 420),
+                maximum: CGSize(width: 1400, height: 1200)
+            ) { size in
+                GitBranchesPopupSettings.savePopupSize(size, multiRoot: true, for: projectPath)
+            }
+        }
         .onExitCommand(perform: handleExitCommand)
         .onAppear {
+            popupSize = GitBranchesPopupSettings.popupSize(for: projectPath, multiRoot: true)
             favoriteReferenceIDs = GitBranchesPopupSettings.favorites(for: projectPath)
             rootSyncChoice = GitRootSyncSettings.choice(for: projectPath)
             selectedBranchTargetID = bestBranchTreeTargetID(

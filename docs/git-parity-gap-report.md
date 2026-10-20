@@ -11,9 +11,12 @@ toolbar / gear popup / 空锚点容器。它们引用的子动作要么已有独
 覆盖，要么是 IDE 平台动作（`Diff.ShowDiff`、`ChangesView.Refresh`、
 `EditorCut`、`LocalHistory`、`ContextHelp`、`Vcs.UpdateProject` 等）。
 
-容器里发现的真实差异只有三处呈现层小项：单 root 分支弹窗齿轮没有暴露
-`filter by repository`（multi-root popover 里有）、没有弹窗内 resize 动作、
-没有「关闭 Stage 工具窗」概念。详见 `docs/rebased-action-audit.md`。
+容器里的三项差异逐条核实后：`filter by repository` 在 IntelliJ 里是
+`requireMultiRoot = true`，单 root 本就不显示（Arbor multi-root popover 已有该
+开关，不是缺口）；弹窗 resize 已补齐——两个分支弹窗右下角可拖拽，尺寸按项目
+持久化，齿轮菜单提供 `Restore Default Size`；`Git.Stage.Enable/Disable` 切换的是
+提交模式，与 `Git.Commit.Stage` 行记录的产品决策冲突，按已接受差异保留。
+详见 `docs/rebased-action-audit.md`。
 
 ## 2026-08-29 V1 scope closure
 

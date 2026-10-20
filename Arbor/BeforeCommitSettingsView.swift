@@ -321,6 +321,51 @@ enum GitBranchesPopupSettings {
         defaults.set(value, forKey: key)
     }
 
+    // 弹窗尺寸：对应 IntelliJ 分支弹窗的可拖拽 resize + `Git.Branches.Popup.Resize`
+    // （Restore Size）。单 root 与多 root 弹窗默认尺寸不同，分开存。
+
+    static let popupWidthKey = "popupWidth"
+    static let popupHeightKey = "popupHeight"
+    static let multiRootPopupWidthKey = "multiRootPopupWidth"
+    static let multiRootPopupHeightKey = "multiRootPopupHeight"
+
+    static let defaultPopupSize = CGSize(width: 350, height: 560)
+    static let defaultMultiRootPopupSize = CGSize(width: 700, height: 560)
+
+    static func popupSize(
+        for projectPath: String?,
+        multiRoot: Bool = false,
+        defaults: UserDefaults = .standard
+    ) -> CGSize {
+        let fallback = multiRoot ? defaultMultiRootPopupSize : defaultPopupSize
+        let widthSetting = multiRoot ? multiRootPopupWidthKey : popupWidthKey
+        let heightSetting = multiRoot ? multiRootPopupHeightKey : popupHeightKey
+        guard let widthKey = key(widthSetting, for: projectPath),
+              let heightKey = key(heightSetting, for: projectPath),
+              defaults.object(forKey: widthKey) != nil,
+              defaults.object(forKey: heightKey) != nil else {
+            return fallback
+        }
+        return CGSize(
+            width: CGFloat(defaults.double(forKey: widthKey)),
+            height: CGFloat(defaults.double(forKey: heightKey))
+        )
+    }
+
+    static func savePopupSize(
+        _ size: CGSize,
+        multiRoot: Bool = false,
+        for projectPath: String?,
+        defaults: UserDefaults = .standard
+    ) {
+        let widthSetting = multiRoot ? multiRootPopupWidthKey : popupWidthKey
+        let heightSetting = multiRoot ? multiRootPopupHeightKey : popupHeightKey
+        guard let widthKey = key(widthSetting, for: projectPath),
+              let heightKey = key(heightSetting, for: projectPath) else { return }
+        defaults.set(Double(size.width), forKey: widthKey)
+        defaults.set(Double(size.height), forKey: heightKey)
+    }
+
     static func favorites(
         for projectPath: String?,
         defaults: UserDefaults = .standard
