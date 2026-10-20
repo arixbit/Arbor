@@ -1886,7 +1886,7 @@ var reflogHistoryContent: some View {
 
 var logGraphPanel: some View {
     logGraphBody
-        .onChange(of: logSelection) { _, id in
+        .onChange(of: logSelectionState.selection) { _, id in
             guard let id else { return }
             loadCommitDetailsIfNeeded(id)
         }
@@ -1947,22 +1947,22 @@ var logGraphPanel: some View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .confirmationDialog(
-        logNavigationChoosesParent ? "Select Parent Commit" : "Select Child Commit",
-        isPresented: $isLogNavigationChoicePresented,
+        logSelectionState.navigationChoosesParent ? "Select Parent Commit" : "Select Child Commit",
+        isPresented: $logSelectionState.isNavigationChoicePresented,
         titleVisibility: .visible
     ) {
-        ForEach(Array(pendingLogNavigationCommits.enumerated()), id: \.offset) { _, commit in
+        ForEach(Array(logSelectionState.pendingNavigationCommits.enumerated()), id: \.offset) { _, commit in
             Button(logNavigationChoiceTitle(commit)) {
                 choosePendingLogNavigationCommit(commit)
             }
         }
         Button("Cancel", role: .cancel) {
-            pendingLogNavigationCommits = []
-            pendingLogNavigationSelection = nil
-            pendingLogNavigationGeneration = nil
+            logSelectionState.pendingNavigationCommits = []
+            logSelectionState.pendingNavigationSelection = nil
+            logSelectionState.pendingNavigationGeneration = nil
         }
     } message: {
-        Text(logNavigationChoosesParent ? "Choose a parent commit" : "Choose a child commit")
+        Text(logSelectionState.navigationChoosesParent ? "Choose a parent commit" : "Choose a child commit")
     }
 }
 
@@ -1992,7 +1992,7 @@ var logCommandFilterBar: some View {
 @ViewBuilder
 var logGraphHistoryContent: some View {
     let isCommand = logList.viewMode == .command
-    let isFileHistory = logTabs.first { $0.id == currentLogTabID }?.historyPath != nil
+    let isFileHistory = logSelectionState.tabs.first { $0.id == currentLogTabID }?.historyPath != nil
     let entries = isCommand ? logRuntime.commandEntries : logList.entries
     let isLoading = isCommand ? logRuntime.isLoadingCommand : logList.isLoading
     if isLoading && entries.isEmpty {
@@ -2028,8 +2028,8 @@ var logGraphHistoryContent: some View {
             }
             LogGraphView(
                 commits: entries,
-                selection: $logSelection,
-                selectedIDs: $logSelectedIDs,
+                selection: $logSelectionState.selection,
+                selectedIDs: $logSelectionState.selectedIDs,
                 commitIdentity: logCommitIdentity,
                 compactReferences: logCompactReferences,
                 showCommitColumns: logShowCommitColumns,
@@ -2534,7 +2534,7 @@ var logGraphGearMenu: some View {
         Button("Go to Child") { selectChildLogCommit() }
             .disabled(selectedCommit == nil)
         Button("Copy Selected Revision IDs") { copySelectedLogIDs() }
-            .disabled(logSelectedIDs.isEmpty)
+            .disabled(logSelectionState.selectedIDs.isEmpty)
         Divider()
         Menu("More Log Actions") {
             Button("Show Git Log Command…") {
@@ -2546,7 +2546,7 @@ var logGraphGearMenu: some View {
             Button("Create Patch…") {
                 if let selectedCommit { createPatchFromLog(selectedCommit) }
             }
-            .disabled(selectedCommit == nil || logSelectedIDs.count > 1)
+            .disabled(selectedCommit == nil || logSelectionState.selectedIDs.count > 1)
             .help("Create a patch for one selected commit")
             Button("Reset Selected Revisions…") {
                 resetFromLog(selectedLogCommits)
@@ -2878,8 +2878,8 @@ HStack(spacing: 10) {
         // Tags is its own Log sub-view. Do not leave the last History
         // commit rendered in the inspector while the left workspace
         // has already switched to tag management.
-        logSelection = nil
-        logSelectedIDs = []
+        logSelectionState.selection = nil
+        logSelectionState.selectedIDs = []
     }
 }
 .onChange(of: logRuntime.sortModeRaw) { _, _ in
@@ -2918,9 +2918,9 @@ var logGraphBody: some View {
 VStack(spacing: 0) {
     logGraphHeader
 
-    if logTabs.count > 1 {
+    if logSelectionState.tabs.count > 1 {
         LogTabBar(
-            tabs: logTabs,
+            tabs: logSelectionState.tabs,
             activeID: currentLogTabID,
             onSelect: switchLogTab,
             onClose: closeLogTab,

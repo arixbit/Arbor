@@ -13,6 +13,9 @@ struct ContentView: View {
 
     /// Log 运行期数据（命令日志 / 签名 / 多 root 聚合 / 图命令）。
     @StateObject var logRuntime: LogRuntimeState
+
+    /// Log 的选中 / 详情 / tab / 导航状态。
+    @StateObject var logSelectionState: LogSelectionState
     let externalLogWindow: Bool
     let initialExternalLogRootPaths: Set<String>
     let externalLogProviderSession: ExternalLogProviderSession?
@@ -538,21 +541,12 @@ struct ContentView: View {
     @State var selectionModePath: String?
     // 日志模式
     @State var hasMoreLogCommand = true
-    @State var logTabs: [LogTabDescriptor] = [LogTabDescriptor()]
-    @State var activeLogTabID: UUID?
-    @State var logSelection: String?
     /// IntelliJ shows an action-group popup when a commit has multiple
     /// parents or children. Keep the resolved records separate from the
     /// paged graph so the popup can include commits outside the viewport.
-    @State var pendingLogNavigationCommits: [CommitInfo] = []
-    @State var isLogNavigationChoicePresented = false
-    @State var logNavigationChoosesParent = false
-    @State var pendingLogNavigationSelection: String?
-    @State var pendingLogNavigationGeneration: Int?
     /// IntelliJ's graph table is a real multi-selection table. Keep the
-    /// active row in `logSelection` for the details panel, while this set
+    /// active row in `logSelectionState.selection` for the details panel, while this set
     /// preserves Cmd/Shift selections for toolbar and future batch actions.
-    @State var logSelectedIDs: Set<String> = []
     @AppStorage("arbor.log.recentPathFilters.v1") var logRecentPathFiltersRaw = ""
     @AppStorage("arbor.log.visibleRootPaths.v1") var logVisibleRootPathsPersistedRaw = ""
     /// Phase 5:log 加载代际计数——切换条件后旧请求结果直接丢弃(取消行为)。
@@ -564,7 +558,6 @@ struct ContentView: View {
     /// A commit referenced by a notification or reflog may not be in the
     /// currently visible history page. Keep that detail record separate from
     /// the paged graph so the inspector never falls back to an empty pane.
-    @State var logDetailCommit: CommitInfo?
     @State var reflogDetailCommit: CommitInfo?
     @State var reflogDetailCommits: [CommitInfo] = []
     @State var revisionBrowserCommit: CommitInfo?
@@ -593,7 +586,6 @@ struct ContentView: View {
     @State var gitHooksFeedback: String?
     @State var lfsTrackedPaths: Set<String> = []
     @State var lfsPointerPaths: Set<String> = []
-    @State var logDetailLoadTask: Task<Void, Never>?
     @State var reflogDetailLoadTask: Task<Void, Never>?
     @State var compareLoadTask: Task<Void, Never>?
     /// REPO-001:多 root 发现与聚合结果
@@ -757,7 +749,6 @@ struct ContentView: View {
     /// Per-root persisted Log Revert/Cherry-pick recovery notices. This is
     /// separate from operation_state(): Git may have completed or never
     /// started the sequencer while the app was being terminated.
-    @State var logApplyRecoveryNotificationFingerprints: [String: String] = [:]
     @State var resolvedConflictPaths: [String] = []
     @State var operationFeedback: String?
     /// REBASE-001 todo 编辑器状态
@@ -1147,8 +1138,10 @@ struct ContentView: View {
         if externalLogWindow {
             restoredExternalTabs.forEach { _ = externalLogUIManager?.registerUI($0.id) }
         }
-        _logTabs = State(initialValue: externalLogWindow ? restoredExternalTabs : [LogTabDescriptor()])
-        _activeLogTabID = State(initialValue: externalLogWindow ? restoredActiveTabID : nil)
+        _logSelectionState = StateObject(wrappedValue: LogSelectionState(
+            tabs: externalLogWindow ? restoredExternalTabs : [LogTabDescriptor()],
+            activeTabID: externalLogWindow ? restoredActiveTabID : nil
+        ))
         _projectPath = State(initialValue: recoveredPath)
         _path = State(initialValue: recoveredPath ?? "")
         _logBranchesSelectionActionRaw = State(initialValue: GitBranchesPopupSettings.stringValue(
@@ -1334,19 +1327,19 @@ struct ContentView: View {
         )
     }
     var selectedCommit: CommitInfo? {
-        guard let logSelection else { return nil }
+        guard let selectedID = logSelectionState.selection else { return nil }
         let visibleEntries = logList.viewMode == .command ? logRuntime.commandEntries : logList.entries
         return visibleEntries.first {
             let identity = logCommitIdentity($0)
-            return identity == logSelection
-                || identity.hasPrefix(logSelection)
-                || logSelection.hasPrefix(identity)
+            return identity == selectedID
+                || identity.hasPrefix(selectedID)
+                || selectedID.hasPrefix(identity)
         }
-            ?? (logDetailCommit.map {
+            ?? (logSelectionState.detailCommit.map {
                 let identity = logCommitIdentity($0)
-                return identity == logSelection
-                    || identity.hasPrefix(logSelection)
-                    || logSelection.hasPrefix(identity) ? $0 : nil
+                return identity == selectedID
+                    || identity.hasPrefix(selectedID)
+                    || selectedID.hasPrefix(identity) ? $0 : nil
             } ?? nil)
     }
     var selectedTreeChange: TreeChange? {
@@ -2099,8 +2092,8 @@ struct ContentView: View {
             commitPreviewPath = nil
             commitPreviewVisible = false
             commitPreviewThreeVersions = false
-            logSelection = id
-            logSelectedIDs = [id]
+            logSelectionState.selection = id
+            logSelectionState.selectedIDs = [id]
             loadCommitDetailsIfNeeded(id)
         }
         .onReceive(NotificationCenter.default.publisher(for: .arborOpenMultiRootConflictResolver)) { notification in
@@ -3636,7 +3629,7 @@ struct ContentView: View {
         fileTreeDiffRequest = nil
         selection = nil
         selectionModePath = nil
-        logSelection = nil
+        logSelectionState.selection = nil
         fileSelectionVersion = .local
         fileSelection = normalizedPath
         fileContentBlameRequestID &+= 1
@@ -4187,7 +4180,7 @@ struct ContentView: View {
                                 if value != nil {
                                     selection = nil
                                     selectionModePath = nil
-                                    logSelection = nil
+                                    logSelectionState.selection = nil
                                 }
                             }
                         ),
@@ -4284,7 +4277,7 @@ struct ContentView: View {
                                 if value != nil {
                                         selection = nil
                                         selectionModePath = nil
-                                        logSelection = nil
+                                        logSelectionState.selection = nil
                                     }
                                 }
                             ),

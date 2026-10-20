@@ -48,8 +48,8 @@ func navigateLogToBranch(rootPath: String?, branch: String) {
         navigationHeadID = repo.flatMap { try? $0.revisionCommitId(revision: branch) }
     }
     setLogStartRevision(branch)
-    logSelection = navigationHeadID
-    logSelectedIDs = navigationHeadID.map { [$0] } ?? []
+    logSelectionState.selection = navigationHeadID
+    logSelectionState.selectedIDs = navigationHeadID.map { [$0] } ?? []
     logList.viewMode = .graph
     loadLog()
 }

@@ -56,8 +56,8 @@ func openRewordCommit(rootPath: String, commitID: String) {
     logRuntime.aggregateRootPaths = []
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
-    logSelection = nil
-    logSelectedIDs = []
+    logSelectionState.selection = nil
+    logSelectionState.selectedIDs = []
     logList.viewMode = .graph
     toolWindowMode = .log
     toolWindowExpanded = true
@@ -109,9 +109,9 @@ func openRewordCommit(rootPath: String, commitID: String) {
             }
             await MainActor.run {
                 guard self.isActiveLogRepository(rootRepo) else { return }
-                self.logSelection = commit.id
-                self.logSelectedIDs = [commit.id]
-                self.logDetailCommit = commit
+                self.logSelectionState.selection = commit.id
+                self.logSelectionState.selectedIDs = [commit.id]
+                self.logSelectionState.detailCommit = commit
                 self.logRewordCommit = commit
                 self.logRewordMessage = commit.messageBody.isEmpty
                     ? commit.summary
@@ -149,19 +149,19 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
            let identity = logCommitIdentity($0)
            return identity == normalized || identity.hasPrefix(normalized) || normalized.hasPrefix(identity)
        }) {
-        logDetailLoadTask?.cancel()
-        logDetailCommit = visible
+        logSelectionState.detailLoadTask?.cancel()
+        logSelectionState.detailCommit = visible
         return
     }
     if forReflog, reflogDetailCommit?.id == normalized { return }
-    logDetailLoadTask?.cancel()
+    logSelectionState.detailLoadTask?.cancel()
     if forReflog {
         reflogDetailCommit = nil
     } else {
-        logDetailCommit = nil
+        logSelectionState.detailCommit = nil
     }
     let expectedReflogSelection = forReflog ? reflogSelection : nil
-    let expectedLogSelection = forReflog ? nil : logSelection
+    let expectedLogSelection = forReflog ? nil : logSelectionState.selection
     let tabID = currentLogTabID
     let task = Task.detached(priority: .userInitiated) {
         do {
@@ -188,7 +188,7 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
                           selected == normalized
                             || selected.hasPrefix(normalized)
                             || normalized.hasPrefix(selected) {
-                    self.logDetailCommit = commit
+                    self.logSelectionState.detailCommit = commit
                 }
             }
         } catch {
@@ -197,7 +197,7 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
             // error screen.
         }
     }
-    logDetailLoadTask = task
+    logSelectionState.detailLoadTask = task
 }
 
 /// Vcs.Log.GoToParent / GoToChild: keep navigation inside the graph table so
@@ -225,7 +225,7 @@ func selectParentLogCommit() {
         guard !Task.isCancelled else { return }
         await MainActor.run {
             guard self.logList.generation == expectedGeneration,
-                  self.logSelection == expectedSelection,
+                  self.logSelectionState.selection == expectedSelection,
                   self.isActiveLogNavigationRepository(repository, rootPath: commit.repositoryPath) else {
                 return
             }
@@ -237,11 +237,11 @@ func selectParentLogCommit() {
                 )
                 return
             }
-            self.pendingLogNavigationCommits = parents
-            self.logNavigationChoosesParent = true
-            self.pendingLogNavigationSelection = expectedSelection
-            self.pendingLogNavigationGeneration = expectedGeneration
-            self.isLogNavigationChoicePresented = true
+            self.logSelectionState.pendingNavigationCommits = parents
+            self.logSelectionState.navigationChoosesParent = true
+            self.logSelectionState.pendingNavigationSelection = expectedSelection
+            self.logSelectionState.pendingNavigationGeneration = expectedGeneration
+            self.logSelectionState.isNavigationChoicePresented = true
         }
     }
 }
@@ -257,7 +257,7 @@ func selectChildLogCommit() {
         guard !Task.isCancelled else { return }
         await MainActor.run {
             guard self.logList.generation == expectedGeneration,
-                  self.logSelection == expectedSelection,
+                  self.logSelectionState.selection == expectedSelection,
                   self.isActiveLogNavigationRepository(repository, rootPath: commit.repositoryPath) else {
                 return
             }
@@ -280,31 +280,31 @@ func selectChildLogCommit() {
             if children.count == 1 {
                 self.selectLogRevision(self.logCommitIdentity(children[0]))
             } else {
-                self.pendingLogNavigationCommits = children
-                self.logNavigationChoosesParent = false
-                self.pendingLogNavigationSelection = expectedSelection
-                self.pendingLogNavigationGeneration = expectedGeneration
-                self.isLogNavigationChoicePresented = true
+                self.logSelectionState.pendingNavigationCommits = children
+                self.logSelectionState.navigationChoosesParent = false
+                self.logSelectionState.pendingNavigationSelection = expectedSelection
+                self.logSelectionState.pendingNavigationGeneration = expectedGeneration
+                self.logSelectionState.isNavigationChoicePresented = true
             }
         }
     }
 }
 
 func choosePendingLogNavigationCommit(_ commit: CommitInfo) {
-    guard isLogNavigationChoicePresented,
-          pendingLogNavigationSelection == logSelection,
-          pendingLogNavigationGeneration == logList.generation else {
-        isLogNavigationChoicePresented = false
-        pendingLogNavigationCommits = []
-        pendingLogNavigationSelection = nil
-        pendingLogNavigationGeneration = nil
+    guard logSelectionState.isNavigationChoicePresented,
+          logSelectionState.pendingNavigationSelection == logSelectionState.selection,
+          logSelectionState.pendingNavigationGeneration == logList.generation else {
+        logSelectionState.isNavigationChoicePresented = false
+        logSelectionState.pendingNavigationCommits = []
+        logSelectionState.pendingNavigationSelection = nil
+        logSelectionState.pendingNavigationGeneration = nil
         return
     }
     let identity = logCommitIdentity(commit)
-    isLogNavigationChoicePresented = false
-    pendingLogNavigationCommits = []
-    pendingLogNavigationSelection = nil
-    pendingLogNavigationGeneration = nil
+    logSelectionState.isNavigationChoicePresented = false
+    logSelectionState.pendingNavigationCommits = []
+    logSelectionState.pendingNavigationSelection = nil
+    logSelectionState.pendingNavigationGeneration = nil
     selectLogRevision(identity)
 }
 
@@ -1177,7 +1177,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                 self.lastIndexRevision = staging?.indexRevision
                 self.branches = branchList
                 self.syncStatuses = syncStatuses
-                self.logDetailCommit = nil
+                self.logSelectionState.detailCommit = nil
                 if self.toolWindowMode == .log {
                     // The Log workspace stays live beside Commit in Rebased;
                     // committing from the left pane must immediately move
@@ -1653,7 +1653,7 @@ func dropSelectedCommitsFromLog(_ commits: [CommitInfo], repository repo: Reposi
                         notificationGroup: .standard
                     )
                 }
-                self.logSelection = nil
+                self.logSelectionState.selection = nil
                 self.refreshAll(showFeedback: false)
                 self.loadLog()
             }

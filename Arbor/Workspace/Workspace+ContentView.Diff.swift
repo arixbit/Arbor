@@ -404,7 +404,7 @@ func openTreeComparisonTab(
     projectPanelExpanded = false
     showBranchesPopover = false
     saveCurrentLogTab()
-    if let existing = logTabs.first(where: {
+    if let existing = logSelectionState.tabs.first(where: {
         $0.viewMode == .compare
             && $0.rootPath == tab.rootPath
             && $0.compareRepositoryPath == tab.compareRepositoryPath
@@ -438,7 +438,7 @@ func openBranchComparisonTab(rootPath: String, first: String, second: String) {
     projectPanelExpanded = false
     showBranchesPopover = false
     saveCurrentLogTab()
-    if let existing = logTabs.first(where: {
+    if let existing = logSelectionState.tabs.first(where: {
         $0.viewMode == .compareBranches
             && $0.rootPath == tab.rootPath
             && $0.compareRepositoryPath == tab.compareRepositoryPath

@@ -90,8 +90,8 @@ func applyLogBranchFilters(_ filters: [LogRootBranchFilter]) {
     logRuntime.activeRemotes = []
     logList.startRevision = ""
     logList.startRevisions = []
-    logSelection = nil
-    logSelectedIDs = []
+    logSelectionState.selection = nil
+    logSelectionState.selectedIDs = []
     logList.viewMode = .graph
     loadLog()
 }
@@ -143,8 +143,8 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     }
     logList.entries = []
     logList.isShowingCachedSnapshot = false
-    logSelection = tab.selection
-    logSelectedIDs = tab.selectedIDs
+    logSelectionState.selection = tab.selection
+    logSelectionState.selectedIDs = tab.selectedIDs
     logList.pageCursor = nil
     reflogEntries = []
     let restoredReflogRoot = tab.reflogRootPath
@@ -153,7 +153,7 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     reflogRootRepo = nil
     reflogSelection = tab.reflogSelection
     reflogSelectedIDs = Set(tab.reflogSelectedIDs ?? [])
-    logDetailCommit = nil
+    logSelectionState.detailCommit = nil
     reflogDetailCommit = nil
     reflogDetailCommits = []
     reflogDetailLoadTask?.cancel()
@@ -856,8 +856,8 @@ func runLogApplyOperation(
             }.joined(separator: "\n")
             self.commitFeedback = operation.title
             self.feedbackCenter.success(operation.title, detail: details)
-            self.logSelection = nil
-            self.logSelectedIDs = []
+            self.logSelectionState.selection = nil
+            self.logSelectionState.selectedIDs = []
             self.refreshAll(showFeedback: false)
         }
     }
@@ -968,8 +968,8 @@ func applyExternalLogRootSelection(_ requestedPaths: Set<String>) {
     logRuntime.aggregateRootPaths = next
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
-    logSelection = nil
-    logSelectedIDs = []
+    logSelectionState.selection = nil
+    logSelectionState.selectedIDs = []
     logList.error = nil
     logList.viewMode = .graph
     loadLog()
@@ -1075,14 +1075,14 @@ func publishLogApplyRecoveryNoticeIfNeeded(rootPath: String) -> Bool {
           !recovery.commitIDs.isEmpty,
           !recovery.initialHead.isEmpty else {
         feedbackCenter.expire(notificationID: logApplyRecoveryNotificationID(rootPath: normalizedRoot))
-        logApplyRecoveryNotificationFingerprints.removeValue(
+        logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
             forKey: operationRecoveryNotificationRootKey(normalizedRoot)
         )
         return false
     }
     let key = operationRecoveryNotificationRootKey(normalizedRoot)
     let fingerprint = logApplyRecoveryFingerprint(recovery)
-    guard logApplyRecoveryNotificationFingerprints[key] != fingerprint else { return true }
+    guard logSelectionState.applyRecoveryNotificationFingerprints[key] != fingerprint else { return true }
     let title = logApplyRecoveryTitle(recovery.operation)
     if recovery.preserveLocalChanges, !recovery.affectedPaths.isEmpty {
         feedbackCenter.error(
@@ -1105,7 +1105,7 @@ func publishLogApplyRecoveryNoticeIfNeeded(rootPath: String) -> Bool {
             localized: false
         )
     }
-    logApplyRecoveryNotificationFingerprints[key] = fingerprint
+    logSelectionState.applyRecoveryNotificationFingerprints[key] = fingerprint
     return true
 }
 
@@ -1170,7 +1170,7 @@ func retryLogApplyRecovery(
     guard targetRepo.headCommitId() == recovery.initialHead else {
         clearLogApplyRecovery(repositoryPath: normalizedRoot)
         feedbackCenter.expire(notificationID: logApplyRecoveryNotificationID(rootPath: normalizedRoot))
-        logApplyRecoveryNotificationFingerprints.removeValue(
+        logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
             forKey: operationRecoveryNotificationRootKey(normalizedRoot)
         )
         feedbackCenter.warning(
@@ -1202,7 +1202,7 @@ func retryLogApplyRecovery(
             )
             clearLogApplyRecovery(repositoryPath: normalizedRoot)
             await MainActor.run {
-                self.logApplyRecoveryNotificationFingerprints.removeValue(
+                self.logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
                     forKey: operationRecoveryNotificationRootKey(normalizedRoot)
                 )
                 self.feedbackCenter.expire(

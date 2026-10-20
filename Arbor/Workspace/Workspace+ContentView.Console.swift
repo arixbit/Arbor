@@ -1697,7 +1697,7 @@ func doOperationAbort() {
                 if !operationStillActive {
                     for recovery in logApplyRecoveriesToCancel {
                         clearLogApplyRecovery(repositoryPath: recovery.rootPath)
-                        self.logApplyRecoveryNotificationFingerprints.removeValue(
+                        self.logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
                             forKey: operationRecoveryNotificationRootKey(recovery.rootPath)
                         )
                         self.feedbackCenter.expire(

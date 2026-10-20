@@ -81,7 +81,7 @@ func persistExternalLogTabs() {
     guard externalLogWindow, let persistenceKey = externalLogTabsPersistenceKey else { return }
 
     let snapshot = currentLogTabSnapshot()
-    var tabs = logTabs
+    var tabs = logSelectionState.tabs
     if let index = tabs.firstIndex(where: { $0.id == snapshot.id }) {
         tabs[index] = snapshot
     } else {
@@ -114,8 +114,8 @@ func disposeExternalLogSession() {
     logRuntime.signatureLoadTask = nil
     logRuntime.commandTask?.cancel()
     logRuntime.commandTask = nil
-    logDetailLoadTask?.cancel()
-    logDetailLoadTask = nil
+    logSelectionState.detailLoadTask?.cancel()
+    logSelectionState.detailLoadTask = nil
     reflogDetailLoadTask?.cancel()
     reflogDetailLoadTask = nil
     reflogLoadTask?.cancel()
@@ -153,7 +153,7 @@ func disposeExternalLogSession() {
 }
 
 var currentLogTabID: UUID {
-    activeLogTabID ?? logTabs.first?.id ?? UUID()
+    logSelectionState.activeTabID ?? logSelectionState.tabs.first?.id ?? UUID()
 }
 
 /// IntelliJ's branch filter accepts multiple heads. Keep the legacy singular
@@ -240,8 +240,8 @@ func showLogRevisionRanges(_ persistedRanges: [PersistedLogRevisionRange]) {
         return $0.newRevision < $1.newRevision
     }
     saveCurrentLogTab()
-    if let existing = logTabs.first(where: { $0.updateInfoRanges == persistedRanges }) {
-        activeLogTabID = existing.id
+    if let existing = logSelectionState.tabs.first(where: { $0.updateInfoRanges == persistedRanges }) {
+        logSelectionState.activeTabID = existing.id
         applyLogTab(existing)
         persistExternalLogTabs()
         toolWindowMode = .log
@@ -287,8 +287,8 @@ func navigateLogToRevision(rootPath: String, revision: String) {
     logRuntime.activeRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
     logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
     setLogStartRevisions([])
-    logSelection = nil
-    logSelectedIDs = []
+    logSelectionState.selection = nil
+    logSelectionState.selectedIDs = []
     logList.viewMode = .graph
     loadLog()
     Task { @MainActor in
@@ -309,10 +309,10 @@ func logStartRevisionBinding(for revision: String) -> Binding<Bool> {
 }
 
 func currentLogTabSnapshot() -> LogTabDescriptor {
-    let existingTab = logTabs.first(where: { $0.id == currentLogTabID })
+    let existingTab = logSelectionState.tabs.first(where: { $0.id == currentLogTabID })
     return LogTabDescriptor(
         id: currentLogTabID,
-        title: logTabs.first(where: { $0.id == currentLogTabID })?.title ?? "Log",
+        title: logSelectionState.tabs.first(where: { $0.id == currentLogTabID })?.title ?? "Log",
         rootPath: (logList.activeRootPath ?? existingTab?.rootPath).map(canonicalExternalLogPath),
         historyPath: existingTab?.historyPath,
         updateInfoRanges: existingTab?.updateInfoRanges,
@@ -344,8 +344,8 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
         compareSecondFilter: logList.viewMode == .compareBranches
             ? branchCompareSecondFilter
             : nil,
-        selection: logSelection,
-        selectedIDs: logSelectedIDs,
+        selection: logSelectionState.selection,
+        selectedIDs: logSelectionState.selectedIDs,
         reflogRootPath: reflogRootPath.map(canonicalExternalLogPath),
         reflogSelection: reflogSelection,
         reflogSelectedIDs: persistedReflogSelectionIDs(
@@ -357,12 +357,12 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
 
 func saveCurrentLogTab() {
     let snapshot = currentLogTabSnapshot()
-    if let index = logTabs.firstIndex(where: { $0.id == snapshot.id }) {
-        logTabs[index] = snapshot
+    if let index = logSelectionState.tabs.firstIndex(where: { $0.id == snapshot.id }) {
+        logSelectionState.tabs[index] = snapshot
     } else {
-        logTabs.insert(snapshot, at: 0)
+        logSelectionState.tabs.insert(snapshot, at: 0)
     }
-    activeLogTabID = snapshot.id
+    logSelectionState.activeTabID = snapshot.id
     if externalLogWindow {
         persistExternalLogTabs()
     }
@@ -395,8 +395,8 @@ func appendLogTabAndLoad(_ tab: LogTabDescriptor) {
        !externalLogUIManager.registerUI(tab.id) {
         return
     }
-    logTabs.append(tab)
-    activeLogTabID = tab.id
+    logSelectionState.tabs.append(tab)
+    logSelectionState.activeTabID = tab.id
     applyLogTab(tab)
     persistExternalLogTabs()
     loadActiveLogTab(tab)
@@ -406,16 +406,16 @@ func openAnotherLogTab() {
     saveCurrentLogTab()
     var tab = currentLogTabSnapshot()
     tab.id = UUID()
-    tab.title = "Log \(logTabs.count + 1)"
+    tab.title = "Log \(logSelectionState.tabs.count + 1)"
     appendLogTabAndLoad(tab)
 }
 
 func switchLogTab(_ id: UUID) {
     guard id != currentLogTabID,
-          let tab = logTabs.first(where: { $0.id == id }) else { return }
+          let tab = logSelectionState.tabs.first(where: { $0.id == id }) else { return }
     let previousMode = logList.viewMode
     saveCurrentLogTab()
-    activeLogTabID = id
+    logSelectionState.activeTabID = id
     applyLogTab(tab)
     persistExternalLogTabs()
     if tab.viewMode == previousMode,
@@ -431,20 +431,20 @@ func switchLogTab(_ id: UUID) {
 }
 
 func closeLogTab(_ id: UUID) {
-    guard logTabs.count > 1,
-          let index = logTabs.firstIndex(where: { $0.id == id }) else { return }
+    guard logSelectionState.tabs.count > 1,
+          let index = logSelectionState.tabs.firstIndex(where: { $0.id == id }) else { return }
     let closingActive = id == currentLogTabID
     if closingActive { saveCurrentLogTab() }
     externalLogUIManager?.disposeUI(id)
-    logTabs.remove(at: index)
+    logSelectionState.tabs.remove(at: index)
     if !closingActive {
         persistExternalLogTabs()
         return
     }
     let previousMode = logList.viewMode
-    let replacementIndex = min(index, logTabs.count - 1)
-    let replacement = logTabs[replacementIndex]
-    activeLogTabID = replacement.id
+    let replacementIndex = min(index, logSelectionState.tabs.count - 1)
+    let replacement = logSelectionState.tabs[replacementIndex]
+    logSelectionState.activeTabID = replacement.id
     applyLogTab(replacement)
     persistExternalLogTabs()
     if replacement.viewMode == previousMode,
@@ -542,8 +542,8 @@ func runLogCommand(reset: Bool = true) {
     logRuntime.isLoadingCommand = true
     if reset {
         logRuntime.commandEntries = []
-        logSelectedIDs = []
-        logSelection = nil
+        logSelectionState.selectedIDs = []
+        logSelectionState.selection = nil
     }
     hasMoreLogCommand = !commandHasExplicitLimit
     logRuntime.commandError = nil
@@ -650,8 +650,8 @@ func selectReflogRoot(_ rootPath: String, preservingSelection: Bool = false) {
     logRuntime.aggregateLoadedCounts = [:]
     logList.startRevision = ""
     logList.startRevisions = []
-    logSelection = nil
-    logSelectedIDs = []
+    logSelectionState.selection = nil
+    logSelectionState.selectedIDs = []
 
     if normalizedPath == primaryPath {
         logList.activeRootPath = nil
@@ -880,7 +880,7 @@ func setLogPathFilterSelections(
 ) {
     let normalized = normalizedLogPathFilterSelections(selections)
     if let projectPath,
-       logTabs.first(where: { $0.id == currentLogTabID })?.updateInfoRanges != nil {
+       logSelectionState.tabs.first(where: { $0.id == currentLogTabID })?.updateInfoRanges != nil {
         GitUpdateInfoPathFilterSettings.save(
             logPathFilterEditorText(normalized),
             roots: logStructureFilterRootPaths,
@@ -1140,7 +1140,7 @@ func loadLog(reset: Bool = true) {
         logList.isLoading = true
         logList.isLoadingMore = false
         logList.isShowingCachedSnapshot = false
-        logDetailCommit = nil
+        logSelectionState.detailCommit = nil
         reflogDetailCommit = nil
         reflogDetailCommits = []
         reflogSelectedIDs = []
@@ -1211,8 +1211,8 @@ func loadLog(reset: Bool = true) {
                     self.logList.entries = restoredGraph.commits
                     self.logList.pageCursor = restoredGraph.cursor
                     self.logList.hasMore = restoredGraph.hasMore
-                    self.logSelection = restoredGraph.commits.first?.id
-                    self.logSelectedIDs = restoredGraph.commits.first.map { [$0.id] } ?? []
+                    self.logSelectionState.selection = restoredGraph.commits.first?.id
+                    self.logSelectionState.selectedIDs = restoredGraph.commits.first.map { [$0.id] } ?? []
                     self.logList.isShowingCachedSnapshot = true
                 }
             } else if reset,
@@ -1283,8 +1283,8 @@ func loadLog(reset: Bool = true) {
                       self.externalLogTabIsAlive(tabID),
                       self.isActiveLogRepository(repo) else { return } // 过期结果丢弃
                 if reset {
-                    let previousSelection = self.logSelection
-                    let previousSelections = self.logSelectedIDs
+                    let previousSelection = self.logSelectionState.selection
+                    let previousSelections = self.logSelectionState.selectedIDs
                     var restoredEntries = restoredGraph?.commits ?? []
                     let restoredIDs = Set(restoredEntries.map(\.id))
                     restoredEntries.append(contentsOf: log.filter { !restoredIDs.contains($0.id) })
@@ -1301,18 +1301,18 @@ func loadLog(reset: Bool = true) {
                         }
                     }
                     if !retainedSelections.isEmpty {
-                        self.logSelectedIDs = Set(retainedSelections.map(\.id))
-                        self.logSelection = retainedSelections.first(where: { $0.id == previousSelection })?.id
+                        self.logSelectionState.selectedIDs = Set(retainedSelections.map(\.id))
+                        self.logSelectionState.selection = retainedSelections.first(where: { $0.id == previousSelection })?.id
                             ?? retainedSelections.first?.id
                     } else if let selectedID = matchingLogCommitID(
                         requestedID: previousSelection,
                         in: restoredEntries
                     ) {
-                        self.logSelection = selectedID
-                        self.logSelectedIDs = [selectedID]
+                        self.logSelectionState.selection = selectedID
+                        self.logSelectionState.selectedIDs = [selectedID]
                     } else {
-                        self.logSelection = restoredEntries.first?.id
-                        self.logSelectedIDs = restoredEntries.first.map { Set([$0.id]) } ?? []
+                        self.logSelectionState.selection = restoredEntries.first?.id
+                        self.logSelectionState.selectedIDs = restoredEntries.first.map { Set([$0.id]) } ?? []
                     }
                     self.logList.pageCursor = log.last?.id ?? restoredGraph?.cursor
                 } else {
@@ -1495,7 +1495,7 @@ func loadAggregatedLog(reset: Bool) {
         logList.isShowingCachedSnapshot = false
         logRuntime.aggregateLoadedCounts = [:]
         logRuntime.aggregatePageCursors = [:]
-        logDetailCommit = nil
+        logSelectionState.detailCommit = nil
         logRuntime.aggregateRepositories = [:]
         logCherryPickedCommitIDs = []
         logCherryPickComparisonReady = false
@@ -1668,8 +1668,8 @@ func loadAggregatedLog(reset: Bool) {
                     self.logRuntime.aggregateRepositories = cachedRepositoriesSnapshot
                     self.logRuntime.aggregateLoadedCounts = cachedCountsSnapshot
                     self.logRuntime.aggregatePageCursors = cachedCursorsSnapshot
-                    self.logSelection = cachedEntriesSnapshot.first.map(self.logCommitIdentity)
-                    self.logSelectedIDs = cachedEntriesSnapshot.first.map { [self.logCommitIdentity($0)] } ?? []
+                    self.logSelectionState.selection = cachedEntriesSnapshot.first.map(self.logCommitIdentity)
+                    self.logSelectionState.selectedIDs = cachedEntriesSnapshot.first.map { [self.logCommitIdentity($0)] } ?? []
                     self.logList.hasMore = cachedHasMoreSnapshot
                     self.logList.isShowingCachedSnapshot = true
                 }
@@ -1781,8 +1781,8 @@ func loadAggregatedLog(reset: Bool) {
                 for commit in deduplicated {
                     counts[commit.repositoryPath ?? "", default: 0] += 1
                 }
-                let previousSelection = self.logSelection
-                let previousSelections = self.logSelectedIDs
+                let previousSelection = self.logSelectionState.selection
+                let previousSelections = self.logSelectionState.selectedIDs
                 self.logList.entries = deduplicated
                 self.logRuntime.aggregateRepositories = repositories
                 self.logRuntime.aggregateLoadedCounts = counts
@@ -1794,14 +1794,14 @@ func loadAggregatedLog(reset: Bool) {
                     return previousSelections.contains(identity) || identity == previousSelection
                 }
                 if let first = retained.first {
-                    self.logSelection = self.logCommitIdentity(first)
-                    self.logSelectedIDs = Set(retained.map(self.logCommitIdentity))
+                    self.logSelectionState.selection = self.logCommitIdentity(first)
+                    self.logSelectionState.selectedIDs = Set(retained.map(self.logCommitIdentity))
                 } else if let first = deduplicated.first {
-                    self.logSelection = self.logCommitIdentity(first)
-                    self.logSelectedIDs = [self.logCommitIdentity(first)]
+                    self.logSelectionState.selection = self.logCommitIdentity(first)
+                    self.logSelectionState.selectedIDs = [self.logCommitIdentity(first)]
                 } else {
-                    self.logSelection = nil
-                    self.logSelectedIDs = []
+                    self.logSelectionState.selection = nil
+                    self.logSelectionState.selectedIDs = []
                 }
                 self.logList.isLoadingMore = false
                 if reset { self.logList.isLoading = false }
@@ -1960,8 +1960,8 @@ func selectLogRevision(_ id: String) {
         return identity == id || identity.hasPrefix(id) || id.hasPrefix(identity)
     }) {
         let identity = logCommitIdentity(visible)
-        logSelection = identity
-        logSelectedIDs = [identity]
+        logSelectionState.selection = identity
+        logSelectionState.selectedIDs = [identity]
         return
     }
 
@@ -1993,15 +1993,15 @@ func selectLogRevision(_ id: String) {
                 self.logList.entries.insert(commit, at: 0)
             }
             let identity = self.logCommitIdentity(commit)
-            self.logSelection = identity
-            self.logSelectedIDs = [identity]
+            self.logSelectionState.selection = identity
+            self.logSelectionState.selectedIDs = [identity]
         }
     }
 }
 
 func copySelectedLogIDs() {
     let ids = logList.entries
-        .filter { logSelectedIDs.contains(logCommitIdentity($0)) }
+        .filter { logSelectionState.selectedIDs.contains(logCommitIdentity($0)) }
         .map(\.id)
     guard !ids.isEmpty else { return }
     NSPasteboard.general.clearContents()
@@ -2374,7 +2374,7 @@ func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                     additionalActions: [logSelectedChangesUndoFeedbackAction(for: undoTarget)],
                     notificationID: notificationID
                 )
-                self.logSelection = nil
+                self.logSelectionState.selection = nil
                 let isCurrentRoot = self.repo?.workdir().map {
                     logSelectedChangesRootPathsMatch(rootPath, $0)
                 } == true
@@ -2461,7 +2461,7 @@ func extractSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                     additionalActions: [logSelectedChangesUndoFeedbackAction(for: undoTarget)],
                     notificationID: notificationID
                 )
-                self.logSelection = nil
+                self.logSelectionState.selection = nil
                 let isCurrentRoot = self.repo?.workdir().map {
                     logSelectedChangesRootPathsMatch(rootPath, $0)
                 } == true
@@ -2805,7 +2805,7 @@ func openFileHistoryTab(path: String, startRevision: String, rootPath: String?) 
         rootPath: rootPath
     )
     saveCurrentLogTab()
-    if let existing = logTabs.first(where: {
+    if let existing = logSelectionState.tabs.first(where: {
         $0.historyPath == tab.historyPath
             && $0.rootPath == tab.rootPath
             && $0.startRevision == tab.startRevision

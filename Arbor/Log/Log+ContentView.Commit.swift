@@ -182,7 +182,7 @@ struct CommitDetailsMetadataView: View {
 /// main actor.
 var selectedLogCommits: [CommitInfo] {
     let entries = logList.viewMode == .command ? logRuntime.commandEntries : logList.entries
-    let selected = entries.filter { logSelectedIDs.contains(logCommitIdentity($0)) }
+    let selected = entries.filter { logSelectionState.selectedIDs.contains(logCommitIdentity($0)) }
     if selected.count > 1 { return selected }
     if let selectedCommit { return [selectedCommit] }
     return []

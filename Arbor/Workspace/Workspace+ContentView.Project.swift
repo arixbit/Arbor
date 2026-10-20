@@ -321,7 +321,7 @@ func refreshAll(
                     self.feedbackCenter.expire(
                         notificationID: self.logApplyRecoveryNotificationID(rootPath: rootPath)
                     )
-                    self.logApplyRecoveryNotificationFingerprints.removeValue(
+                    self.logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
                         forKey: operationRecoveryNotificationRootKey(rootPath)
                     )
                     self.publishOperationRecoveryNoticeIfNeeded(
@@ -559,7 +559,7 @@ func openProjectPath(_ projectPath: String) {
     selectionModePath = nil
     commitPreviewPath = nil
     commitPreviewVisible = false
-    logSelectedIDs = []
+    logSelectionState.selectedIDs = []
     reflogRootPath = nil
     reflogRootRepo = nil
     reflogEntries = []
@@ -663,7 +663,7 @@ func openProjectPath(_ projectPath: String) {
                 self.branches = bs
                 self.refreshLogMyBranches()
                 self.selection = nil; self.fileSelection = nil
-                self.logSelection = nil
+                self.logSelectionState.selection = nil
                 self.compareSelection = nil
                 self.compareSelectedPaths = []
                 if let cachedStatus = loadPersistedStatusCache(rootPath: root),
@@ -805,7 +805,7 @@ func openProjectPath(_ projectPath: String) {
                             self.feedbackCenter.expire(
                                 notificationID: self.logApplyRecoveryNotificationID(rootPath: rootPath)
                             )
-                            self.logApplyRecoveryNotificationFingerprints.removeValue(
+                            self.logSelectionState.applyRecoveryNotificationFingerprints.removeValue(
                                 forKey: operationRecoveryNotificationRootKey(rootPath)
                             )
                             self.publishOperationRecoveryNoticeIfNeeded(
@@ -856,8 +856,8 @@ func resetProjectState() {
     reflogLoadTask = nil
     reflogLoadMoreTask?.cancel()
     reflogLoadMoreTask = nil
-    logDetailLoadTask?.cancel()
-    logDetailLoadTask = nil
+    logSelectionState.detailLoadTask?.cancel()
+    logSelectionState.detailLoadTask = nil
     reflogDetailLoadTask?.cancel()
     reflogDetailLoadTask = nil
     compareLoadTask?.cancel()
@@ -899,9 +899,9 @@ func resetProjectState() {
     lastIndexRevision = nil
     headId = nil
     logList.entries = []
-    logTabs = [LogTabDescriptor()]
-    activeLogTabID = nil
-    logDetailCommit = nil
+    logSelectionState.tabs = [LogTabDescriptor()]
+    logSelectionState.activeTabID = nil
+    logSelectionState.detailCommit = nil
     branchCompareFirstEntries = []
     branchCompareSecondEntries = []
     branchCompareSelectionID = nil
@@ -941,14 +941,14 @@ func resetProjectState() {
     selectionModePath = nil
     commitPreviewPath = nil
     commitPreviewVisible = false
-    logSelectedIDs = []
+    logSelectionState.selectedIDs = []
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
     shelfPreviewName = nil
     shelfPreviewText = nil
     showShelfPreview = false
-    logSelection = nil
+    logSelectionState.selection = nil
     compareSelection = nil
     compareSelectedPaths = []
     mergeInProgress = false
@@ -1634,8 +1634,8 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     self.logRuntime.aggregateRepositories = [:]
                     self.logRuntime.aggregateLoadedCounts = [:]
                     self.logList.entries = []
-                    self.logSelection = nil
-                    self.logSelectedIDs = []
+                    self.logSelectionState.selection = nil
+                    self.logSelectionState.selectedIDs = []
                 }
                 self.applyProjectGitExecutableOverride(
                     for: projectPath,
@@ -1649,8 +1649,8 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 if externalLogSelectionChanged {
                     if self.logRuntime.aggregateRootPaths.isEmpty {
                         self.logList.entries = []
-                        self.logSelection = nil
-                        self.logSelectedIDs = []
+                        self.logSelectionState.selection = nil
+                        self.logSelectionState.selectedIDs = []
                     } else {
                         self.externalLogAggregateLoadStarted = true
                         if self.logList.viewMode == .command {
