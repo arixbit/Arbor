@@ -27,7 +27,7 @@ targets:
       - path: RebasedDialogs.swift
       - path: CommitDetailView.swift
       - path: DiffDetailView.swift
-      - path: WorkspaceOperations.swift
+      - path: Workspace
       - path: LogGraphView.swift
       - path: PushDialogView.swift
       - path: PullDialogView.swift
