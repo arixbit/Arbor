@@ -58,7 +58,7 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Stash").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("说明（可选）", text: $stashMessage).textFieldStyle(.roundedBorder)
+                    TextField("说明（可选）", text: $stashUI.message).textFieldStyle(.roundedBorder)
                     Button("保存") { stashSave() }
                 }
                 ForEach(stashes, id: \.id) { s in

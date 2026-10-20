@@ -791,8 +791,6 @@ struct ContentView: View {
     @State var renameNew: String = ""
     @State var branches: [BranchInfo] = []
     @State var branchComparisons: [String: BranchCompare] = [:]
-    @State var stashMessage: String = ""
-    @State var stashRootPath: String?
     @State var shelveName: String = ""
     @State var shelves: [ShelveInfo] = []
     @State var deletedShelves: [ShelveInfo] = []
@@ -808,8 +806,6 @@ struct ContentView: View {
     @State var shelfRootError: String?
     @State var shelfRootLoadGeneration = 0
     @State var stashes: [StashInfo] = []
-    @State var unstashRootPath: String?
-    @State var unstashStashes: [StashInfo] = []
     // 远程
     @State var remotes: [RemoteInfo] = []
     @State var isShallowRepository = false
@@ -895,11 +891,6 @@ struct ContentView: View {
     @State var submoduleLogPath = ""
     @State var submoduleLogEntries: [CommitInfo] = []
     @State var submoduleLogError: String?
-    @State var stashDiffText: String?
-    @State var stashDiffStashID: String?
-    @State var stashDiffRootPath: String?
-    @State var stashPreviewStashID: String?
-    @State var stashPreviewText: String?
     @State var shelfPreviewName: String?
     @State var shelfPreviewIsDeleted = false
     @State var shelfPreviewText: String?
@@ -1017,9 +1008,7 @@ struct ContentView: View {
     @State var pullDialogSnapshots: [GitRootBranchSnapshot] = []
     @State var pullDialogRebase = false
     @State var pullDialogGeneration = 0
-    @State var unstashAsStashID: String?
     @State var uncommitRequest: RebasedUncommitRequest?
-    @State var stashFilesInitialPaths: Set<String> = []
     @State var showNewTagDialog = false
     @State var showRemoteTagsDialog = false
     @State var showMultiRootRemoteTagsDialog = false
