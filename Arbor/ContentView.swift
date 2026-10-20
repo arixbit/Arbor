@@ -2332,6 +2332,15 @@ struct ContentView: View {
     @State var lfsRemoteName = ""
     @State var lfsShowAllRevisions = false
     @State var lfsSelectedPaths: Set<String> = []
+    // Git hooks 面板状态（面板列表 / 选中脚本 / 编辑草稿）
+    @State var showHooksPanel = false
+    @State var gitHooks: [GitHookInfo] = []
+    @State var gitHooksLocation: GitHooksLocation?
+    @State var selectedGitHook: String?
+    @State var gitHookContents: GitHookContents?
+    @State var gitHookDraft = ""
+    @State var gitHooksBusy = false
+    @State var gitHooksFeedback: String?
     @State var lfsTrackedPaths: Set<String> = []
     @State var lfsPointerPaths: Set<String> = []
     @State var logDetailLoadTask: Task<Void, Never>?
@@ -3429,6 +3438,25 @@ struct ContentView: View {
         // 后半段修饰符链（拆分以降低单表达式类型检查复杂度）
         .overlay(alignment: .trailing) {
             conflictResolverOverlays
+        }
+        .sheet(isPresented: $showHooksPanel) {
+            HooksPanelView(
+                hooks: gitHooks,
+                location: gitHooksLocation,
+                contents: gitHookContents,
+                busy: gitHooksBusy,
+                feedback: gitHooksFeedback,
+                selectedName: $selectedGitHook,
+                draft: $gitHookDraft,
+                onRefresh: { reloadGitHooks() },
+                onSelect: { selectGitHook($0) },
+                onSave: { saveGitHookDraft() },
+                onRevert: { revertGitHookDraft() },
+                onToggleEnabled: { toggleGitHookEnabled($0) },
+                onInstallSample: { installGitHookSample($0) },
+                onDelete: { deleteGitHook($0) },
+                onDismiss: { showHooksPanel = false }
+            )
         }
         .sheet(isPresented: $showLfsPanel) {
             LfsPanelView(

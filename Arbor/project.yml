@@ -29,6 +29,7 @@ targets:
       - path: DiffDetailView.swift
       - path: Workspace
       - path: Lfs
+      - path: Hooks
       - path: LogGraphView.swift
       - path: PushDialogView.swift
       - path: PullDialogView.swift

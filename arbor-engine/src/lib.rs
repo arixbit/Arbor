@@ -13,6 +13,7 @@ mod error;
 mod gitprocess;
 mod gpg;
 mod highlight;
+mod hookadmin;
 mod hooks;
 mod index;
 mod lfs;
@@ -61,6 +62,7 @@ pub use gitprocess::{
 };
 pub use gpg::{configure_gpg_agent, gpg_agent_status, GpgAgentStatus};
 pub use highlight::{highlight_code, HighlightKind, HighlightSpan};
+pub use hookadmin::{GitHookContents, GitHookInfo, GitHookState, GitHooksLocation};
 pub use lfs::{
     LfsCapability, LfsCommandResult, LfsFileEntry, LfsHookState, LfsPathState, LfsTrackedPattern,
 };
