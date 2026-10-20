@@ -54,6 +54,7 @@ struct GitLabClient: HostingClient {
         for repository: HostingRepository,
         state: String = "open"
     ) async throws -> [HostingPullRequest] {
+        let state = Self.apiState(state)
         let response: [GitLabMergeRequest] = try await request(
             repository: repository,
             path: projectPath(repository, suffix: "merge_requests"),
@@ -83,6 +84,7 @@ struct GitLabClient: HostingClient {
         for repository: HostingRepository,
         state: String = "open"
     ) async throws -> [HostingIssue] {
+        let state = Self.apiState(state)
         let response: [GitLabIssue] = try await request(
             repository: repository,
             path: projectPath(repository, suffix: "issues"),
@@ -113,11 +115,21 @@ struct GitLabClient: HostingClient {
         path: String,
         line: Int?
     ) async throws -> HostingComment {
-        let position: GitLabPosition? = if let line, !path.isEmpty, !commitID.isEmpty {
+        let requestPath = projectPath(repository, suffix: "merge_requests/\(pullRequestID)")
+        let mergeRequest: GitLabMergeRequest = try await request(
+            repository: repository,
+            path: requestPath
+        )
+        let position: GitLabPosition? = if let line,
+                                           !path.isEmpty,
+                                           let diffRefs = mergeRequest.diffRefs,
+                                           let baseSHA = diffRefs.baseSHA,
+                                           let startSHA = diffRefs.startSHA,
+                                           let headSHA = diffRefs.headSHA {
             GitLabPosition(
-                baseSHA: commitID,
-                startSHA: commitID,
-                headSHA: commitID,
+                baseSHA: baseSHA,
+                startSHA: startSHA,
+                headSHA: headSHA,
                 positionType: "text",
                 newPath: path,
                 newLine: line
@@ -232,7 +244,8 @@ struct GitLabClient: HostingClient {
         for repository: HostingRepository,
         iid: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws {
         switch outcome {
         case .comment:
@@ -248,7 +261,8 @@ struct GitLabClient: HostingClient {
             _ = try await request(
                 repository: repository,
                 path: projectPath(repository, suffix: "merge_requests/\(iid)/approve"),
-                method: "POST"
+                method: "POST",
+                body: GitLabExpectedHeadAction(sha: expectedHeadRevision)
             ) as GitLabApprovalResponse
         case .requestChanges:
             throw HostingAPIError.http(status: 501, message: "GitLab does not expose Request Changes for this client")
@@ -258,7 +272,8 @@ struct GitLabClient: HostingClient {
     func mergeGitLabMergeRequest(
         for repository: HostingRepository,
         iid: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws {
         guard method == "merge" || method == "squash" else {
             throw HostingAPIError.http(status: 501, message: "GitLab merge method is unavailable")
@@ -267,7 +282,10 @@ struct GitLabClient: HostingClient {
             repository: repository,
             path: projectPath(repository, suffix: "merge_requests/\(iid)/merge"),
             method: "PUT",
-            body: GitLabMergeAction(squash: method == "squash")
+            body: GitLabMergeAction(
+                squash: method == "squash",
+                sha: expectedHeadRevision
+            )
         ) as GitLabMergeRequest
     }
 
@@ -292,6 +310,10 @@ struct GitLabClient: HostingClient {
             path: projectPath(repository, suffix: "merge_requests/\(iid)/unapprove"),
             method: "POST"
         ) as GitLabApprovalResponse
+    }
+
+    private static func apiState(_ state: String) -> String {
+        state.lowercased() == "open" ? "opened" : state.lowercased()
     }
 
     private func request<Response: Decodable>(
@@ -415,7 +437,7 @@ private struct GitLabMergeRequest: Decodable {
             id: iid ?? id ?? 0,
             title: title,
             body: description,
-            state: state,
+            state: state == "opened" ? "open" : state,
             draft: draft ?? workInProgress,
             htmlURL: webURL,
             author: author?.hostingUser,
@@ -612,6 +634,11 @@ private struct GitLabCreateNote: Encodable {
 
 private struct GitLabMergeAction: Encodable {
     let squash: Bool
+    let sha: String
+}
+
+private struct GitLabExpectedHeadAction: Encodable {
+    let sha: String
 }
 
 private struct GitLabStateAction: Encodable {

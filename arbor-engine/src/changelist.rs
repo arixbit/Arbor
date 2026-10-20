@@ -468,6 +468,51 @@ pub(crate) fn observe_paths(state: &mut ChangeLists, current_paths: &[String]) -
     changed
 }
 
+/// Observe a complete Git status snapshot while preserving file identity for
+/// explicit rename records. Copies deliberately do not inherit the source
+/// assignment: they are new changes and follow the active-list rule in
+/// `observe_paths`.
+pub(crate) fn observe_status(state: &mut ChangeLists, status: &[crate::status::FileEntry]) -> bool {
+    let mut changed = false;
+    for entry in status {
+        let is_rename = entry.staged == crate::status::ChangeKind::Renamed
+            || entry.unstaged == crate::status::ChangeKind::Renamed;
+        let Some(old_path) = entry.old_path.as_deref().filter(|_| is_rename) else {
+            continue;
+        };
+        if old_path == entry.path {
+            continue;
+        }
+
+        if let Some(index) = state
+            .assignments
+            .iter()
+            .position(|(path, _)| path == old_path)
+        {
+            let (_, list_name) = state.assignments.remove(index);
+            state
+                .assignments
+                .retain(|(path, _)| path != entry.path.as_str());
+            let index = index.min(state.assignments.len());
+            state
+                .assignments
+                .insert(index, (entry.path.clone(), list_name));
+            changed = true;
+        }
+
+        if let Some(index) = state.seen_paths.iter().position(|path| path == old_path) {
+            state.seen_paths.remove(index);
+            if !state.seen_paths.contains(&entry.path) {
+                state.seen_paths.insert(index, entry.path.clone());
+            }
+            changed = true;
+        }
+    }
+
+    let current_paths: Vec<String> = status.iter().map(|entry| entry.path.clone()).collect();
+    observe_paths(state, &current_paths) || changed
+}
+
 pub(crate) fn metadata(state: &ChangeLists) -> Vec<ChangeListMetadata> {
     state
         .lists

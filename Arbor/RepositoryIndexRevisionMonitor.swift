@@ -1054,6 +1054,32 @@ struct RepositoryExternalVCSMove: Codable, Equatable, Hashable, Sendable {
     let newPath: String
 }
 
+enum RepositoryExternalVCSPathKind: String, Codable, Sendable {
+    case missing
+    case file
+    case directory
+    case symbolicLink
+    case other
+}
+
+struct RepositoryExternalVCSPathSnapshot: Codable, Equatable, Sendable {
+    let path: String
+    let kind: RepositoryExternalVCSPathKind
+    let byteCount: UInt64?
+    let digest: String?
+
+    var isVerifiable: Bool {
+        switch kind {
+        case .missing, .directory:
+            true
+        case .file, .symbolicLink:
+            digest != nil
+        case .other:
+            false
+        }
+    }
+}
+
 /// The exact paths a user approved for an external VFS Git action. Keeping
 /// this separate from the raw watcher event makes Retry replay only confirmed
 /// work, never an unreviewed rename candidate.
@@ -1062,6 +1088,41 @@ struct RepositoryExternalVCSAction: Codable, Equatable, Sendable {
     let stageAddPaths: [String]
     let removePaths: [String]
     let forceMoves: [RepositoryExternalVCSMove]
+    let pathSnapshots: [RepositoryExternalVCSPathSnapshot]
+
+    init(
+        addPaths: [String],
+        stageAddPaths: [String],
+        removePaths: [String],
+        forceMoves: [RepositoryExternalVCSMove],
+        pathSnapshots: [RepositoryExternalVCSPathSnapshot] = []
+    ) {
+        self.addPaths = addPaths
+        self.stageAddPaths = stageAddPaths
+        self.removePaths = removePaths
+        self.forceMoves = forceMoves
+        self.pathSnapshots = pathSnapshots
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case addPaths
+        case stageAddPaths
+        case removePaths
+        case forceMoves
+        case pathSnapshots
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        addPaths = try container.decode([String].self, forKey: .addPaths)
+        stageAddPaths = try container.decode([String].self, forKey: .stageAddPaths)
+        removePaths = try container.decode([String].self, forKey: .removePaths)
+        forceMoves = try container.decode([RepositoryExternalVCSMove].self, forKey: .forceMoves)
+        pathSnapshots = try container.decodeIfPresent(
+            [RepositoryExternalVCSPathSnapshot].self,
+            forKey: .pathSnapshots
+        ) ?? []
+    }
 
     var isEmpty: Bool {
         addPaths.isEmpty
@@ -1069,6 +1130,128 @@ struct RepositoryExternalVCSAction: Codable, Equatable, Sendable {
             && removePaths.isEmpty
             && forceMoves.isEmpty
     }
+}
+
+private func repositoryExternalVCSActionSnapshotPaths(
+    _ action: RepositoryExternalVCSAction
+) -> [String] {
+    Array(Set(
+        action.addPaths
+            + action.stageAddPaths
+            + action.removePaths
+            + action.forceMoves.flatMap { [$0.oldPath, $0.newPath] }
+    )).sorted()
+}
+
+private func repositoryExternalVCSFNV1a(_ bytes: some Sequence<UInt8>) -> String {
+    var hash: UInt64 = 0xcbf29ce484222325
+    for byte in bytes {
+        hash ^= UInt64(byte)
+        hash &*= 0x100000001b3
+    }
+    return String(format: "%016llx", hash)
+}
+
+private func repositoryExternalVCSFileDigest(at path: String) -> (UInt64, String)? {
+    guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+    defer { try? handle.close() }
+    var hash: UInt64 = 0xcbf29ce484222325
+    var count: UInt64 = 0
+    do {
+        while let data = try handle.read(upToCount: 64 * 1024), !data.isEmpty {
+            count += UInt64(data.count)
+            for byte in data {
+                hash ^= UInt64(byte)
+                hash &*= 0x100000001b3
+            }
+        }
+        return (count, String(format: "%016llx", hash))
+    } catch {
+        return nil
+    }
+}
+
+func repositoryExternalVCSPathSnapshot(
+    rootPath: String,
+    relativePath: String
+) -> RepositoryExternalVCSPathSnapshot {
+    let absolutePath = URL(fileURLWithPath: rootPath)
+        .standardizedFileURL
+        .appendingPathComponent(relativePath)
+        .standardizedFileURL
+        .path
+    let fileManager = FileManager.default
+    if let destination = try? fileManager.destinationOfSymbolicLink(atPath: absolutePath) {
+        let bytes = Array(destination.utf8)
+        return RepositoryExternalVCSPathSnapshot(
+            path: relativePath,
+            kind: .symbolicLink,
+            byteCount: UInt64(bytes.count),
+            digest: repositoryExternalVCSFNV1a(bytes)
+        )
+    }
+    var isDirectory: ObjCBool = false
+    guard fileManager.fileExists(atPath: absolutePath, isDirectory: &isDirectory) else {
+        return RepositoryExternalVCSPathSnapshot(
+            path: relativePath,
+            kind: .missing,
+            byteCount: nil,
+            digest: nil
+        )
+    }
+    if isDirectory.boolValue {
+        return RepositoryExternalVCSPathSnapshot(
+            path: relativePath,
+            kind: .directory,
+            byteCount: nil,
+            digest: nil
+        )
+    }
+    if let (byteCount, digest) = repositoryExternalVCSFileDigest(at: absolutePath) {
+        return RepositoryExternalVCSPathSnapshot(
+            path: relativePath,
+            kind: .file,
+            byteCount: byteCount,
+            digest: digest
+        )
+    }
+    return RepositoryExternalVCSPathSnapshot(
+        path: relativePath,
+        kind: .other,
+        byteCount: nil,
+        digest: nil
+    )
+}
+
+func repositoryExternalVCSActionCapturingSnapshots(
+    _ action: RepositoryExternalVCSAction,
+    rootPath: String
+) -> RepositoryExternalVCSAction {
+    RepositoryExternalVCSAction(
+        addPaths: action.addPaths,
+        stageAddPaths: action.stageAddPaths,
+        removePaths: action.removePaths,
+        forceMoves: action.forceMoves,
+        pathSnapshots: repositoryExternalVCSActionSnapshotPaths(action).map {
+            repositoryExternalVCSPathSnapshot(rootPath: rootPath, relativePath: $0)
+        }
+    )
+}
+
+func repositoryExternalVCSActionMatchesSnapshots(
+    _ action: RepositoryExternalVCSAction,
+    rootPath: String
+) -> Bool {
+    let expectedPaths = repositoryExternalVCSActionSnapshotPaths(action)
+    guard !expectedPaths.isEmpty,
+          action.pathSnapshots.count == expectedPaths.count,
+          action.pathSnapshots.allSatisfy(\.isVerifiable) else {
+        return false
+    }
+    let current = expectedPaths.map {
+        repositoryExternalVCSPathSnapshot(rootPath: rootPath, relativePath: $0)
+    }
+    return current == action.pathSnapshots
 }
 
 func repositoryExternalVCSActionPathIsSafe(_ path: String) -> Bool {

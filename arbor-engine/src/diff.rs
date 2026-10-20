@@ -194,9 +194,16 @@ pub(crate) fn head_bytes(repo: &gix::Repository, path: &str) -> Result<Vec<u8>, 
 
 /// 工作区文件字节；不存在 -> 空（删除文件场景）。
 pub(crate) fn worktree_bytes(repo: &gix::Repository, path: &str) -> Vec<u8> {
-    match repo.workdir() {
-        Some(wd) => std::fs::read(wd.join(path)).unwrap_or_default(),
-        None => Vec::new(),
+    let Some(workdir) = repo.workdir() else {
+        return Vec::new();
+    };
+    let file_path = workdir.join(path);
+    match std::fs::symlink_metadata(&file_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => std::fs::read_link(file_path)
+            .map(|target| target.as_os_str().as_encoded_bytes().to_vec())
+            .unwrap_or_default(),
+        Ok(metadata) if metadata.is_file() => std::fs::read(file_path).unwrap_or_default(),
+        _ => Vec::new(),
     }
 }
 

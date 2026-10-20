@@ -271,3 +271,33 @@ fn authenticated_commit_push_and_refspec_use_the_remote_path() {
         outcome.commit_id
     );
 }
+
+#[test]
+fn plus_refspec_cannot_force_when_force_is_false() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "base.txt", "base", "base");
+    let remote_dir = tempfile::tempdir().unwrap();
+    common::git(remote_dir.path(), &["init", "--bare", "-q"]);
+    let repo = r.open();
+    repo.remote_add(
+        "origin".into(),
+        remote_dir.path().to_string_lossy().into_owned(),
+    )
+    .unwrap();
+    repo.push_refspec("origin".into(), "HEAD:refs/heads/main".into(), false)
+        .unwrap();
+    let remote_before = common::git(remote_dir.path(), &["rev-parse", "refs/heads/main"]);
+
+    r.write("next.txt", "next");
+    repo.stage("next.txt".into()).unwrap();
+    repo.commit("next".into(), false).unwrap();
+    let error = repo
+        .push_refspec("origin".into(), "+HEAD:refs/heads/main".into(), false)
+        .unwrap_err();
+
+    assert!(error.to_string().contains("requires force=true"));
+    assert_eq!(
+        common::git(remote_dir.path(), &["rev-parse", "refs/heads/main"]),
+        remote_before
+    );
+}

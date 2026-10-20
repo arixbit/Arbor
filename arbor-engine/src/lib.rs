@@ -74,15 +74,17 @@ pub use remote::{
     RebasePauseReason, RemoteInfo,
 };
 pub use repo::{
-    clone_repository, clone_repository_with_auth_options, clone_repository_with_options,
-    initialize_repository, open_repository, workspace_status, CherryPickEmptyPolicy, DirEntry,
-    ExternalMergeToolResult, ExternalMergeToolSettings, FileContent,
-    ForcePushedBranchUpdateOutcome, GitCommandResult, GitContentTransformMode, GitIdentity,
-    LocalChangesRestoreInfo, LocalChangesSavePolicy, PatchApplyMemberResult, PatchApplyResult,
-    PatchApplyStatus, Repository, ResetMode, ResetRecoveryInfo, ResetRecoveryTarget,
-    RevertMainline, RevisionEntry, SshAuthMethod, SshConnectionSettings, SshHostKeyPolicy,
-    StagingFileVersions, StagingVersionContent, SubmoduleAddUndoTarget, SubmoduleChange,
-    SubmoduleInfo, SubmoduleRemoveUndoTarget, SubmoduleState, WorkspaceEntry, WorktreeInfo,
+    clone_repository, clone_repository_with_auth_options,
+    clone_repository_with_auth_options_and_cancel, clone_repository_with_options,
+    clone_repository_with_options_and_cancel, initialize_repository, open_repository,
+    workspace_status, CherryPickEmptyPolicy, DirEntry, ExternalMergeToolResult,
+    ExternalMergeToolSettings, FileContent, ForcePushedBranchUpdateOutcome, GitCommandResult,
+    GitContentTransformMode, GitIdentity, LocalChangesRestoreInfo, LocalChangesSavePolicy,
+    PatchApplyMemberResult, PatchApplyResult, PatchApplyStatus, Repository, ResetMode,
+    ResetRecoveryInfo, ResetRecoveryTarget, RevertMainline, RevisionEntry, SshAuthMethod,
+    SshConnectionSettings, SshHostKeyPolicy, StagingFileVersions, StagingVersionContent,
+    SubmoduleAddUndoTarget, SubmoduleChange, SubmoduleInfo, SubmoduleRemoveUndoTarget,
+    SubmoduleState, WorkspaceEntry, WorktreeInfo,
 };
 pub use roots::{
     discover_git_roots, keep_multi_root_reset_recovery, list_multi_root_branches,

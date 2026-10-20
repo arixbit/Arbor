@@ -5,6 +5,49 @@ import XCTest
 /// 防止 off-by-one、UTF-16 偏移、尾随换行等回归。
 final class MergeParserTests: XCTestCase {
 
+    func testConflictLoadRequestRequiresGenerationPathAndRepositoryIdentity() {
+        XCTAssertTrue(
+            isCurrentConflictLoadRequest(
+                repositoryID: "/repo/.git",
+                path: "current.txt",
+                generation: 4,
+                currentRepositoryID: "/repo/.git",
+                currentPath: "current.txt",
+                currentGeneration: 4
+            )
+        )
+        XCTAssertFalse(
+            isCurrentConflictLoadRequest(
+                repositoryID: "/repo/.git",
+                path: "current.txt",
+                generation: 3,
+                currentRepositoryID: "/repo/.git",
+                currentPath: "current.txt",
+                currentGeneration: 4
+            )
+        )
+        XCTAssertFalse(
+            isCurrentConflictLoadRequest(
+                repositoryID: "/repo/.git",
+                path: "old.txt",
+                generation: 4,
+                currentRepositoryID: "/repo/.git",
+                currentPath: "current.txt",
+                currentGeneration: 4
+            )
+        )
+        XCTAssertFalse(
+            isCurrentConflictLoadRequest(
+                repositoryID: "/old/.git",
+                path: "current.txt",
+                generation: 4,
+                currentRepositoryID: "/repo/.git",
+                currentPath: "current.txt",
+                currentGeneration: 4
+            )
+        )
+    }
+
     // MARK: - splitLines（匹配 Rust str::lines()）
 
     func testSplitLines_trailingNewline() {
@@ -140,6 +183,21 @@ final class MergeParserTests: XCTestCase {
 
         XCTAssertEqual(textView.string, "ctx\ntheirs\nctx2\n")
         XCTAssertTrue(bridge.blocks.isEmpty)
+    }
+
+    func testMergeEditorBridgeLocksCurrentAndReplacementResultEditors() {
+        let first = NSTextView(frame: .zero)
+        let second = NSTextView(frame: .zero)
+        let bridge = MergeEditorBridge()
+        bridge.attachResult(first)
+
+        bridge.setResultEditingEnabled(false)
+        bridge.attachResult(second)
+
+        XCTAssertFalse(first.isEditable)
+        XCTAssertFalse(second.isEditable)
+        bridge.setResultEditingEnabled(true)
+        XCTAssertTrue(second.isEditable)
     }
 
     func testMergeEditorBridge_ignorePatchBlockKeepsOursAndClearsMarker() {

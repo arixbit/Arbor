@@ -61,8 +61,12 @@ fn shelf_location_migrates_manifests_and_patches_without_moving_refs() {
     let resolved = repo
         .shelve_set_location(target.to_string_lossy().into_owned(), true)
         .unwrap();
-    assert_eq!(resolved, target.to_string_lossy());
-    assert_eq!(repo.shelve_location().unwrap(), target.to_string_lossy());
+    let canonical_target = target.canonicalize().unwrap();
+    assert_eq!(resolved, canonical_target.to_string_lossy());
+    assert_eq!(
+        repo.shelve_location().unwrap(),
+        canonical_target.to_string_lossy()
+    );
     assert_eq!(repo.shelve_list().unwrap().len(), 1);
     assert!(target.join("arbor-shelves").exists());
 
@@ -93,6 +97,120 @@ fn shelf_location_without_migration_keeps_existing_shelves_visible() {
     );
     assert_eq!(repo.shelve_list().unwrap().len(), 1);
     assert!(!target.exists());
+}
+
+#[test]
+fn shelf_location_round_trips_to_git_dir_and_records_repository_owner() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "v1", "init");
+    r.write("a.txt", "v2");
+    let repo = r.open();
+    repo.shelve("round-trip".into(), vec!["a.txt".into()])
+        .unwrap();
+
+    let target = r.path.with_extension("owned-shelf-location");
+    let _ = std::fs::remove_dir_all(&target);
+    repo.shelve_set_location(target.to_string_lossy().into_owned(), true)
+        .unwrap();
+    let owner = std::fs::read_to_string(target.join("arbor-shelf-storage")).unwrap();
+    assert!(owner.starts_with("ARBOR_SHELF_STORAGE_V1\n"));
+    let canonical_git_dir = r.path.join(".git").canonicalize().unwrap();
+    assert!(owner.contains(canonical_git_dir.to_string_lossy().as_ref()));
+
+    let git_dir = r.path.join(".git");
+    repo.shelve_set_location(git_dir.to_string_lossy().into_owned(), true)
+        .unwrap();
+    assert_eq!(repo.shelve_location().unwrap(), git_dir.to_string_lossy());
+    repo.shelve_pop("round-trip".into()).unwrap();
+    assert_eq!(r.read("a.txt"), "v2");
+    let _ = std::fs::remove_dir_all(&target);
+}
+
+#[test]
+fn shelf_location_retry_accepts_same_owner_but_rejects_another_repository() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "a.txt", "v1", "init");
+    r.write("a.txt", "v2");
+    let repo = r.open();
+    repo.shelve("retry".into(), vec!["a.txt".into()]).unwrap();
+    let target = r.path.with_extension("retry-shelf-location");
+    let _ = std::fs::remove_dir_all(&target);
+    repo.shelve_set_location(target.to_string_lossy().into_owned(), true)
+        .unwrap();
+
+    std::fs::remove_file(r.path.join(".git/arbor-shelf-location")).unwrap();
+    repo.shelve_set_location(target.to_string_lossy().into_owned(), true)
+        .expect("same-repository completed copy must be retryable");
+    assert_eq!(repo.shelve_list().unwrap().len(), 1);
+
+    let other = TestRepo::new();
+    let error = other
+        .open()
+        .shelve_set_location(target.to_string_lossy().into_owned(), false)
+        .expect_err("another repository must not share owned Shelf storage");
+    assert!(error.to_string().contains("another repository"));
+    let _ = std::fs::remove_dir_all(&target);
+}
+
+#[test]
+fn shelf_location_rejects_root_and_worktree_overlap() {
+    let r = TestRepo::new();
+    let repo = r.open();
+    assert!(repo.shelve_set_location("/".into(), false).is_err());
+    assert!(repo
+        .shelve_set_location(r.path.to_string_lossy().into_owned(), false)
+        .is_err());
+    assert!(repo
+        .shelve_set_location(
+            r.path.join("shelf-storage").to_string_lossy().into_owned(),
+            false,
+        )
+        .is_err());
+}
+
+#[test]
+fn shelve_requires_separate_untracked_and_ignored_opt_ins() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "tracked.txt", "v1", "init");
+    r.write("untracked.txt", "new");
+    r.write(".gitignore", "ignored.txt\n");
+    r.write("ignored.txt", "ignored");
+    let repo = r.open();
+
+    let untracked_error = repo
+        .shelve("untracked-default".into(), vec!["untracked.txt".into()])
+        .expect_err("untracked files require an explicit option");
+    assert!(untracked_error.to_string().contains("include_untracked"));
+    assert_eq!(r.read("untracked.txt"), "new");
+
+    let ignored_error = repo
+        .shelve_with_options(
+            "ignored-with-untracked-only".into(),
+            vec!["ignored.txt".into()],
+            true,
+            false,
+        )
+        .expect_err("include-untracked must not include ignored files");
+    assert!(ignored_error.to_string().contains("include_ignored"));
+    assert_eq!(r.read("ignored.txt"), "ignored");
+
+    repo.shelve_with_options(
+        "untracked-explicit".into(),
+        vec!["untracked.txt".into()],
+        true,
+        false,
+    )
+    .unwrap();
+    assert!(!r.exists("untracked.txt"));
+
+    repo.shelve_with_options(
+        "ignored-explicit".into(),
+        vec!["ignored.txt".into()],
+        false,
+        true,
+    )
+    .unwrap();
+    assert!(!r.exists("ignored.txt"));
 }
 
 #[test]

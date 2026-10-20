@@ -20,10 +20,12 @@ struct GitHubBranchRef: Codable, Equatable, Sendable {
 struct GitHubRepositorySummary: Codable, Equatable, Sendable {
     let fullName: String?
     let htmlURL: String?
+    let cloneURL: String?
 
     enum CodingKeys: String, CodingKey {
         case fullName = "full_name"
         case htmlURL = "html_url"
+        case cloneURL = "clone_url"
     }
 }
 
@@ -158,6 +160,9 @@ struct HostingPullRequest: Codable, Equatable, Identifiable, Sendable {
     var assignees: [HostingUser]? = nil
     var reviewers: [HostingUser]? = nil
     var labels: [String]? = nil
+    var headRepositoryFullName: String? = nil
+    var headRepositoryCloneURL: String? = nil
+    var baseRepositoryFullName: String? = nil
 
     init(
         id: Int,
@@ -173,7 +178,10 @@ struct HostingPullRequest: Codable, Equatable, Identifiable, Sendable {
         comments: Int?,
         assignees: [HostingUser]? = nil,
         reviewers: [HostingUser]? = nil,
-        labels: [String]? = nil
+        labels: [String]? = nil,
+        headRepositoryFullName: String? = nil,
+        headRepositoryCloneURL: String? = nil,
+        baseRepositoryFullName: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -189,6 +197,9 @@ struct HostingPullRequest: Codable, Equatable, Identifiable, Sendable {
         self.assignees = assignees
         self.reviewers = reviewers
         self.labels = labels
+        self.headRepositoryFullName = headRepositoryFullName
+        self.headRepositoryCloneURL = headRepositoryCloneURL
+        self.baseRepositoryFullName = baseRepositoryFullName
     }
 }
 
@@ -354,7 +365,10 @@ extension GitHubPullRequest {
             comments: comments,
             assignees: assignees?.map(\.hostingUser),
             reviewers: requestedReviewers?.map(\.hostingUser),
-            labels: labels?.compactMap(\.name)
+            labels: labels?.compactMap(\.name),
+            headRepositoryFullName: head?.repo?.fullName,
+            headRepositoryCloneURL: head?.repo?.cloneURL,
+            baseRepositoryFullName: base?.repo?.fullName
         )
     }
 }

@@ -208,3 +208,28 @@ fn changelist_v1_metadata_migrates_without_losing_members() {
         .unwrap()
         .starts_with("ARBOR_CHANGELISTS_V2\n"));
 }
+
+#[test]
+fn changelist_assignment_follows_a_git_rename() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "old.txt", "one\n", "init");
+    r.write("old.txt", "two\n");
+    let repo = r.open();
+    repo.changelist_list().unwrap();
+    repo.changelist_create("Review".into()).unwrap();
+    repo.changelist_move_paths(vec!["old.txt".into()], "Review".into())
+        .unwrap();
+
+    r.git(&["mv", "old.txt", "new.txt"]);
+    let lists = repo.changelist_list().unwrap();
+
+    assert_eq!(lists[0].paths, Vec::<String>::new());
+    assert_eq!(lists[1].name, "Review");
+    assert_eq!(lists[1].paths, vec!["new.txt"]);
+    assert!(lists
+        .iter()
+        .all(|list| !list.paths.contains(&"old.txt".into())));
+
+    let reopened = r.open();
+    assert_eq!(reopened.changelist_list().unwrap(), lists);
+}

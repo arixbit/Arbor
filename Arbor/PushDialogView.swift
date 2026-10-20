@@ -30,6 +30,30 @@ enum PushDialogMode: Equatable {
 }
 
 enum PushDialogRefspec {
+    static func requestsForce(_ refspec: String?) -> Bool {
+        refspec?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("+") == true
+    }
+
+    static func targetBranch(_ refspec: String?) -> String? {
+        guard let value = refspec?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              let separator = value.lastIndex(of: ":") else { return nil }
+        let target = value[value.index(after: separator)...]
+        guard target.hasPrefix("refs/heads/") else { return nil }
+        let branch = String(target.dropFirst("refs/heads/".count))
+        return branch.isEmpty ? nil : branch
+    }
+
+    static func sourceRevision(_ refspec: String?) -> String? {
+        guard var value = refspec?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        if value.hasPrefix("+") { value.removeFirst() }
+        guard let separator = value.lastIndex(of: ":") else { return nil }
+        let source = String(value[..<separator])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return source.isEmpty ? nil : source
+    }
+
     static func normalizeTargetBranch(_ raw: String) -> String {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let branch = value.hasPrefix("refs/heads/")
@@ -46,7 +70,7 @@ enum PushDialogRefspec {
     }
 }
 
-struct MultiRootPushTargetSelection: Identifiable, Equatable {
+struct MultiRootPushTargetSelection: Identifiable, Codable, Equatable, Sendable {
     let rootPath: String
     let remote: String
     let targetBranch: String
@@ -137,7 +161,11 @@ struct PushDialogView: View {
             ) ?? ""
         )
         _branch = State(initialValue: defaultBranch ?? branches.first(where: { $0.isCurrent })?.name ?? "")
-        _sourceRevision = State(initialValue: defaultSourceRevision ?? "")
+        _sourceRevision = State(
+            initialValue: defaultSourceRevision
+                ?? branches.first(where: { $0.isCurrent })?.name
+                ?? ""
+        )
         _forceWithLease = State(initialValue: GitPushSettings.forceWithLeaseDefault())
         _publishBranch = State(initialValue: !currentHasUpstream)
         _useCustomRefspec = State(initialValue: defaultRefspec != nil)
@@ -145,7 +173,7 @@ struct PushDialogView: View {
         _pushTags = State(initialValue: defaultPushTagMode != nil)
         _pushTagMode = State(initialValue: defaultPushTagMode ?? .all)
         _runHooks = State(initialValue: defaultRunHooks)
-        _selectedCommitID = State(initialValue: commits.first?.id)
+        _selectedCommitID = State(initialValue: repo == nil ? commits.first?.id : nil)
     }
 
     @State private var publishBranch: Bool
@@ -155,6 +183,9 @@ struct PushDialogView: View {
     @State private var pushTagMode: PushDialogTagMode
     @State private var runHooks: Bool
     @State private var selectedCommitID: String?
+    @State private var outgoingCommits: [CommitInfo] = []
+    @State private var outgoingCommitsLoading = false
+    @State private var outgoingCommitsError: String?
     @State private var changedFiles: [TreeChange] = []
     @State private var selectedChangedPath: String?
     @State private var selectedFileDiff: FileDiff?
@@ -162,8 +193,17 @@ struct PushDialogView: View {
     @State private var previewTask: Task<Void, Never>?
 
     private var selectedBranchIsProtected: Bool {
-        GitProtectedBranchRules.matches(normalizedTargetBranch, patterns: protectedBranchPatterns)
+        GitProtectedBranchRules.matches(
+            PushDialogRefspec.targetBranch(selectedRefspec) ?? normalizedTargetBranch,
+            patterns: protectedBranchPatterns
+        )
     }
+
+    private var selectedRefspecRequestsForce: Bool {
+        PushDialogRefspec.requestsForce(selectedRefspec)
+    }
+
+    private var effectiveForce: Bool { force || selectedRefspecRequestsForce }
 
     private var normalizedTargetBranch: String {
         PushDialogRefspec.normalizeTargetBranch(branch)
@@ -176,6 +216,18 @@ struct PushDialogView: View {
         )
     }
 
+    private var generatedMappedBranchRefspec: String? {
+        let source = sourceRevision.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = normalizedTargetBranch
+        guard mode == .push, !source.isEmpty, !target.isEmpty, source != target else {
+            return nil
+        }
+        return PushDialogRefspec.pushUpToCommit(
+            sourceRevision: source,
+            targetBranch: target
+        )
+    }
+
     private var selectedRefspec: String? {
         if useCustomRefspec {
             let value = customRefspec.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -184,7 +236,24 @@ struct PushDialogView: View {
         if mode == .pushUpToCommit || mode == .addCommitsToRemoteBranch {
             return generatedPushUpRefspec
         }
+        if mode == .push {
+            return generatedMappedBranchRefspec
+        }
         return nil
+    }
+
+    private var displayedCommits: [CommitInfo] {
+        repo == nil ? commits : outgoingCommits
+    }
+
+    private var outgoingPreviewKey: String {
+        [
+            mode.title,
+            remote,
+            normalizedTargetBranch,
+            sourceRevision.trimmingCharacters(in: .whitespacesAndNewlines),
+            useCustomRefspec ? customRefspec.trimmingCharacters(in: .whitespacesAndNewlines) : "",
+        ].joined(separator: "\u{1f}")
     }
 
     var body: some View {
@@ -231,6 +300,14 @@ struct PushDialogView: View {
                         TextField("refs/heads/branch", text: $branch)
                             .textFieldStyle(.roundedBorder)
                     }
+                } else if mode == .push {
+                    Picker("Source branch", selection: $sourceRevision) {
+                        ForEach(branches, id: \.name) { item in
+                            Text(item.name).tag(item.name)
+                        }
+                    }
+                    TextField("Target branch", text: $branch)
+                        .textFieldStyle(.roundedBorder)
                 } else {
                     Picker("分支", selection: $branch) {
                         ForEach(branches, id: \.name) { item in
@@ -245,7 +322,7 @@ struct PushDialogView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
-                if force {
+                if effectiveForce {
                     Toggle("Use force-with-lease (safer)", isOn: $forceWithLease)
                     Text(forceWithLease
                         ? "仅当远程仍指向你最近看到的提交时才覆盖。"
@@ -270,6 +347,11 @@ struct PushDialogView: View {
                     if useCustomRefspec {
                         TextField("e.g. HEAD:refs/heads/release", text: $customRefspec)
                             .textFieldStyle(.roundedBorder)
+                        if selectedRefspecRequestsForce {
+                            Text("The leading + makes this a force push.")
+                                .font(.caption)
+                                .foregroundStyle(selectedBranchIsProtected ? Color.red : Color.orange)
+                        }
                     }
                 }
 
@@ -292,9 +374,9 @@ struct PushDialogView: View {
                         onPush(
                             remotes.isEmpty ? nil : remote,
                             normalizedTargetBranch.isEmpty ? nil : normalizedTargetBranch,
-                            force && !selectedBranchIsProtected,
+                            effectiveForce,
                             publishBranch,
-                            force && forceWithLease,
+                            effectiveForce && forceWithLease,
                             selectedRefspec,
                             mode == .push && pushTags ? pushTagMode : nil,
                             mode == .push && !runHooks
@@ -305,16 +387,16 @@ struct PushDialogView: View {
                         (!remotes.isEmpty && !remotes.contains(where: { $0.name == remote }))
                             || ((mode == .pushUpToCommit || mode == .addCommitsToRemoteBranch)
                                 && selectedRefspec == nil)
+                            || (effectiveForce && selectedBranchIsProtected)
                     )
                 }
             }
         }
         .padding(20)
         .frame(width: repo == nil ? 480 : 820)
-        .onAppear {
-            if let selectedCommitID, let repo {
-                loadCommitPreview(repo: repo, commitID: selectedCommitID)
-            }
+        .task(id: outgoingPreviewKey) {
+            guard let repo else { return }
+            await loadOutgoingCommits(repo: repo, key: outgoingPreviewKey)
         }
         .onDisappear { previewTask?.cancel() }
         .onChange(of: selectedCommitID) { _, value in
@@ -333,14 +415,27 @@ struct PushDialogView: View {
             HStack {
                 Text("Commits").font(.headline)
                 Spacer()
-                Text("\(commits.count) loaded").font(.caption).foregroundStyle(.secondary)
+                if outgoingCommitsLoading {
+                    ProgressView().controlSize(.small)
+                }
+                Text(repo == nil
+                    ? "\(displayedCommits.count) loaded"
+                    : "\(displayedCommits.count) outgoing")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            if commits.isEmpty {
-                Text("No local commits loaded").font(.caption).foregroundStyle(.secondary)
+            if let outgoingCommitsError {
+                Text(outgoingCommitsError).font(.caption).foregroundStyle(.red)
+            } else if displayedCommits.isEmpty {
+                Text(outgoingCommitsLoading
+                    ? "Loading outgoing commits…"
+                    : (repo == nil ? "No local commits loaded" : "No outgoing commits"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 5) {
-                        ForEach(commits.prefix(12), id: \.id) { commit in
+                        ForEach(displayedCommits.prefix(12), id: \.id) { commit in
                             Button {
                                 selectedCommitID = commit.id
                             } label: {
@@ -362,6 +457,58 @@ struct PushDialogView: View {
                 .frame(maxHeight: 150)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
+        }
+    }
+
+    @MainActor
+    private func loadOutgoingCommits(repo: Repository, key: String) async {
+        let selectedRemote = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetBranch = PushDialogRefspec.targetBranch(selectedRefspec) ?? normalizedTargetBranch
+        let source = PushDialogRefspec.sourceRevision(selectedRefspec)
+            ?? sourceRevision.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !selectedRemote.isEmpty, !targetBranch.isEmpty, !source.isEmpty else {
+            outgoingCommits = []
+            outgoingCommitsError = nil
+            outgoingCommitsLoading = false
+            selectedCommitID = nil
+            return
+        }
+
+        outgoingCommitsLoading = true
+        outgoingCommitsError = nil
+        let result: Result<[CommitInfo], Error> = await Task.detached(priority: .userInitiated) {
+            Result {
+                let remoteRevision = "refs/remotes/\(selectedRemote)/\(targetBranch)"
+                let commandArgs: [String]
+                if (try? repo.revisionCommitId(revision: remoteRevision)) != nil {
+                    commandArgs = ["\(remoteRevision)..\(source)"]
+                } else {
+                    commandArgs = [source]
+                }
+                return try repo.logWithCommand(commandArgs: commandArgs, limit: 200)
+            }
+        }.value
+        guard key == outgoingPreviewKey else { return }
+        outgoingCommitsLoading = false
+        switch result {
+        case let .success(commits):
+            outgoingCommits = commits
+            outgoingCommitsError = nil
+            if !commits.contains(where: { $0.id == selectedCommitID }) {
+                selectedCommitID = commits.first?.id
+            }
+            if commits.isEmpty {
+                changedFiles = []
+                selectedChangedPath = nil
+                selectedFileDiff = nil
+            }
+        case let .failure(error):
+            outgoingCommits = []
+            selectedCommitID = nil
+            changedFiles = []
+            selectedChangedPath = nil
+            selectedFileDiff = nil
+            outgoingCommitsError = "Unable to load outgoing commits: \(error)"
         }
     }
 

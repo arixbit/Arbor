@@ -585,7 +585,7 @@ pub fn clone_repository(
     destination: String,
     recursive_submodules: bool,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, None, None)
+    clone_inner(url, destination, recursive_submodules, None, None, None)
 }
 
 /// 克隆远程仓库并可选限制初始历史深度。
@@ -600,7 +600,26 @@ pub fn clone_repository_with_options(
     recursive_submodules: bool,
     depth: Option<u32>,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, None, depth)
+    clone_inner(url, destination, recursive_submodules, None, depth, None)
+}
+
+/// Clone with shallow-clone options and a cancellation handle.
+#[uniffi::export]
+pub fn clone_repository_with_options_and_cancel(
+    url: String,
+    destination: String,
+    recursive_submodules: bool,
+    depth: Option<u32>,
+    cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
+) -> Result<String, EngineError> {
+    clone_inner(
+        url,
+        destination,
+        recursive_submodules,
+        None,
+        depth,
+        Some(cancel.token()),
+    )
 }
 
 /// 带认证代理的克隆：HTTPS/SSH 首次提示走 Swift 的 handler（AUTH-001）。
@@ -612,7 +631,14 @@ pub fn clone_repository_with_auth(
     recursive_submodules: bool,
     broker: std::sync::Arc<crate::auth::CredentialBroker>,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, Some(&broker), None)
+    clone_inner(
+        url,
+        destination,
+        recursive_submodules,
+        Some(&broker),
+        None,
+        None,
+    )
 }
 
 /// 带认证代理和可选 shallow depth 的克隆入口。
@@ -624,7 +650,34 @@ pub fn clone_repository_with_auth_options(
     broker: std::sync::Arc<crate::auth::CredentialBroker>,
     depth: Option<u32>,
 ) -> Result<String, EngineError> {
-    clone_inner(url, destination, recursive_submodules, Some(&broker), depth)
+    clone_inner(
+        url,
+        destination,
+        recursive_submodules,
+        Some(&broker),
+        depth,
+        None,
+    )
+}
+
+/// Authenticated clone with options and process-group cancellation.
+#[uniffi::export]
+pub fn clone_repository_with_auth_options_and_cancel(
+    url: String,
+    destination: String,
+    recursive_submodules: bool,
+    broker: std::sync::Arc<crate::auth::CredentialBroker>,
+    depth: Option<u32>,
+    cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
+) -> Result<String, EngineError> {
+    clone_inner(
+        url,
+        destination,
+        recursive_submodules,
+        Some(&broker),
+        depth,
+        Some(cancel.token()),
+    )
 }
 
 fn clone_inner(
@@ -633,6 +686,7 @@ fn clone_inner(
     recursive_submodules: bool,
     broker: Option<&crate::auth::CredentialBroker>,
     depth: Option<u32>,
+    cancel: Option<&crate::gitprocess::GitCancelToken>,
 ) -> Result<String, EngineError> {
     ignore_sigpipe();
     let url = url.trim();
@@ -663,19 +717,34 @@ fn clone_inner(
         });
     }
     let depth_arg = depth.map(|value| value.to_string());
+    let local_source_path = std::path::Path::new(url);
+    let local_source = local_source_path.is_absolute() || local_source_path.exists();
     let spec = crate::gitprocess::GitCommandSpec::new(
         crate::gitprocess::GitCommandCategory::Clone,
         "clone",
     )
     .flag_if("--recurse-submodules", recursive_submodules)
+    // Git ignores --depth for the local hard-link clone optimization. Force
+    // the normal transport when a local absolute path requests shallow history.
+    .flag_if("--no-local", depth.is_some() && local_source)
     .opt_arg("--depth", depth_arg.as_deref())
     .url_arg(url)
     .arg(destination.to_string_lossy().into_owned());
     let outcome = match broker {
-        Some(broker) => crate::auth::run_with_askpass(&spec, broker, None)?,
-        None => crate::gitprocess::run_to_completion(&spec)?,
+        Some(broker) => crate::auth::run_with_askpass(&spec, broker, cancel)?,
+        None => crate::gitprocess::run(&spec, cancel, |_| {})?,
     };
     if !outcome.success() {
+        let cancelled = matches!(
+            outcome.failure,
+            Some(crate::gitprocess::GitFailureKind::Cancelled)
+        ) || outcome.cancelled;
+        if destination.exists() {
+            let _ = std::fs::remove_dir_all(&destination);
+        }
+        if cancelled {
+            return Err(EngineError::Cancelled);
+        }
         return Err(outcome.into_error(&spec));
     }
     Ok(std::fs::canonicalize(&destination)
@@ -5253,6 +5322,11 @@ fn push_refspec_inner(
     broker: Option<&crate::auth::CredentialBroker>,
     cancel: Option<&crate::gitprocess::GitCancelToken>,
 ) -> Result<(), EngineError> {
+    if refspec.trim_start().starts_with('+') && !force {
+        return Err(EngineError::GitOperation {
+            message: "a '+' push refspec is a force push and requires force=true".into(),
+        });
+    }
     let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
         message: "push requires a non-bare worktree".into(),
     })?;
@@ -5607,6 +5681,8 @@ fn shelve_locked(
     name: String,
     paths: Vec<String>,
     preserve_index: bool,
+    include_untracked: bool,
+    include_ignored: bool,
 ) -> Result<(), EngineError> {
     use crate::shelve::{
         build_patch_tree, capture_index_entries_for_paths, load_shelves, reset_path_to_head,
@@ -5628,6 +5704,45 @@ fn shelve_locked(
         return Err(EngineError::GitOperation {
             message: "shelve: name must not contain tabs or line breaks".into(),
         });
+    }
+    let status = crate::status::compute_status(repo)?;
+    for path in &paths {
+        crate::repo::worktree_relative_path(path)?;
+        let entry = status.iter().find(|entry| entry.path == *path);
+        let rename_source = status.iter().any(|entry| {
+            entry.old_path.as_deref() == Some(path.as_str())
+                && (entry.staged == crate::status::ChangeKind::Renamed
+                    || entry.unstaged == crate::status::ChangeKind::Renamed)
+        });
+        if rename_source {
+            continue;
+        }
+        let Some(entry) = entry else {
+            // A clean, tracked path is still a valid Shelve selection: it
+            // creates an empty patch and is used by the deleted-shelf flow.
+            // Unknown paths remain rejected so this exception does not turn
+            // path validation into an arbitrary worktree operation.
+            let head_spec = format!("HEAD:{path}");
+            if repo
+                .rev_parse_single(BStr::new(head_spec.as_bytes()))
+                .is_err()
+            {
+                return Err(EngineError::GitOperation {
+                    message: format!("shelve: path is not a current change: {path}"),
+                });
+            }
+            continue;
+        };
+        if entry.unstaged == crate::status::ChangeKind::Ignored && !include_ignored {
+            return Err(EngineError::GitOperation {
+                message: format!("shelve: ignored path requires include_ignored: {path}"),
+            });
+        }
+        if entry.unstaged == crate::status::ChangeKind::Untracked && !include_untracked {
+            return Err(EngineError::GitOperation {
+                message: format!("shelve: untracked path requires include_untracked: {path}"),
+            });
+        }
     }
     if preserve_index && crate::shelve::has_temporary_index_snapshot(repo)? {
         return Err(EngineError::GitOperation {
@@ -5909,7 +6024,14 @@ impl Repository {
         let repo = self.inner.lock().expect("repo mutex poisoned");
         let relative_path = worktree_relative_path(&path)?;
         let file_path = worktree_root(&repo)?.join(relative_path);
-        let metadata = std::fs::metadata(&file_path).map_err(EngineError::from_gix)?;
+        let metadata = std::fs::symlink_metadata(&file_path).map_err(EngineError::from_gix)?;
+        if metadata.file_type().is_symlink() {
+            let target = std::fs::read_link(&file_path).map_err(EngineError::from_gix)?;
+            return Ok(file_content_from_bytes(
+                target.as_os_str().as_encoded_bytes().to_vec(),
+                false,
+            ));
+        }
         if !metadata.is_file() {
             return Err(EngineError::GitOperation {
                 message: format!("not a file: {path}"),
@@ -6143,8 +6265,8 @@ impl Repository {
         let repo = self.inner.lock().expect("repo mutex poisoned");
         let mut state = crate::changelist::load_change_lists(&repo)?;
         let status = crate::status::compute_status(&repo)?;
-        let current_paths: Vec<String> = status.into_iter().map(|entry| entry.path).collect();
-        if crate::changelist::observe_paths(&mut state, &current_paths) {
+        let current_paths: Vec<String> = status.iter().map(|entry| entry.path.clone()).collect();
+        if crate::changelist::observe_status(&mut state, &status) {
             crate::changelist::save_change_lists(&repo, &state)?;
         }
         Ok(crate::changelist::to_info(&state, &current_paths))
@@ -13338,10 +13460,11 @@ impl Repository {
     pub fn conflict_apply_batch(
         &self,
         path: String,
+        result_content: String,
         action: crate::conflict::ConflictBatchAction,
     ) -> Result<crate::conflict::ConflictBatchResult, EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        crate::conflict::apply_batch(&repo, &path, action)
+        crate::conflict::apply_batch(&repo, &path, &result_content, action)
     }
 
     /// 文件级接受方向（IntelliJ Accept Yours/Theirs/Both）：写工作区 + 清
@@ -13406,9 +13529,18 @@ impl Repository {
     /// -> upsert stage 0（写 blob + stat + mode）。与 `resolve` 共用 `write_resolved`。
     pub fn resolve_edited(&self, path: String, content: String) -> Result<(), EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        let index_entries = crate::conflict::capture_index_entries(&repo, &path)?;
-        write_resolved(&repo, &path, &content)?;
-        crate::conflict::mark_resolved(&repo, &path, index_entries)
+        crate::conflict::resolve_edited(&repo, &path, &content, false)
+    }
+
+    /// Explicit override for workflows that already showed a destructive
+    /// confirmation before accepting a result that still contains markers.
+    pub fn resolve_edited_allow_conflict_markers(
+        &self,
+        path: String,
+        content: String,
+    ) -> Result<(), EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        crate::conflict::resolve_edited(&repo, &path, &content, true)
     }
 
     // MARK: stash
@@ -13912,7 +14044,28 @@ impl Repository {
     /// 保存指定路径的变更为命名补丁，并把工作区/索引重置回 HEAD。
     pub fn shelve(&self, name: String, paths: Vec<String>) -> Result<(), EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        shelve_locked(&repo, name, paths, false)
+        shelve_locked(&repo, name, paths, false, false, false)
+    }
+
+    /// Save selected changes with explicit opt-ins for untracked and ignored
+    /// members. Ignored files remain a separate boundary: including untracked
+    /// files alone never includes an ignored path.
+    pub fn shelve_with_options(
+        &self,
+        name: String,
+        paths: Vec<String>,
+        include_untracked: bool,
+        include_ignored: bool,
+    ) -> Result<(), EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        shelve_locked(
+            &repo,
+            name,
+            paths,
+            false,
+            include_untracked,
+            include_ignored,
+        )
     }
 
     /// 保存供 Pull/Checkout/Rebase 临时使用的 Shelf，同时记录保存前的
@@ -13924,7 +14077,7 @@ impl Repository {
         paths: Vec<String>,
     ) -> Result<(), EngineError> {
         let repo = self.inner.lock().expect("repo mutex poisoned");
-        shelve_locked(&repo, name, paths, true)
+        shelve_locked(&repo, name, paths, true, true, true)
     }
 
     /// 导入一个 unified/binary patch 为独立 Shelf 文件。

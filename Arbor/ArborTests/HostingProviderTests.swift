@@ -322,6 +322,12 @@ final class HostingProviderTests: XCTestCase {
                 URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.percentEncodedPath,
                 "/api/v4/projects/acme%2Ftools%2Farbor/merge_requests"
             )
+            let query = Dictionary(uniqueKeysWithValues:
+                URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.map {
+                    ($0.name, $0.value ?? "")
+                } ?? []
+            )
+            XCTAssertEqual(query["state"], "opened")
             let response = try XCTUnwrap(HTTPURLResponse(
                 url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
             ))
@@ -397,6 +403,15 @@ final class HostingProviderTests: XCTestCase {
         defer { try? store.deleteToken(for: repository) }
 
         HostingMockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            ))
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(request.url?.path, "/api/v4/projects/acme/arbor/merge_requests/7")
+                return (response, Data("""
+                {"iid":7,"diff_refs":{"base_sha":"base","start_sha":"start","head_sha":"head"}}
+                """.utf8))
+            }
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.path, "/api/v4/projects/acme/arbor/merge_requests/7/discussions")
             let body = try Self.bodyData(from: request)
@@ -405,12 +420,11 @@ final class HostingProviderTests: XCTestCase {
             let position = try XCTUnwrap(json["position"] as? [String: Any])
             XCTAssertEqual(position["new_path"] as? String, "Sources/App.swift")
             XCTAssertEqual(position["new_line"] as? Int, 12)
-            XCTAssertEqual(position["head_sha"] as? String, "abcdef")
-            let response = try XCTUnwrap(HTTPURLResponse(
-                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
-            ))
+            XCTAssertEqual(position["base_sha"] as? String, "base")
+            XCTAssertEqual(position["start_sha"] as? String, "start")
+            XCTAssertEqual(position["head_sha"] as? String, "head")
             return (response, Data("""
-            {"notes":[{"id":99,"body":"Please rename this.","position":{"new_path":"Sources/App.swift","new_line":12,"head_sha":"abcdef"}}]}
+            {"notes":[{"id":99,"body":"Please rename this.","position":{"new_path":"Sources/App.swift","new_line":12,"head_sha":"head"}}]}
             """.utf8))
         }
 
@@ -471,6 +485,53 @@ final class HostingProviderTests: XCTestCase {
 
         let files = try await client.loadGitLabCommitFiles(for: repository, commitID: "commitsha")
         XCTAssertEqual(files.map(\.path), ["commit.swift"])
+    }
+
+    func testGitLabApproveAndMergeBindMutationToExpectedHeadRevision() async throws {
+        let repository = try XCTUnwrap(
+            HostingProvider.parse(remoteURL: "https://gitlab.com/acme/arbor.git")
+        )
+        let store = KeychainStore(service: "com.arbor.tests.\(UUID().uuidString)")
+        try store.setToken("gitlab-token", for: repository)
+        defer { try? store.deleteToken(for: repository) }
+
+        HostingMockURLProtocol.requestHandler = { request in
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            ))
+            switch request.url?.path {
+            case "/api/v4/projects/acme/arbor/merge_requests/7/approve":
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(json["sha"] as? String, "reviewed-head")
+                return (response, Data("{}".utf8))
+            case "/api/v4/projects/acme/arbor/merge_requests/7/merge":
+                XCTAssertEqual(request.httpMethod, "PUT")
+                XCTAssertEqual(json["sha"] as? String, "reviewed-head")
+                XCTAssertEqual(json["squash"] as? Bool, true)
+                return (response, Data("{\"iid\":7,\"state\":\"merged\"}".utf8))
+            default:
+                throw NSError(domain: "HostingProviderTests", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: "Unexpected GitLab mutation path \(request.url?.path ?? "nil")"
+                ])
+            }
+        }
+
+        let client = GitLabClient(session: makeHostingMockSession(), keychain: store)
+        try await client.submitGitLabReview(
+            for: repository,
+            iid: 7,
+            outcome: .approve,
+            body: nil,
+            expectedHeadRevision: "reviewed-head"
+        )
+        try await client.mergeGitLabMergeRequest(
+            for: repository,
+            iid: 7,
+            method: "squash",
+            expectedHeadRevision: "reviewed-head"
+        )
     }
 
     func testBitbucketClientUsesBasicAuthAndDecodesPage() async throws {
@@ -3192,6 +3253,21 @@ final class GitLocalChangesSavePolicySettingsTests: XCTestCase {
 }
 
 final class PushDialogTests: XCTestCase {
+    func testLeadingPlusRefspecIsForceAndExposesItsBranchTarget() {
+        XCTAssertTrue(PushDialogRefspec.requestsForce(" +HEAD:refs/heads/main "))
+        XCTAssertFalse(PushDialogRefspec.requestsForce("HEAD:refs/heads/main"))
+        XCTAssertEqual(
+            PushDialogRefspec.sourceRevision(" +feature/local:refs/heads/release/1.0 "),
+            "feature/local"
+        )
+        XCTAssertEqual(
+            PushDialogRefspec.targetBranch("+HEAD:refs/heads/release/1.0"),
+            "release/1.0"
+        )
+        XCTAssertNil(PushDialogRefspec.sourceRevision(":refs/heads/main"))
+        XCTAssertNil(PushDialogRefspec.targetBranch("refs/tags/v1:refs/tags/v1"))
+    }
+
     func testOnlyCommitAndPushKeepsNoRemoteCommitFallback() {
         XCTAssertTrue(PushDialogMode.commitAndPush.allowsCommitOnlyFallbackWithoutRemote)
         XCTAssertFalse(PushDialogMode.push.allowsCommitOnlyFallbackWithoutRemote)

@@ -164,41 +164,7 @@ fn diff3_blocks(
     repo: &gix::Repository,
     file: &ConflictFile,
 ) -> Result<Vec<(Vec<String>, Vec<String>, Vec<String>)>, EngineError> {
-    let workdir = repo.workdir().unwrap_or_else(|| Path::new("."));
-    let mut ours_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
-    let mut base_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
-    let mut theirs_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
-    ours_file
-        .write_all(file.ours.as_bytes())
-        .map_err(EngineError::from_gix)?;
-    base_file
-        .write_all(file.base.as_bytes())
-        .map_err(EngineError::from_gix)?;
-    theirs_file
-        .write_all(file.theirs.as_bytes())
-        .map_err(EngineError::from_gix)?;
-    let output = crate::gitprocess::git_command_for_working_dir(workdir)
-        .args([
-            "merge-file",
-            "--diff3",
-            "-p",
-            ours_file.path().to_string_lossy().as_ref(),
-            base_file.path().to_string_lossy().as_ref(),
-            theirs_file.path().to_string_lossy().as_ref(),
-        ])
-        .output()
-        .map_err(EngineError::from_gix)?;
-    // merge-file exits 1 when it found conflicts; stdout is still the useful
-    // diff3 representation. Exit codes above 1 indicate an actual failure.
-    if !output.status.success() && output.status.code() != Some(1) {
-        return Err(EngineError::GitOperation {
-            message: format!(
-                "git merge-file failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            ),
-        });
-    }
-    let output_text = String::from_utf8_lossy(&output.stdout);
+    let output_text = merge_file_output(repo, file, Some("--diff3"))?;
     let lines: Vec<&str> = output_text.lines().collect();
     let mut blocks = Vec::new();
     let mut index = 0;
@@ -240,6 +206,51 @@ fn diff3_blocks(
     Ok(blocks)
 }
 
+/// Run Git's three-way file merge against the exact stage 2/1/3 content.
+/// `mode` is either `--diff3`, `--union`, or absent for normal merge markers.
+fn merge_file_output(
+    repo: &gix::Repository,
+    file: &ConflictFile,
+    mode: Option<&str>,
+) -> Result<String, EngineError> {
+    let workdir = repo.workdir().unwrap_or_else(|| Path::new("."));
+    let mut ours_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    let mut base_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    let mut theirs_file = tempfile::NamedTempFile::new().map_err(EngineError::from_gix)?;
+    ours_file
+        .write_all(file.ours.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    base_file
+        .write_all(file.base.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    theirs_file
+        .write_all(file.theirs.as_bytes())
+        .map_err(EngineError::from_gix)?;
+    let mut command = crate::gitprocess::git_command_for_working_dir(workdir);
+    command.arg("merge-file");
+    if let Some(mode) = mode {
+        command.arg(mode);
+    }
+    let output = command
+        .args(["-p", "-L", "HEAD", "-L", "base", "-L", "theirs"])
+        .arg(ours_file.path())
+        .arg(base_file.path())
+        .arg(theirs_file.path())
+        .output()
+        .map_err(EngineError::from_gix)?;
+    // merge-file exits 1 when it found conflicts; stdout is still the useful
+    // diff3 representation. Exit codes above 1 indicate an actual failure.
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "git merge-file failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 pub(crate) fn preview_batch(
     repo: &gix::Repository,
     path: &str,
@@ -273,14 +284,19 @@ pub(crate) fn preview_batch(
 pub(crate) fn apply_batch(
     repo: &gix::Repository,
     path: &str,
+    result_content: &str,
     action: ConflictBatchAction,
 ) -> Result<ConflictBatchResult, EngineError> {
-    let (binary, file) = read_conflict_file(repo, path)?;
+    let (binary, mut file) = read_conflict_file(repo, path)?;
     if binary {
         return Err(EngineError::GitOperation {
             message: "conflict batch actions are unavailable for binary files".into(),
         });
     }
+    // The AppKit editor owns unsaved result text. Treat that buffer as the
+    // batch source instead of re-reading the worktree and losing user edits.
+    file.result = result_content.to_string();
+    file.blocks = crate::merge::parse_marker_blocks(result_content, &file.ours, &file.theirs);
     let canonical_blocks = diff3_blocks(repo, &file).unwrap_or_default();
     let kinds = classify_blocks(repo, &file);
     let mut lines: Vec<String> = file.result.lines().map(str::to_string).collect();
@@ -747,7 +763,7 @@ pub(crate) fn capture_index_entries(
 }
 
 /// 文件级接受一侧或双方：写工作区 + 清冲突 stages + upsert stage 0。
-/// 二进制安全（raw bytes）。
+/// Ours/Theirs 保持 raw bytes；Both 仅适用于可进行三方合并的文本。
 pub(crate) fn accept(
     repo: &gix::Repository,
     path: &str,
@@ -762,46 +778,56 @@ pub(crate) fn accept(
     let content: Vec<u8> = match pick {
         FilePick::Ours => ours,
         FilePick::Theirs => theirs,
-        // Both：两段都保留（ours 在上，中间换行分隔）；任一侧缺失取另一侧。
         FilePick::Both => {
-            let mut merged = Vec::new();
-            let mut any = false;
-            for side in [&ours, &theirs] {
-                if !side.is_empty() {
-                    if any {
-                        merged.push(b'\n');
-                    }
-                    merged.extend_from_slice(side);
-                    any = true;
-                }
+            let (binary, file) = read_conflict_file(repo, path)?;
+            if binary {
+                return Err(EngineError::GitOperation {
+                    message: format!(
+                        "accept both: {path} is binary; choose either the local or remote version"
+                    ),
+                });
             }
-            merged
+            merge_file_output(repo, &file, Some("--union"))?.into_bytes()
         }
     };
     crate::merge::write_resolved_bytes(repo, path, &content)?;
     mark_resolved(repo, path, index_entries)
 }
 
-/// 重新物化冲突现场：从 index stages 重新生成 marker 内容写回工作区，
-/// **不碰索引 stages**（reset 语义：放弃当前编辑，回到未解决状态）。
+pub(crate) fn resolve_edited(
+    repo: &gix::Repository,
+    path: &str,
+    content: &str,
+    allow_conflict_markers: bool,
+) -> Result<(), EngineError> {
+    if !allow_conflict_markers && contains_conflict_marker_lines(content) {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "resolve edited: {path} still contains conflict markers; resolve every block before marking the file resolved"
+            ),
+        });
+    }
+    let index_entries = capture_index_entries(repo, path)?;
+    write_resolved(repo, path, content)?;
+    mark_resolved(repo, path, index_entries)
+}
+
+fn contains_conflict_marker_lines(content: &str) -> bool {
+    content
+        .lines()
+        .any(|line| line.starts_with("<<<<<<<") || line.starts_with(">>>>>>>"))
+}
+
+/// 重新物化冲突现场：从 index stages 做真正的三方合并，只在重叠改动处
+/// 生成 marker，并保留共同上下文一次。索引 stages 保持不变。
 pub(crate) fn reset(repo: &gix::Repository, path: &str) -> Result<(), EngineError> {
-    use gix::index::entry::Stage;
-    let index = repo.index().map_err(EngineError::from_gix)?;
-    let path_bstr = path.as_bytes().as_bstr();
-    let ours = stage_bytes(repo, &index, path_bstr, Stage::Ours);
-    let theirs = stage_bytes(repo, &index, path_bstr, Stage::Theirs);
-    if has_binary_attribute(repo, path)
-        || crate::diff::is_binary(&ours)
-        || crate::diff::is_binary(&theirs)
-    {
+    let (binary, file) = read_conflict_file(repo, path)?;
+    if binary {
         return Err(EngineError::GitOperation {
             message: format!("reset: {path} 是二进制文件，无法生成 marker；请用 Accept 或手动编辑"),
         });
     }
-    let content = render_marker(
-        &String::from_utf8_lossy(&ours),
-        &String::from_utf8_lossy(&theirs),
-    );
+    let content = merge_file_output(repo, &file, None)?;
     let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
         message: "bare repository has no worktree".into(),
     })?;
@@ -1019,22 +1045,4 @@ fn has_binary_attribute(repo: &gix::Repository, path: &str) -> bool {
         })
         .map(|attrs| attrs.binary == crate::attributes::AttributeValue::Set)
         .unwrap_or(false)
-}
-
-/// 从两侧内容生成 git 风格 marker（与 gix merge 物化格式兼容，
-/// parse_marker_blocks 只依赖 marker 行前缀，label 不影响解析）。
-pub(crate) fn render_marker(ours: &str, theirs: &str) -> String {
-    let mut out = String::new();
-    out.push_str("<<<<<<< HEAD\n");
-    out.push_str(ours);
-    if !ours.is_empty() && !ours.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str("=======\n");
-    out.push_str(theirs);
-    if !theirs.is_empty() && !theirs.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(">>>>>>> theirs\n");
-    out
 }

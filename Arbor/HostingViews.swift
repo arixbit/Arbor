@@ -109,6 +109,7 @@ final class HostingWorkspaceModel: ObservableObject {
     @Published var isDetailLoading = false
     @Published var detailError: String?
     private var commitFilesLoadGeneration = 0
+    private var detailLoadGeneration = 0
 
     init(repository: HostingRepository?) {
         self.repository = repository
@@ -184,28 +185,54 @@ final class HostingWorkspaceModel: ObservableObject {
     func loadDetail(for pullRequest: HostingPullRequest) async {
         guard let repository else { return }
         selectedPullRequestID = pullRequest.id
+        detailLoadGeneration &+= 1
+        let generation = detailLoadGeneration
         detail = nil
         detailError = nil
         selectedCommitID = nil
         selectedFilePath = nil
         detailFiles = []
         isDetailLoading = true
+        defer {
+            if detailLoadGeneration == generation {
+                isDetailLoading = false
+            }
+        }
         do {
             let loaded = try await client.hostingPullRequestDetail(
                 for: repository,
                 pullRequestID: pullRequest.id
             )
-            guard selectedPullRequestID == pullRequest.id else { return }
+            guard detailLoadGeneration == generation,
+                  selectedPullRequestID == pullRequest.id else { return }
             detail = loaded
             selectedCommitID = loaded.commits.first?.id
             detailFiles = loaded.files
             selectedFilePath = loaded.files.first?.path
         } catch {
-            guard selectedPullRequestID == pullRequest.id else { return }
+            guard detailLoadGeneration == generation,
+                  selectedPullRequestID == pullRequest.id else { return }
             detailError = error.localizedDescription
             record(error)
         }
-        isDetailLoading = false
+    }
+
+    func loadSelectedDetail() async {
+        guard let selectedPullRequestID else {
+            detailLoadGeneration &+= 1
+            detail = nil
+            detailError = nil
+            isDetailLoading = false
+            return
+        }
+        guard let pullRequest = pullRequests.first(where: { $0.id == selectedPullRequestID }) else {
+            detailLoadGeneration &+= 1
+            detail = nil
+            detailError = "The selected pull request is no longer in this list."
+            isDetailLoading = false
+            return
+        }
+        await loadDetail(for: pullRequest)
     }
 
     func loadFilesForSelectedCommit() async {
@@ -246,13 +273,22 @@ final class HostingWorkspaceModel: ObservableObject {
     }
 
     func submitReview(outcome: HostingReviewOutcome, body: String?) async -> Bool {
-        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        guard let repository,
+              let pullRequestID = selectedPullRequestID,
+              let detail,
+              detail.pullRequest.id == pullRequestID,
+              let expectedHeadRevision = detail.headRevision,
+              !expectedHeadRevision.isEmpty else {
+            detailError = "Reload the selected pull request before submitting a review."
+            return false
+        }
         do {
             try await client.submitHostingReview(
                 for: repository,
                 pullRequestID: pullRequestID,
                 outcome: outcome,
-                body: body
+                body: body,
+                expectedHeadRevision: expectedHeadRevision
             )
             await reloadSelectedDetail()
             return true
@@ -264,12 +300,21 @@ final class HostingWorkspaceModel: ObservableObject {
     }
 
     func mergeSelected(method: String) async -> Bool {
-        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        guard let repository,
+              let pullRequestID = selectedPullRequestID,
+              let detail,
+              detail.pullRequest.id == pullRequestID,
+              let expectedHeadRevision = detail.headRevision,
+              !expectedHeadRevision.isEmpty else {
+            detailError = "Reload the selected pull request before merging."
+            return false
+        }
         do {
             try await client.mergeHostingPullRequest(
                 for: repository,
                 pullRequestID: pullRequestID,
-                method: method
+                method: method,
+                expectedHeadRevision: expectedHeadRevision
             )
             await reloadSelectedDetail()
             await loadPullRequests()
@@ -282,7 +327,12 @@ final class HostingWorkspaceModel: ObservableObject {
     }
 
     func closeSelected() async -> Bool {
-        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        guard let repository,
+              let pullRequestID = selectedPullRequestID,
+              detail?.pullRequest.id == pullRequestID else {
+            detailError = "Reload the selected pull request before closing it."
+            return false
+        }
         do {
             try await client.closeHostingPullRequest(for: repository, pullRequestID: pullRequestID)
             await reloadSelectedDetail()
@@ -296,7 +346,12 @@ final class HostingWorkspaceModel: ObservableObject {
     }
 
     func revokeApproval() async -> Bool {
-        guard let repository, let pullRequestID = selectedPullRequestID else { return false }
+        guard let repository,
+              let pullRequestID = selectedPullRequestID,
+              detail?.pullRequest.id == pullRequestID else {
+            detailError = "Reload the selected pull request before changing its approval."
+            return false
+        }
         do {
             try await client.revokeHostingApproval(for: repository, pullRequestID: pullRequestID)
             await reloadSelectedDetail()
@@ -497,12 +552,11 @@ struct HostingHubView: View {
                 List(filteredPullRequests, selection: $model.selectedPullRequestID) { pullRequest in
                     PullRequestRow(pullRequest: pullRequest)
                         .tag(pullRequest.id)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            Task { await model.loadDetail(for: pullRequest) }
-                        }
                 }
                 .listStyle(.inset)
+                .task(id: model.selectedPullRequestID) {
+                    await model.loadSelectedDetail()
+                }
             }
             }
             .frame(minWidth: 340, idealWidth: 420, maxWidth: 520)

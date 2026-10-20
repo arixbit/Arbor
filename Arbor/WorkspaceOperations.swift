@@ -1678,75 +1678,122 @@ func externalVCSActionNotificationID(repositoryPath: String) -> String {
     return "arbor.external-vcs-action.\(stablePath)"
 }
 
+struct RepositoryExternalVCSActionExecutionError: LocalizedError, Sendable {
+    let message: String
+    let remainingAction: RepositoryExternalVCSAction
+
+    var errorDescription: String? { message }
+}
+
 func runRepositoryExternalVCSActions(
     repo: Repository,
-    addPaths: [String],
-    stageAddPaths: [String],
-    removePaths: [String],
-    forceMoves: [RepositoryExternalVCSMove]
+    action: RepositoryExternalVCSAction
 ) throws -> String {
     var completed: [String] = []
+    var remainingAddPaths = action.addPaths
+    var remainingStageAddPaths = action.stageAddPaths
+    var remainingRemovePaths = action.removePaths
+    var remainingForceMoves = action.forceMoves
+
+    func executionError(_ error: Error) -> RepositoryExternalVCSActionExecutionError {
+        RepositoryExternalVCSActionExecutionError(
+            message: error.localizedDescription,
+            remainingAction: RepositoryExternalVCSAction(
+                addPaths: remainingAddPaths,
+                stageAddPaths: remainingStageAddPaths,
+                removePaths: remainingRemovePaths,
+                forceMoves: remainingForceMoves
+            )
+        )
+    }
+
+    let addPaths = action.addPaths
     if !addPaths.isEmpty {
         // Rename destinations follow IntelliJ's move/rename path and stage
         // their complete content. Newly created files use the separate
         // empty-blob path below.
-        let result = try repo.runGitCommand(
-            command: "add",
-            args: ["--"] + addPaths
-        )
+        let result: GitCommandResult
+        do {
+            result = try repo.runGitCommand(
+                command: "add",
+                args: ["--"] + addPaths
+            )
+        } catch {
+            throw executionError(error)
+        }
         guard result.exitCode == 0 else {
-            throw NSError(
+            throw executionError(NSError(
                 domain: "Arbor.GitVFSListener",
                 code: Int(result.exitCode),
                 userInfo: [
                     NSLocalizedDescriptionKey:
                         result.stderr.isEmpty ? result.stdout : result.stderr
                 ]
-            )
+            ))
         }
+        remainingAddPaths.removeAll()
         completed.append("Added \(addPaths.count) file(s)")
     }
+    let stageAddPaths = action.stageAddPaths
     if !stageAddPaths.isEmpty {
         // IntelliJ's staging-area VFS listener uses addPathsToIndex: an empty
         // blob is written to the index while the real content stays outside it.
-        try repo.stageEmptyBlobPaths(paths: stageAddPaths)
+        do {
+            try repo.stageEmptyBlobPaths(paths: stageAddPaths)
+        } catch {
+            throw executionError(error)
+        }
+        remainingStageAddPaths.removeAll()
         completed.append("Added \(stageAddPaths.count) new file(s) to the staging index")
     }
+    let removePaths = action.removePaths
     if !removePaths.isEmpty {
-        let result = try repo.runGitCommand(
-            command: "rm",
-            args: ["--cached", "--ignore-unmatch", "-r", "--"] + removePaths
-        )
+        let result: GitCommandResult
+        do {
+            result = try repo.runGitCommand(
+                command: "rm",
+                args: ["--cached", "--ignore-unmatch", "-r", "--"] + removePaths
+            )
+        } catch {
+            throw executionError(error)
+        }
         guard result.exitCode == 0 else {
-            throw NSError(
+            throw executionError(NSError(
                 domain: "Arbor.GitVFSListener",
                 code: Int(result.exitCode),
                 userInfo: [
                     NSLocalizedDescriptionKey:
                         result.stderr.isEmpty ? result.stdout : result.stderr
                 ]
-            )
+            ))
         }
+        remainingRemovePaths.removeAll()
         completed.append("Removed \(removePaths.count) file(s) from Git")
     }
     // GitVFSListener performs ordinary add/delete work before case-only force
     // moves. Preserve that ordering for mixed VFS batches.
-    if !forceMoves.isEmpty {
-        for move in forceMoves {
-            let result = try repo.runGitCommand(
-                command: "mv",
-                args: ["-f", "--", move.oldPath, move.newPath]
-            )
+    if !action.forceMoves.isEmpty {
+        for move in action.forceMoves {
+            let result: GitCommandResult
+            do {
+                result = try repo.runGitCommand(
+                    command: "mv",
+                    args: ["-f", "--", move.oldPath, move.newPath]
+                )
+            } catch {
+                throw executionError(error)
+            }
             guard result.exitCode == 0 else {
-                throw NSError(
+                throw executionError(NSError(
                     domain: "Arbor.GitVFSListener",
                     code: Int(result.exitCode),
                     userInfo: [
                         NSLocalizedDescriptionKey:
                             result.stderr.isEmpty ? result.stdout : result.stderr
                     ]
-                )
+                ))
             }
+            remainingForceMoves.removeFirst()
             completed.append("Moved \(move.oldPath) to \(move.newPath)")
         }
     }
@@ -2787,7 +2834,7 @@ private func confirmAndPerformExternalVCSActions(
     let rootPath = URL(fileURLWithPath: event.repositoryPath)
         .standardizedFileURL
         .path
-    let retryAction = RepositoryExternalVCSAction(
+    let action = RepositoryExternalVCSAction(
         addPaths: addPaths,
         stageAddPaths: stageAddPaths,
         removePaths: removePaths,
@@ -2797,13 +2844,7 @@ private func confirmAndPerformExternalVCSActions(
     beginFeedbackOperation("Update Git files", notificationID: notificationID)
     Task.detached(priority: .userInitiated) { [addPaths, stageAddPaths, removePaths] in
         do {
-            let completedDetail = try runRepositoryExternalVCSActions(
-                repo: repo,
-                addPaths: addPaths,
-                stageAddPaths: stageAddPaths,
-                removePaths: removePaths,
-                forceMoves: forceMoves
-            )
+            let completedDetail = try runRepositoryExternalVCSActions(repo: repo, action: action)
             await MainActor.run {
                 self.refreshRepositoryChange(event) {
                     self.finishExternalVCSAction(ticket, repo: repo)
@@ -2815,19 +2856,21 @@ private func confirmAndPerformExternalVCSActions(
                 )
             }
         } catch {
+            let executionError = error as? RepositoryExternalVCSActionExecutionError
+            let retryAction = repositoryExternalVCSActionCapturingSnapshots(
+                executionError?.remainingAction ?? action,
+                rootPath: rootPath
+            )
             await MainActor.run {
                 self.refreshRepositoryChange(event) {
                     self.finishExternalVCSAction(ticket, repo: repo)
                 }
                 self.feedbackCenter.error(
                     "External Git file action failed",
-                    detail: errorMessage(error),
+                    detail: executionError?.message ?? errorMessage(error),
                     nextStep: "Review the affected paths, then retry the external Git action.",
                     additionalActions: [
-                        self.externalVCSRetryFeedbackAction(
-                            rootPath: rootPath,
-                            action: retryAction
-                        )
+                        self.externalVCSRetryFeedbackAction(rootPath: rootPath, action: retryAction)
                     ],
                     notificationID: notificationID
                 )
@@ -2902,14 +2945,16 @@ private func retryExternalVCSAction(
         rootPath: String,
         action: RepositoryExternalVCSAction
     ) {
-        guard repositoryExternalVCSActionIsSafe(action), !action.isEmpty,
+        guard repositoryExternalVCSActionIsSafe(action),
+              repositoryExternalVCSActionMatchesSnapshots(action, rootPath: rootPath),
+              !action.isEmpty,
               let repo,
               let currentRoot = repo.workdir(),
               URL(fileURLWithPath: currentRoot).standardizedFileURL.path
                   == URL(fileURLWithPath: rootPath).standardizedFileURL.path else {
             feedbackCenter.error(
                 "External Git retry unavailable",
-                detail: "The saved paths are no longer a safe repository-relative action.",
+                detail: "The affected files changed after the failed Git action, so the saved operation is stale.",
                 nextStep: "Refresh the repository and retry the file action from the current changes."
             )
             return
@@ -2924,13 +2969,7 @@ private func retryExternalVCSAction(
         beginFeedbackOperation("Update Git files", notificationID: notificationID)
         Task.detached(priority: .userInitiated) {
             do {
-                let detail = try runRepositoryExternalVCSActions(
-                    repo: repo,
-                    addPaths: action.addPaths,
-                    stageAddPaths: action.stageAddPaths,
-                    removePaths: action.removePaths,
-                    forceMoves: action.forceMoves
-                )
+                let detail = try runRepositoryExternalVCSActions(repo: repo, action: action)
                 await MainActor.run {
                     self.refreshRepositoryChange(
                         externalVCSActionRefreshEvent(
@@ -2945,15 +2984,20 @@ private func retryExternalVCSAction(
                     )
                 }
             } catch {
+                let executionError = error as? RepositoryExternalVCSActionExecutionError
+                let retryAction = repositoryExternalVCSActionCapturingSnapshots(
+                    executionError?.remainingAction ?? action,
+                    rootPath: normalizedRoot
+                )
                 await MainActor.run {
                     self.feedbackCenter.error(
                         "External Git file retry failed",
-                        detail: errorMessage(error),
+                        detail: executionError?.message ?? errorMessage(error),
                         nextStep: "Review the affected paths and retry again after fixing the cause.",
                         additionalActions: [
                             self.externalVCSRetryFeedbackAction(
                                 rootPath: normalizedRoot,
-                                action: action
+                                action: retryAction
                             )
                         ],
                         notificationID: notificationID
@@ -3563,9 +3607,12 @@ func refreshAll(
             // `st` is already the authoritative visible status snapshot.
             // Projecting Changelists from it avoids another full worktree walk
             // inside the engine for both full and incremental refreshes.
-            let cls = (try? repo.changelistListForPaths(
-                currentPaths: st.map(\.path)
-            )) ?? []
+            let containsRename = st.contains {
+                $0.staged == .renamed || $0.unstaged == .renamed
+            }
+            let cls = (try? (containsRename
+                ? repo.changelistList()
+                : repo.changelistListForPaths(currentPaths: st.map(\.path)))) ?? []
             let hid = repo.headCommitId()
             let mergePending = repo.mergeInProgress()
             let opState = try? repo.operationState()
@@ -3803,6 +3850,7 @@ func initializeProject(at requestedPath: String) {
 }
 
 func cloneRepositoryFromDialog() {
+    guard !cloneInProgress else { return }
     let url = cloneURL.trimmingCharacters(in: .whitespacesAndNewlines)
     let parent = cloneParentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
     var directoryName = cloneDirectoryName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3831,17 +3879,28 @@ func cloneRepositoryFromDialog() {
     let destination = URL(fileURLWithPath: parent).appendingPathComponent(directoryName).path
     let recursive = cloneRecursiveSubmodules
     let broker = credentialAuth.broker
+    let cancel = GitCancelHandle()
+    cloneRequestGeneration &+= 1
+    let generation = cloneRequestGeneration
+    cloneInProgress = true
+    cloneCancelling = false
+    cloneCancelHandle = cancel
     beginFeedbackOperation("Clone Git repository")
     Task.detached(priority: .userInitiated) {
         do {
-            let clonedPath = try cloneRepositoryWithAuthOptions(
+            let clonedPath = try cloneRepositoryWithAuthOptionsAndCancel(
                 url: url,
                 destination: destination,
                 recursiveSubmodules: recursive,
                 broker: broker,
-                depth: requestedDepth
+                depth: requestedDepth,
+                cancel: cancel
             )
             await MainActor.run {
+                guard self.cloneRequestGeneration == generation else { return }
+                self.cloneInProgress = false
+                self.cloneCancelling = false
+                self.cloneCancelHandle = nil
                 self.showCloneDialog = false
                 self.cloneURL = ""
                 self.cloneDirectoryName = ""
@@ -3853,11 +3912,33 @@ func cloneRepositoryFromDialog() {
             await MainActor.run { self.requestOpenProject(clonedPath) }
         } catch {
             await MainActor.run {
+                guard self.cloneRequestGeneration == generation else { return }
+                self.cloneInProgress = false
+                self.cloneCancelling = false
+                self.cloneCancelHandle = nil
+                if cancel.isCancelled() {
+                    self.feedbackCenter.warning(
+                        "Clone cancelled",
+                        detail: destination,
+                        nextStep: "Adjust the clone options and retry when ready."
+                    )
+                    return
+                }
                 self.loadError = errorMessage(error)
                 self.feedbackCenter.error("Clone Git repository failed", detail: friendlyRemoteError(error), nextStep: "Check the URL, destination, and authentication, then retry.")
             }
         }
     }
+}
+
+func cancelCloneRepositoryFromDialog() {
+    guard cloneInProgress else {
+        showCloneDialog = false
+        return
+    }
+    guard !cloneCancelling else { return }
+    cloneCancelling = true
+    cloneCancelHandle?.cancel()
 }
 
 /// 请求打开一个项目；已有项目时由用户选择替换当前窗口或新窗口。
@@ -4105,7 +4186,12 @@ func openProjectPath(_ projectPath: String) {
             Task.detached(priority: .utility) {
                 do {
                     let st = try r.status()
-                    let cls = (try? r.changelistListForPaths(currentPaths: st.map(\.path))) ?? []
+                    let containsRename = st.contains {
+                        $0.staged == .renamed || $0.unstaged == .renamed
+                    }
+                    let cls = (try? (containsRename
+                        ? r.changelistList()
+                        : r.changelistListForPaths(currentPaths: st.map(\.path)))) ?? []
                     let mergePending = r.mergeInProgress()
                     let shelveRestore = try? r.shelveRestoreInfo()
                     await MainActor.run {
@@ -7735,12 +7821,7 @@ private func beginSingleRootPushAfterCommit(rootPath: String) {
                 return
             }
             if requiresPreview {
-                self.pushDialogRemote = nil
-                self.pushDialogBranch = nil
-                self.pushDialogSourceRevision = nil
-                self.pushDialogRefspec = nil
-                self.pushDialogMode = .push
-                self.showPushDialog = true
+                self.beginPushDialog()
             } else {
                 self.doPush(
                     nil,
@@ -7825,10 +7906,16 @@ func beginPushDialog(branch: String? = nil) {
     // configured remote; let the dialog explain that state and offer remote
     // configuration instead of silently discarding the click.
     guard self.repo != nil else { return }
-    pushDialogRemote = nil
+    let sourceBranch = branch ?? currentBranchName
+    let configuredTarget = syncStatuses
+        .first(where: { $0.branch == sourceBranch && $0.trackingExists })
+        .flatMap {
+            remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
+        }
+    pushDialogRemote = configuredTarget?.remote
     pushDialogRefspec = nil
-    pushDialogBranch = branch
-    pushDialogSourceRevision = nil
+    pushDialogBranch = configuredTarget?.branch ?? sourceBranch
+    pushDialogSourceRevision = sourceBranch
     pushDialogMode = .push
     showPushDialog = true
 }
@@ -28012,6 +28099,11 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
             let selectedBranch = branches.contains(where: { $0.name == branch })
                 ? branch
                 : branches.first(where: { $0.isCurrent })?.name
+            let configuredTarget = syncStatuses
+                .first(where: { $0.branch == selectedBranch && $0.trackingExists })
+                .flatMap {
+                    remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
+                }
             await MainActor.run {
                 self.multiRootPushContext = MultiRootPushContext(
                     rootPath: rootPath,
@@ -28019,8 +28111,10 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
                     remotes: remotes,
                     branches: branches,
                     commits: commits,
-                    defaultRemote: remotes.count == 1 ? remotes[0].name : nil,
-                    defaultBranch: selectedBranch,
+                    defaultRemote: configuredTarget?.remote
+                        ?? (remotes.count == 1 ? remotes[0].name : nil),
+                    defaultBranch: configuredTarget?.branch ?? selectedBranch,
+                    defaultSourceRevision: selectedBranch,
                     currentHasUpstream: syncStatuses.first(where: { $0.branch == selectedBranch })?.trackingExists ?? false,
                     protectedBranchPatterns: self.effectiveProtectedBranchPatterns(
                         forRootPath: rootPath
@@ -28372,12 +28466,9 @@ func pushInRoot(
                 )
             }
             resolvedBranch = branch
-            let protectedTarget = refspec?
-                .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: true)
-                .last
-                .map { $0.replacingOccurrences(of: "refs/heads/", with: "") }
-                ?? branch
-            guard !force || !GitProtectedBranchRules.matches(
+            let effectiveForce = force || PushDialogRefspec.requestsForce(refspec)
+            let protectedTarget = PushDialogRefspec.targetBranch(refspec) ?? branch
+            guard !effectiveForce || !GitProtectedBranchRules.matches(
                 protectedTarget,
                 patterns: protectedPatterns
             ) else {
@@ -28398,8 +28489,8 @@ func pushInRoot(
                     try rootRepo.pushRefspecWithOptionsAndAuthAndCancel(
                         remote: remote,
                         refspec: refspec,
-                        force: force,
-                        forceWithLease: force && forceWithLease,
+                        force: effectiveForce,
+                        forceWithLease: effectiveForce && forceWithLease,
                         tagMode: engineTagMode,
                         skipHooks: skipHooks,
                         broker: broker,
@@ -28409,8 +28500,8 @@ func pushInRoot(
                     try rootRepo.pushRefspecWithAuthAndCancel(
                         remote: remote,
                         refspec: refspec,
-                        force: force,
-                        forceWithLease: force && forceWithLease,
+                        force: effectiveForce,
+                        forceWithLease: effectiveForce && forceWithLease,
                         broker: broker,
                         cancel: cancel
                     )
@@ -28421,8 +28512,8 @@ func pushInRoot(
                 try rootRepo.pushWithOptionsAndAuthAndCancel(
                     remote: remote,
                     branch: branch,
-                    force: force,
-                    forceWithLease: force && forceWithLease,
+                    force: effectiveForce,
+                    forceWithLease: effectiveForce && forceWithLease,
                     setUpstream: setUpstream || !trackingExists,
                     tagMode: engineTagMode,
                     skipHooks: skipHooks,
@@ -32073,15 +32164,28 @@ func loadShelves() {
 }
 
 /// shelve 当前激活仓库的全部变更。
-func doShelve(paths selectedPaths: [String]? = nil) {
+func doShelve(
+    paths selectedPaths: [String]? = nil,
+    includeUntracked: Bool = false,
+    includeIgnored: Bool = false
+) {
     guard let repo, !shelveName.isEmpty else { return }
     let name = shelveName
-    let paths = selectedPaths ?? entries.map(\.path)
+    let paths = selectedPaths ?? entries.compactMap { entry in
+        if entry.unstaged == .ignored && !includeIgnored { return nil }
+        if entry.unstaged == .untracked && !includeUntracked { return nil }
+        return entry.path
+    }
     guard !paths.isEmpty else { return }
     beginFeedbackOperation("Shelve changes")
     Task.detached(priority: .userInitiated) {
         do {
-            try repo.shelve(name: name, paths: paths)
+            try repo.shelveWithOptions(
+                name: name,
+                paths: paths,
+                includeUntracked: includeUntracked,
+                includeIgnored: includeIgnored
+            )
             let st = try repo.status()
             let cls = (try? repo.changelistList()) ?? []
             let ss = try repo.shelveList()
@@ -40949,13 +41053,9 @@ func doPush(
         return
     }
     let branch = requestedBranch ?? branches.first { $0.isCurrent }?.name ?? "main"
-    let force = requestedForce ?? pushForce
+    let force = (requestedForce ?? pushForce) || PushDialogRefspec.requestsForce(refspec)
     let useForceWithLease = GitPushSettings.useForceWithLease(force: force, requested: requestedForceWithLease)
-    let protectedTarget = refspec?
-        .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: true)
-        .last
-        .map { $0.replacingOccurrences(of: "refs/heads/", with: "") }
-        ?? branch
+    let protectedTarget = PushDialogRefspec.targetBranch(refspec) ?? branch
     if force,
        GitProtectedBranchRules.matches(
            protectedTarget,

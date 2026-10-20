@@ -1992,6 +1992,47 @@ final class RepositoryFileChangeMonitorTests: XCTestCase {
         )
     }
 
+    func testExternalVCSRetrySnapshotsRejectChangedAndRecreatedPaths() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArborExternalVCSRetry-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let newFile = root.appendingPathComponent("new.txt")
+        try Data("first".utf8).write(to: newFile)
+
+        let addAction = repositoryExternalVCSActionCapturingSnapshots(
+            RepositoryExternalVCSAction(
+                addPaths: ["new.txt"],
+                stageAddPaths: [],
+                removePaths: [],
+                forceMoves: []
+            ),
+            rootPath: root.path
+        )
+        XCTAssertTrue(repositoryExternalVCSActionMatchesSnapshots(addAction, rootPath: root.path))
+        try Data("second".utf8).write(to: newFile)
+        XCTAssertFalse(repositoryExternalVCSActionMatchesSnapshots(addAction, rootPath: root.path))
+
+        let removeAction = repositoryExternalVCSActionCapturingSnapshots(
+            RepositoryExternalVCSAction(
+                addPaths: [],
+                stageAddPaths: [],
+                removePaths: ["deleted.txt"],
+                forceMoves: []
+            ),
+            rootPath: root.path
+        )
+        XCTAssertTrue(repositoryExternalVCSActionMatchesSnapshots(removeAction, rootPath: root.path))
+        try Data("restored".utf8).write(to: root.appendingPathComponent("deleted.txt"))
+        XCTAssertFalse(repositoryExternalVCSActionMatchesSnapshots(removeAction, rootPath: root.path))
+
+        let encoded = try JSONEncoder().encode(addAction)
+        XCTAssertEqual(
+            try JSONDecoder().decode(RepositoryExternalVCSAction.self, from: encoded),
+            addAction
+        )
+    }
+
     func testGitVFSListenerSettingsDefaultToAskAndPersistIndependently() {
         let suiteName = "ArborGitVFSListenerSettings-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

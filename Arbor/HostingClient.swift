@@ -55,13 +55,15 @@ protocol HostingClient {
         for repository: HostingRepository,
         pullRequestID: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws
 
     func mergeHostingPullRequest(
         for repository: HostingRepository,
         pullRequestID: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws
 
     func closeHostingPullRequest(
@@ -107,7 +109,8 @@ extension HostingClient {
         for repository: HostingRepository,
         pullRequestID: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws {
         throw HostingAPIError.http(status: 501, message: "Pull request reviews are not supported by this provider")
     }
@@ -115,7 +118,8 @@ extension HostingClient {
     func mergeHostingPullRequest(
         for repository: HostingRepository,
         pullRequestID: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws {
         throw HostingAPIError.http(status: 501, message: "Pull request merge is not supported by this provider")
     }
@@ -217,22 +221,30 @@ extension GitHubClient: HostingClient {
         for repository: HostingRepository,
         pullRequestID: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws {
         try await submitGitHubReview(
             for: repository,
             number: pullRequestID,
             outcome: outcome,
-            body: body
+            body: body,
+            expectedHeadRevision: expectedHeadRevision
         )
     }
 
     func mergeHostingPullRequest(
         for repository: HostingRepository,
         pullRequestID: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws {
-        try await mergeGitHubPullRequest(for: repository, number: pullRequestID, method: method)
+        try await mergeGitHubPullRequest(
+            for: repository,
+            number: pullRequestID,
+            method: method,
+            expectedHeadRevision: expectedHeadRevision
+        )
     }
 
     func closeHostingPullRequest(
@@ -263,22 +275,30 @@ extension GitLabClient {
         for repository: HostingRepository,
         pullRequestID: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws {
         try await submitGitLabReview(
             for: repository,
             iid: pullRequestID,
             outcome: outcome,
-            body: body
+            body: body,
+            expectedHeadRevision: expectedHeadRevision
         )
     }
 
     func mergeHostingPullRequest(
         for repository: HostingRepository,
         pullRequestID: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws {
-        try await mergeGitLabMergeRequest(for: repository, iid: pullRequestID, method: method)
+        try await mergeGitLabMergeRequest(
+            for: repository,
+            iid: pullRequestID,
+            method: method,
+            expectedHeadRevision: expectedHeadRevision
+        )
     }
 
     func closeHostingPullRequest(

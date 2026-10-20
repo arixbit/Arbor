@@ -122,7 +122,7 @@ final class GitHubClientTests: XCTestCase {
             switch path {
             case "/repos/acme/arbor/pulls/7":
                 return (response, Data("""
-                {"number":7,"title":"Feature","state":"open","head":{"ref":"feature","sha":"headsha"},"base":{"ref":"main","sha":"basesha"},"assignees":[{"login":"owner"}],"requested_reviewers":[{"login":"reviewer"}],"labels":[{"name":"ready"}]}
+                {"number":7,"title":"Feature","state":"open","head":{"ref":"feature","sha":"headsha","repo":{"full_name":"fork/arbor","clone_url":"https://github.com/fork/arbor.git"}},"base":{"ref":"main","sha":"basesha","repo":{"full_name":"acme/arbor"}},"assignees":[{"login":"owner"}],"requested_reviewers":[{"login":"reviewer"}],"labels":[{"name":"ready"}]}
                 """.utf8))
             case "/repos/acme/arbor/pulls/7/commits":
                 return (response, Data("""
@@ -152,11 +152,57 @@ final class GitHubClientTests: XCTestCase {
         XCTAssertEqual(detail.pullRequest.assignees?.compactMap(\.login), ["owner"])
         XCTAssertEqual(detail.pullRequest.reviewers?.compactMap(\.login), ["reviewer"])
         XCTAssertEqual(detail.pullRequest.labels, ["ready"])
+        XCTAssertEqual(detail.pullRequest.headRepositoryFullName, "fork/arbor")
+        XCTAssertEqual(detail.pullRequest.headRepositoryCloneURL, "https://github.com/fork/arbor.git")
+        XCTAssertEqual(detail.pullRequest.baseRepositoryFullName, "acme/arbor")
         XCTAssertEqual(detail.timeline.count, 2)
         XCTAssertTrue(detail.timeline.contains { $0.path == "Sources/App.swift" && $0.line == 12 })
 
         let commitFiles = try await client.loadGitHubCommitFiles(for: repository, commitID: "commitsha")
         XCTAssertEqual(commitFiles.map(\.path), ["commit.swift"])
+    }
+
+    func testReviewAndMergeBindMutationToExpectedHeadRevision() async throws {
+        let repository = HostingProvider.parse(remoteURL: "https://github.com/acme/arbor.git")!
+        let store = KeychainStore(service: "com.arbor.tests.\(UUID().uuidString)")
+        try store.setToken("mutation-token", forOwner: repository.owner)
+        defer { try? store.deleteToken(forOwner: repository.owner) }
+
+        MockURLProtocol.requestHandler = { request in
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            ))
+            switch request.url?.path {
+            case "/repos/acme/arbor/pulls/7/reviews":
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(json["event"] as? String, "APPROVE")
+                XCTAssertEqual(json["commit_id"] as? String, "reviewed-head")
+            case "/repos/acme/arbor/pulls/7/merge":
+                XCTAssertEqual(request.httpMethod, "PUT")
+                XCTAssertEqual(json["merge_method"] as? String, "squash")
+                XCTAssertEqual(json["sha"] as? String, "reviewed-head")
+            default:
+                XCTFail("Unexpected GitHub mutation path: \(request.url?.path ?? "nil")")
+            }
+            return (response, Data("{}".utf8))
+        }
+
+        let client = GitHubClient(session: makeMockSession(), keychain: store)
+        try await client.submitGitHubReview(
+            for: repository,
+            number: 7,
+            outcome: .approve,
+            body: nil,
+            expectedHeadRevision: "reviewed-head"
+        )
+        try await client.mergeGitHubPullRequest(
+            for: repository,
+            number: 7,
+            method: "squash",
+            expectedHeadRevision: "reviewed-head"
+        )
     }
 
     func testUnauthorizedResponseIsTyped() async throws {

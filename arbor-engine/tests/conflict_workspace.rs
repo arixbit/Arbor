@@ -76,10 +76,15 @@ fn conflict_batch_preview_and_apply_leave_true_conflicts_unresolved() {
         .expect("batch preview");
     assert_eq!(preview.true_conflict_blocks, 1);
     assert_eq!(preview.simple_blocks, 0);
+    let result_content = repo.conflict_workspace().unwrap().files[0]
+        .file
+        .result
+        .clone();
 
     let result = repo
         .conflict_apply_batch(
             "file.txt".into(),
+            result_content,
             ConflictBatchAction::ApplyOursNonConflicting,
         )
         .expect("batch action");
@@ -90,22 +95,23 @@ fn conflict_batch_preview_and_apply_leave_true_conflicts_unresolved() {
 }
 
 #[test]
-fn conflict_batch_does_not_overwrite_a_manually_edited_result_block() {
+fn conflict_batch_uses_the_unsaved_editor_buffer_as_its_source() {
     let r = TestRepo::new();
     conflicted_pair(&r);
     common::git_allow_failure(&r.path, &["merge", "feature"]);
     let original = r.read("file.txt");
-    r.write("file.txt", &original.replace("ours", "manual"));
+    let editor_buffer = original.replace("line1", "manual context");
 
     let repo = r.open();
     let result = repo
         .conflict_apply_batch(
             "file.txt".into(),
+            editor_buffer,
             ConflictBatchAction::ApplyOursNonConflicting,
         )
         .expect("batch action");
     assert_eq!(result.applied_blocks, 0);
-    assert!(r.read("file.txt").contains("manual"));
+    assert!(r.read("file.txt").contains("manual context"));
     assert!(r.read("file.txt").contains("<<<<<<<"));
 }
 
@@ -423,7 +429,8 @@ fn accept_theirs_and_both() {
         .expect("theirs");
     assert!(r.read("file.txt").contains("theirs"));
 
-    // both:两段都保留
+    // Both resolves each conflict block as ours+theirs while keeping shared
+    // context exactly once.
     let r2 = TestRepo::new();
     conflicted_pair(&r2);
     common::git_allow_failure(&r2.path, &["merge", "feature"]);
@@ -432,11 +439,7 @@ fn accept_theirs_and_both() {
         .accept_conflict("file.txt".into(), FilePick::Both)
         .expect("both");
     let content = r2.read("file.txt");
-    assert!(
-        content.contains("ours") && content.contains("theirs"),
-        "both: {content}"
-    );
-    assert!(!content.contains("<<<<<<"));
+    assert_eq!(content, "line1\nours\ntheirs\nline3");
 }
 
 #[test]
@@ -454,6 +457,16 @@ fn reset_restores_marker_from_stages() {
         "marker should be restored: {content}"
     );
     assert!(content.contains("ours") && content.contains("theirs"));
+    assert_eq!(content.matches("line1").count(), 1, "reset: {content}");
+    assert_eq!(content.matches("line3").count(), 1, "reset: {content}");
+    assert!(
+        content.starts_with("line1\n<<<<<<< HEAD\n"),
+        "reset: {content}"
+    );
+    assert!(
+        content.ends_with(">>>>>>> theirs\nline3"),
+        "reset: {content}"
+    );
     // stages 未动：仍是冲突状态
     let ws = repo.conflict_workspace().expect("workspace");
     assert_eq!(ws.files.len(), 1);
@@ -514,6 +527,10 @@ fn binary_conflict_flagged_with_no_blocks() {
         .unwrap_err()
         .to_string();
     assert!(err.contains("二进制"), "clear binary reset error: {err}");
+    let both_error = repo2
+        .accept_conflict("img.bin".into(), FilePick::Both)
+        .expect_err("binary Accept Both must be rejected");
+    assert!(both_error.to_string().contains("binary"));
 }
 
 #[test]
@@ -586,4 +603,33 @@ fn manual_edit_mark_resolved() {
     assert_eq!(r.read("file.txt"), custom);
     let ws = repo.conflict_workspace().expect("workspace");
     assert!(ws.files.is_empty());
+}
+
+#[test]
+fn mark_resolved_rejects_markers_without_an_explicit_override() {
+    let r = TestRepo::new();
+    conflicted_pair(&r);
+    common::git_allow_failure(&r.path, &["merge", "feature"]);
+    let repo = r.open();
+    let marker_content = r.read("file.txt");
+
+    let error = repo
+        .resolve_edited("file.txt".into(), marker_content.clone())
+        .expect_err("normal Mark Resolved must reject unresolved markers");
+    assert!(error
+        .to_string()
+        .contains("still contains conflict markers"));
+    assert_eq!(repo.conflict_workspace().unwrap().files.len(), 1);
+
+    let malformed_error = repo
+        .resolve_edited("file.txt".into(), "<<<<<<< HEAD\nunfinished".into())
+        .expect_err("a malformed leftover marker must also be rejected");
+    assert!(malformed_error
+        .to_string()
+        .contains("still contains conflict markers"));
+
+    repo.resolve_edited_allow_conflict_markers("file.txt".into(), marker_content)
+        .expect("explicit marker override");
+    assert!(repo.conflict_workspace().unwrap().files.is_empty());
+    assert!(r.read("file.txt").contains("<<<<<<<"));
 }

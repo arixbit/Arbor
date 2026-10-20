@@ -1,6 +1,6 @@
 mod common;
 
-use arbor_engine::GitContentTransformMode;
+use arbor_engine::{DiffLineKind, DiffMode, GitContentTransformMode};
 use common::{commit, TestRepo};
 
 #[test]
@@ -58,6 +58,39 @@ fn read_worktree_file_rejects_missing_and_unsafe_paths() {
     assert!(engine.read_worktree_file("../outside.txt".into()).is_err());
     assert!(engine.read_worktree_file(".git/config".into()).is_err());
     assert!(engine.read_worktree_file("".into()).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_reader_and_diff_do_not_follow_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let repo = TestRepo::new();
+    repo.write("inside.txt", "inside\n");
+    symlink("inside.txt", repo.path.join("link.txt")).expect("initial symlink");
+    repo.git(&["add", "inside.txt", "link.txt"]);
+    repo.git(&["commit", "-qm", "add link"]);
+
+    let outside = repo.path.parent().unwrap().join("outside-secret.txt");
+    std::fs::write(&outside, "must not be displayed\n").expect("outside file");
+    std::fs::remove_file(repo.path.join("link.txt")).expect("replace symlink");
+    symlink("../outside-secret.txt", repo.path.join("link.txt")).expect("outside symlink");
+
+    let engine = repo.open();
+    let content = engine
+        .read_worktree_file("link.txt".into())
+        .expect("read link");
+    assert_eq!(content.text, "../outside-secret.txt");
+    assert!(!content.text.contains("must not be displayed"));
+
+    let diff = engine
+        .diff_file("link.txt".into(), DiffMode::WorktreeToHead, false)
+        .expect("diff link");
+    let mut new_lines = diff.hunks.iter().flat_map(|hunk| hunk.new_lines.iter());
+    assert!(new_lines.clone().any(|line| {
+        line.kind == DiffLineKind::Addition && line.text == "../outside-secret.txt"
+    }));
+    assert!(!new_lines.any(|line| line.text.contains("must not be displayed")));
 }
 
 #[test]

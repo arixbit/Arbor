@@ -129,6 +129,53 @@ fn shallow_clone_accepts_positive_depth_and_unshallow_restores_history() {
 }
 
 #[test]
+fn shallow_clone_of_plain_local_path_really_limits_history() {
+    let source = TestRepo::new();
+    commit(&source.path, "README.md", "one", "initial");
+    commit(&source.path, "README.md", "two", "second");
+    commit(&source.path, "README.md", "three", "third");
+    let destination_parent = tempfile::tempdir().expect("destination parent");
+    let destination = destination_parent.path().join("shallow-local-path");
+
+    let cloned = arbor_engine::clone_repository_with_options(
+        source.path.to_string_lossy().into_owned(),
+        destination.to_string_lossy().into_owned(),
+        false,
+        Some(1),
+    )
+    .expect("shallow local clone");
+    let repo = arbor_engine::open_repository(cloned).expect("open shallow clone");
+
+    assert!(repo.is_shallow());
+    assert_eq!(
+        common::git(&destination, &["rev-list", "--count", "HEAD"]),
+        "1"
+    );
+}
+
+#[test]
+fn cancelled_clone_does_not_leave_partial_destination() {
+    let source = TestRepo::new();
+    commit(&source.path, "README.md", "one", "initial");
+    let destination_parent = tempfile::tempdir().expect("destination parent");
+    let destination = destination_parent.path().join("cancelled");
+    let cancel = arbor_engine::GitCancelHandle::new();
+    cancel.cancel();
+
+    let error = arbor_engine::clone_repository_with_options_and_cancel(
+        source.path.to_string_lossy().into_owned(),
+        destination.to_string_lossy().into_owned(),
+        false,
+        None,
+        cancel,
+    )
+    .expect_err("pre-cancelled clone must stop");
+
+    assert!(matches!(error, arbor_engine::EngineError::Cancelled));
+    assert!(!destination.exists());
+}
+
+#[test]
 fn shallow_clone_rejects_zero_depth_before_creating_destination() {
     let source = TestRepo::new();
     commit(&source.path, "README.md", "hello", "initial");

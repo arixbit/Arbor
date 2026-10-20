@@ -303,7 +303,8 @@ struct GitHubClient {
         for repository: HostingRepository,
         number: Int,
         outcome: HostingReviewOutcome,
-        body: String?
+        body: String?,
+        expectedHeadRevision: String
     ) async throws {
         let event: String
         switch outcome {
@@ -315,20 +316,32 @@ struct GitHubClient {
             repository: repository,
             path: ["repos", repository.owner, repository.name, "pulls", String(number), "reviews"],
             method: "POST",
-            bodyData: try JSONEncoder().encode(GitHubSubmitReviewRequest(event: event, body: body))
+            bodyData: try JSONEncoder().encode(
+                GitHubSubmitReviewRequest(
+                    event: event,
+                    body: body,
+                    commitID: expectedHeadRevision
+                )
+            )
         ) as GitHubReviewResponse
     }
 
     func mergeGitHubPullRequest(
         for repository: HostingRepository,
         number: Int,
-        method: String
+        method: String,
+        expectedHeadRevision: String
     ) async throws {
         _ = try await request(
             repository: repository,
             path: ["repos", repository.owner, repository.name, "pulls", String(number), "merge"],
             method: "PUT",
-            bodyData: try JSONEncoder().encode(GitHubMergePullRequestRequest(mergeMethod: method))
+            bodyData: try JSONEncoder().encode(
+                GitHubMergePullRequestRequest(
+                    mergeMethod: method,
+                    sha: expectedHeadRevision
+                )
+            )
         ) as GitHubMergeResponse
     }
 
@@ -604,13 +617,21 @@ private struct GitHubCommitDetail: Decodable {
 private struct GitHubSubmitReviewRequest: Encodable {
     let event: String
     let body: String?
+    let commitID: String
+
+    enum CodingKeys: String, CodingKey {
+        case event, body
+        case commitID = "commit_id"
+    }
 }
 
 private struct GitHubMergePullRequestRequest: Encodable {
     let mergeMethod: String
+    let sha: String
 
     enum CodingKeys: String, CodingKey {
         case mergeMethod = "merge_method"
+        case sha
     }
 }
 

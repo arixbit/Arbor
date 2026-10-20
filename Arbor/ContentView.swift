@@ -785,6 +785,7 @@ struct MultiRootPushContext: Identifiable {
     let commits: [CommitInfo]
     let defaultRemote: String?
     let defaultBranch: String?
+    let defaultSourceRevision: String?
     let currentHasUpstream: Bool
     let protectedBranchPatterns: [String]
     let defaultPushTagMode: PushDialogTagMode?
@@ -2255,6 +2256,10 @@ struct ContentView: View {
     @State var cloneDirectoryName = ""
     @State var cloneShallow = false
     @State var cloneDepth = "1"
+    @State var cloneInProgress = false
+    @State var cloneCancelling = false
+    @State var cloneCancelHandle: GitCancelHandle?
+    @State var cloneRequestGeneration = 0
     // IntelliJ's git.clone.recurse.submodules advanced setting defaults to
     // true; persist the same preference instead of resetting it per dialog.
     @AppStorage(GitCloneSettings.recurseSubmodulesKey)
@@ -4277,12 +4282,12 @@ struct ContentView: View {
                 commits: logEntries,
                 mode: pushDialogMode,
                 defaultRemote: pushDialogRemote,
-                defaultBranch: (pushDialogMode == .pushUpToCommit
-                    || pushDialogMode == .addCommitsToRemoteBranch)
-                    ? pushDialogBranch
-                    : (pushDialogBranch ?? branches.first(where: { $0.isCurrent })?.name),
+                defaultBranch: pushDialogBranch
+                    ?? branches.first(where: { $0.isCurrent })?.name,
                 defaultSourceRevision: pushDialogSourceRevision,
-                currentHasUpstream: currentSyncStatus?.trackingExists ?? false,
+                currentHasUpstream: syncStatuses.first(where: {
+                    $0.branch == (pushDialogSourceRevision ?? currentBranchName)
+                })?.trackingExists ?? false,
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
                 defaultRefspec: pushDialogRefspec,
                 defaultPushTagMode: GitPushTagSettings.projectTagMode(for: projectPath),
@@ -4340,6 +4345,7 @@ struct ContentView: View {
                 mode: .push,
                 defaultRemote: context.defaultRemote,
                 defaultBranch: context.defaultBranch,
+                defaultSourceRevision: context.defaultSourceRevision,
                 currentHasUpstream: context.currentHasUpstream,
                 protectedBranchPatterns: context.protectedBranchPatterns,
                 defaultRefspec: nil,
@@ -5043,10 +5049,13 @@ struct ContentView: View {
                 recursiveSubmodules: $cloneRecursiveSubmodules,
                 shallowClone: $cloneShallow,
                 depth: $cloneDepth,
+                isRunning: cloneInProgress,
+                isCancelling: cloneCancelling,
                 onChooseParent: chooseCloneParentDirectory,
                 onClone: cloneRepositoryFromDialog,
-                onCancel: { showCloneDialog = false }
+                onCancel: cancelCloneRepositoryFromDialog
             )
+            .interactiveDismissDisabled(cloneInProgress)
         }
         .sheet(isPresented: $showNewTagDialog) {
             RebasedTagDialog(
@@ -5072,9 +5081,13 @@ struct ContentView: View {
                 name: $shelveName,
                 repo: repo,
                 entries: entries,
-                onShelve: { paths in
+                onShelve: { paths, includeUntracked, includeIgnored in
                     showShelveDialog = false
-                    doShelve(paths: paths)
+                    doShelve(
+                        paths: paths,
+                        includeUntracked: includeUntracked,
+                        includeIgnored: includeIgnored
+                    )
                 },
                 onCancel: { showShelveDialog = false }
             )
@@ -7573,9 +7586,11 @@ final class MergeEditorBridge: ObservableObject {
     /// range in addition to an explicitly selected hunk chip.
     @Published var selectionRevision = 0
     private var resultEditGroupActionName: String?
+    private var resultEditingEnabled = true
 
     func attachResult(_ tv: NSTextView) {
         resultTextView = tv
+        tv.isEditable = resultEditingEnabled
         applyColoring()
         refreshBlocks()
     }
@@ -7585,6 +7600,11 @@ final class MergeEditorBridge: ObservableObject {
     }
 
     func getResultText() -> String { resultTextView?.string ?? "" }
+
+    func setResultEditingEnabled(_ enabled: Bool) {
+        resultEditingEnabled = enabled
+        resultTextView?.isEditable = enabled
+    }
 
     @discardableResult
     private func replaceResultText(_ text: String, actionName: String) -> Bool {
@@ -8205,6 +8225,19 @@ struct MergeEditorView: NSViewRepresentable {
 
 // MARK: - 冲突三栏视图（可编辑）
 
+func isCurrentConflictLoadRequest(
+    repositoryID: String,
+    path: String,
+    generation: Int,
+    currentRepositoryID: String?,
+    currentPath: String,
+    currentGeneration: Int
+) -> Bool {
+    repositoryID == currentRepositoryID
+        && path == currentPath
+        && generation == currentGeneration
+}
+
 struct ConflictDetailView: View {
     let repo: Repository?
     let path: String
@@ -8254,6 +8287,7 @@ struct ConflictDetailView: View {
     @State private var showPartialResolveConfirmation = false
     @State private var pendingResolveContent: String?
     @State private var reloadToken = 0
+    @State private var loadGeneration = 0
     @StateObject private var bridge = MergeEditorBridge()
 
     private var isPatchMode: Bool { patchText != nil }
@@ -8372,6 +8406,7 @@ struct ConflictDetailView: View {
         }
         .onAppear { load() }
         .onChange(of: path) { _, _ in load() }
+        .onChange(of: repo?.gitDir()) { _, _ in load() }
         .onChange(of: bridge.blocks.count) { _, n in
             if selectedBlock >= n { selectedBlock = max(0, n - 1) }
         }
@@ -8406,7 +8441,7 @@ struct ConflictDetailView: View {
                 let content = pendingResolveContent
                 pendingResolveContent = nil
                 guard let content else { return }
-                resolveEditedContent(content)
+                resolveEditedContent(content, allowConflictMarkers: true)
             }
             Button("Continue Editing", role: .cancel) {
                 pendingResolveContent = nil
@@ -8638,12 +8673,24 @@ struct ConflictDetailView: View {
     private func applyConflictBatch(_ action: ConflictBatchAction) {
         guard let repo, !saving else { return }
         let path = self.path
+        let repositoryID = repo.gitDir()
+        let resultContent = bridge.getResultText()
+        bridge.setResultEditingEnabled(false)
         saving = true
         Task.detached(priority: .userInitiated) {
             do {
-                let result = try repo.conflictApplyBatch(path: path, action: action)
+                let result = try repo.conflictApplyBatch(
+                    path: path,
+                    resultContent: resultContent,
+                    action: action
+                )
                 await MainActor.run {
+                    self.bridge.setResultEditingEnabled(true)
                     self.saving = false
+                    guard self.repo?.gitDir() == repositoryID, self.path == path else {
+                        self.onChanged()
+                        return
+                    }
                     self.feedback = result.fullyResolved
                         ? "All eligible conflicts resolved"
                         : "Applied \(result.appliedBlocks) safe block(s); \(result.remainingBlocks) remain"
@@ -8652,7 +8699,9 @@ struct ConflictDetailView: View {
                 }
             } catch {
                 await MainActor.run {
+                    self.bridge.setResultEditingEnabled(true)
                     self.saving = false
+                    guard self.repo?.gitDir() == repositoryID, self.path == path else { return }
                     self.feedback = "\(error)"
                 }
             }
@@ -9018,8 +9067,17 @@ struct ConflictDetailView: View {
     }
 
     private func load() {
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        conflict = nil
+        conflictIsBinary = false
+        conflictBatchPreview = nil
+        conflictError = nil
+        patchHunks = []
+        selectedPatchHunkID = nil
         guard let repo else { return }
         let path = self.path
+        let repositoryID = repo.gitDir()
         let directPatchText = patchText
         let restoreName = self.restoreName
         Task.detached(priority: .userInitiated) {
@@ -9035,6 +9093,14 @@ struct ConflictDetailView: View {
                 }
                 guard let workspaceFile = workspace.files.first(where: { $0.path == path }) else {
                     await MainActor.run {
+                        guard isCurrentConflictLoadRequest(
+                            repositoryID: repositoryID,
+                            path: path,
+                            generation: generation,
+                            currentRepositoryID: self.repo?.gitDir(),
+                            currentPath: self.path,
+                            currentGeneration: self.loadGeneration
+                        ) else { return }
                         self.conflict = nil
                         self.conflictIsBinary = false
                         self.conflictBatchPreview = nil
@@ -9049,6 +9115,14 @@ struct ConflictDetailView: View {
                     ? try? repo.conflictBatchPreview(path: path)
                     : nil
                 await MainActor.run {
+                    guard isCurrentConflictLoadRequest(
+                        repositoryID: repositoryID,
+                        path: path,
+                        generation: generation,
+                        currentRepositoryID: self.repo?.gitDir(),
+                        currentPath: self.path,
+                        currentGeneration: self.loadGeneration
+                    ) else { return }
                     var restoredHunks = directPatchText.map {
                         ApplyPatchConflictHunkModel.parse(
                             patch: $0,
@@ -9077,6 +9151,14 @@ struct ConflictDetailView: View {
                 }
             } catch {
                 await MainActor.run {
+                    guard isCurrentConflictLoadRequest(
+                        repositoryID: repositoryID,
+                        path: path,
+                        generation: generation,
+                        currentRepositoryID: self.repo?.gitDir(),
+                        currentPath: self.path,
+                        currentGeneration: self.loadGeneration
+                    ) else { return }
                     self.conflict = nil
                     self.conflictIsBinary = false
                     self.conflictBatchPreview = nil
@@ -9162,24 +9244,44 @@ struct ConflictDetailView: View {
             showPartialResolveConfirmation = true
             return
         }
+        if !parseConflictMarkers(content).isEmpty {
+            feedback = "仍有未解决的冲突标记；请先解决每个冲突块"
+            return
+        }
         resolveEditedContent(content)
     }
 
-    private func resolveEditedContent(_ content: String) {
+    private func resolveEditedContent(
+        _ content: String,
+        allowConflictMarkers: Bool = false
+    ) {
         guard let repo, !saving else { return }
         let path = self.path
+        let repositoryID = repo.gitDir()
+        bridge.setResultEditingEnabled(false)
         saving = true
         Task.detached(priority: .userInitiated) {
             do {
-                try repo.resolveEdited(path: path, content: content)
+                if allowConflictMarkers {
+                    try repo.resolveEditedAllowConflictMarkers(path: path, content: content)
+                } else {
+                    try repo.resolveEdited(path: path, content: content)
+                }
                 await MainActor.run {
+                    self.bridge.setResultEditingEnabled(true)
                     self.saving = false
+                    guard self.repo?.gitDir() == repositoryID, self.path == path else {
+                        self.onChanged()
+                        return
+                    }
                     self.feedback = "已标记为已解决"
                     self.onChanged()
                 }
             } catch {
                 await MainActor.run {
+                    self.bridge.setResultEditingEnabled(true)
                     self.saving = false
+                    guard self.repo?.gitDir() == repositoryID, self.path == path else { return }
                     self.feedback = "\(error)"
                 }
             }

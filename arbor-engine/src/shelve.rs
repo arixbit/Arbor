@@ -19,6 +19,15 @@ const TEMPORARY_INDEX_SNAPSHOT_MAGIC: &str = "ARBOUR_SHELVE_INDEX_RESTORE_V1";
 const SHELF_PATCH_DIR: &str = "arbor-shelf-patches";
 const DELETED_SHELF_PATCH_DIR: &str = "arbor-shelf-patches-deleted";
 const SHELF_LOCATION_FILE: &str = "arbor-shelf-location";
+const SHELF_STORAGE_OWNER_FILE: &str = "arbor-shelf-storage";
+const SHELF_STORAGE_MAGIC: &str = "ARBOR_SHELF_STORAGE_V1";
+const SHELF_STORAGE_ARTIFACTS: [&str; 5] = [
+    "arbor-shelves",
+    "arbor-shelves-deleted",
+    "arbor-shelves-meta",
+    SHELF_PATCH_DIR,
+    DELETED_SHELF_PATCH_DIR,
+];
 
 struct ShelveApplyProgress {
     generation: u64,
@@ -284,10 +293,251 @@ fn shelf_storage_root(repo: &gix::Repository) -> std::path::PathBuf {
         return legacy;
     };
     let candidate = std::path::PathBuf::from(raw.trim());
-    if candidate.is_absolute() {
-        candidate
+    if !candidate.is_absolute() {
+        return legacy;
+    }
+    match read_shelf_storage_owner(&candidate) {
+        Ok(Some(owner)) => match canonical_git_dir(repo) {
+            Ok(expected) if owner == expected.to_string_lossy().into_owned() => candidate,
+            _ => legacy,
+        },
+        // Custom Shelf locations created before the ownership marker existed
+        // remain readable. The next successful location update claims them.
+        Ok(None) => candidate,
+        Err(_) => legacy,
+    }
+}
+
+fn canonical_git_dir(repo: &gix::Repository) -> Result<std::path::PathBuf, EngineError> {
+    repo.git_dir().canonicalize().map_err(EngineError::from_gix)
+}
+
+fn read_shelf_storage_owner(root: &std::path::Path) -> Result<Option<String>, EngineError> {
+    let marker = root.join(SHELF_STORAGE_OWNER_FILE);
+    let raw = match std::fs::read_to_string(&marker) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(EngineError::from_gix(error)),
+    };
+    let mut lines = raw.lines();
+    let magic = lines.next();
+    let owner = lines.next();
+    if magic != Some(SHELF_STORAGE_MAGIC)
+        || owner.map(str::is_empty).unwrap_or(true)
+        || lines.next().is_some()
+    {
+        return Err(EngineError::GitOperation {
+            message: format!(
+                "shelve: malformed storage ownership marker at {}",
+                marker.display()
+            ),
+        });
+    }
+    Ok(owner.map(str::to_string))
+}
+
+fn write_atomic_text(
+    directory: &std::path::Path,
+    destination: &std::path::Path,
+    contents: &[u8],
+) -> Result<(), EngineError> {
+    use std::io::Write;
+
+    std::fs::create_dir_all(directory).map_err(EngineError::from_gix)?;
+    let mut temporary =
+        tempfile::NamedTempFile::new_in(directory).map_err(EngineError::from_gix)?;
+    temporary
+        .write_all(contents)
+        .map_err(EngineError::from_gix)?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(EngineError::from_gix)?;
+    temporary
+        .persist(destination)
+        .map_err(|error| EngineError::from_gix(error.error))?;
+    Ok(())
+}
+
+fn write_shelf_storage_owner(
+    repo: &gix::Repository,
+    root: &std::path::Path,
+) -> Result<(), EngineError> {
+    let owner = canonical_git_dir(repo)?;
+    let contents = format!("{SHELF_STORAGE_MAGIC}\n{}\n", owner.display());
+    write_atomic_text(
+        root,
+        &root.join(SHELF_STORAGE_OWNER_FILE),
+        contents.as_bytes(),
+    )
+}
+
+fn normalize_shelf_location(
+    requested: &std::path::Path,
+) -> Result<std::path::PathBuf, EngineError> {
+    if !requested.is_absolute() {
+        return Err(EngineError::GitOperation {
+            message: "shelve: location must be an absolute path".into(),
+        });
+    }
+    let mut normalized = std::path::PathBuf::new();
+    for component in requested.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            std::path::Component::RootDir => normalized.push(std::path::MAIN_SEPARATOR_STR),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(EngineError::GitOperation {
+                        message: "shelve: location escapes the filesystem root".into(),
+                    });
+                }
+            }
+            std::path::Component::Normal(component) => normalized.push(component),
+        }
+    }
+    if normalized.exists() {
+        return normalized.canonicalize().map_err(EngineError::from_gix);
+    }
+
+    let mut cursor = normalized.as_path();
+    let mut suffix = Vec::new();
+    while !cursor.exists() {
+        let name = cursor
+            .file_name()
+            .ok_or_else(|| EngineError::GitOperation {
+                message: "shelve: location has no existing parent".into(),
+            })?;
+        suffix.push(name.to_os_string());
+        cursor = cursor.parent().ok_or_else(|| EngineError::GitOperation {
+            message: "shelve: location has no existing parent".into(),
+        })?;
+    }
+    let mut resolved = cursor.canonicalize().map_err(EngineError::from_gix)?;
+    for component in suffix.into_iter().rev() {
+        resolved.push(component);
+    }
+    Ok(resolved)
+}
+
+fn shelf_paths_overlap(left: &std::path::Path, right: &std::path::Path) -> bool {
+    left == right || left.starts_with(right) || right.starts_with(left)
+}
+
+fn remove_shelf_artifact(path: &std::path::Path) -> Result<(), EngineError> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(EngineError::from_gix(error)),
+    };
+    if metadata.file_type().is_dir() {
+        std::fs::remove_dir_all(path).map_err(EngineError::from_gix)
     } else {
-        legacy
+        std::fs::remove_file(path).map_err(EngineError::from_gix)
+    }
+}
+
+fn install_staged_shelf_artifacts(
+    staged: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<(), EngineError> {
+    std::fs::create_dir_all(target).map_err(EngineError::from_gix)?;
+    for name in SHELF_STORAGE_ARTIFACTS {
+        let destination = target.join(name);
+        remove_shelf_artifact(&destination)?;
+        let source = staged.join(name);
+        if source.exists() {
+            std::fs::rename(source, destination).map_err(EngineError::from_gix)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_shelf_location_target(
+    repo: &gix::Repository,
+    target: &std::path::Path,
+    current: &std::path::Path,
+    legacy: &std::path::Path,
+) -> Result<(), EngineError> {
+    if target.parent().is_none() {
+        return Err(EngineError::GitOperation {
+            message: "shelve: filesystem root cannot be used as Shelf storage".into(),
+        });
+    }
+    if target != legacy && shelf_paths_overlap(target, legacy) {
+        return Err(EngineError::GitOperation {
+            message: "shelve: Shelf storage cannot overlap the Git directory".into(),
+        });
+    }
+    if target != legacy {
+        if let Some(workdir) = repo.workdir() {
+            let workdir = workdir.canonicalize().map_err(EngineError::from_gix)?;
+            if shelf_paths_overlap(target, &workdir) {
+                return Err(EngineError::GitOperation {
+                    message: "shelve: Shelf storage cannot overlap the worktree".into(),
+                });
+            }
+        }
+    }
+    if target != current && shelf_paths_overlap(target, current) {
+        return Err(EngineError::GitOperation {
+            message: "shelve: Shelf storage cannot overlap the current storage directory".into(),
+        });
+    }
+    Ok(())
+}
+
+fn ensure_custom_shelf_target(
+    repo: &gix::Repository,
+    target: &std::path::Path,
+) -> Result<bool, EngineError> {
+    if !target.exists() {
+        return Ok(false);
+    }
+    if !target.is_dir() {
+        return Err(EngineError::GitOperation {
+            message: "shelve: storage target must be a directory".into(),
+        });
+    }
+    if let Some(owner) = read_shelf_storage_owner(target)? {
+        let expected = canonical_git_dir(repo)?.to_string_lossy().into_owned();
+        if owner != expected {
+            return Err(EngineError::GitOperation {
+                message: "shelve: storage target belongs to another repository".into(),
+            });
+        }
+        return Ok(true);
+    }
+    let nonempty = std::fs::read_dir(target)
+        .map_err(EngineError::from_gix)?
+        .next()
+        .is_some();
+    if nonempty {
+        return Err(EngineError::GitOperation {
+            message: "shelve: storage target is nonempty and has no repository ownership marker"
+                .into(),
+        });
+    }
+    Ok(false)
+}
+
+fn write_shelf_location_marker(
+    legacy: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<(), EngineError> {
+    let contents = format!("{}\n", target.display());
+    write_atomic_text(
+        legacy,
+        &legacy.join(SHELF_LOCATION_FILE),
+        contents.as_bytes(),
+    )
+}
+
+fn remove_shelf_location_marker(legacy: &std::path::Path) -> Result<(), EngineError> {
+    match std::fs::remove_file(legacy.join(SHELF_LOCATION_FILE)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(EngineError::from_gix(error)),
     }
 }
 
@@ -373,6 +623,41 @@ fn verify_shelf_artifact(
     Ok(())
 }
 
+fn stage_shelf_artifacts(
+    repo: &gix::Repository,
+    current: &std::path::Path,
+    parent: &std::path::Path,
+) -> Result<tempfile::TempDir, EngineError> {
+    std::fs::create_dir_all(parent).map_err(EngineError::from_gix)?;
+    let staged = tempfile::Builder::new()
+        .prefix(".arbor-shelf-migrate-")
+        .tempdir_in(parent)
+        .map_err(EngineError::from_gix)?;
+    write_shelf_storage_owner(repo, staged.path())?;
+    for name in SHELF_STORAGE_ARTIFACTS {
+        let source = current.join(name);
+        let destination = staged.path().join(name);
+        copy_shelf_artifact(&source, &destination)?;
+        if source.exists() {
+            verify_shelf_artifact(&source, &destination)?;
+        }
+    }
+    Ok(staged)
+}
+
+fn verify_shelf_artifacts(
+    current: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<(), EngineError> {
+    for name in SHELF_STORAGE_ARTIFACTS {
+        let source = current.join(name);
+        if source.exists() {
+            verify_shelf_artifact(&source, &target.join(name))?;
+        }
+    }
+    Ok(())
+}
+
 /// Change the on-disk Shelf directory. The copy is assembled in a temporary
 /// sibling and the location marker is written last; a failed copy therefore
 /// leaves the old Shelf fully usable and can be retried safely.
@@ -381,74 +666,73 @@ pub(crate) fn set_shelf_location(
     requested: &std::path::Path,
     migrate_existing: bool,
 ) -> Result<std::path::PathBuf, EngineError> {
-    if !requested.is_absolute() {
-        return Err(EngineError::GitOperation {
-            message: "shelve: location must be an absolute path".into(),
-        });
-    }
-    let legacy = repo.git_dir().to_path_buf();
-    let current = shelf_storage_root(repo);
-    let target = if requested.exists() {
-        requested.canonicalize().map_err(EngineError::from_gix)?
-    } else {
-        requested.to_path_buf()
-    };
+    let legacy = canonical_git_dir(repo)?;
+    let current = normalize_shelf_location(&shelf_storage_root(repo))?;
+    let target = normalize_shelf_location(requested)?;
+    validate_shelf_location_target(repo, &target, &current, &legacy)?;
+
     if target == current {
+        if target != legacy {
+            match read_shelf_storage_owner(&target)? {
+                Some(owner) if owner == canonical_git_dir(repo)?.to_string_lossy().into_owned() => {
+                }
+                Some(_) => {
+                    return Err(EngineError::GitOperation {
+                        message: "shelve: storage target belongs to another repository".into(),
+                    })
+                }
+                None => write_shelf_storage_owner(repo, &target)?,
+            }
+        }
         return Ok(target);
     }
-    let artifacts = [
-        "arbor-shelves",
-        "arbor-shelves-deleted",
-        "arbor-shelves-meta",
-        SHELF_PATCH_DIR,
-        DELETED_SHELF_PATCH_DIR,
-    ];
-    let has_artifacts = artifacts.iter().any(|name| current.join(name).exists());
-    if !migrate_existing {
+
+    let has_artifacts = SHELF_STORAGE_ARTIFACTS
+        .iter()
+        .any(|name| current.join(name).exists());
+    if has_artifacts && !migrate_existing {
+        return Err(EngineError::GitOperation {
+            message: "shelve: existing Shelves require migration before changing location".into(),
+        });
+    }
+
+    if target == legacy {
         if has_artifacts {
-            return Err(EngineError::GitOperation {
-                message: "shelve: existing Shelves require migration before changing location"
-                    .into(),
-            });
+            let parent = legacy.parent().ok_or_else(|| EngineError::GitOperation {
+                message: "shelve: Git directory has no parent".into(),
+            })?;
+            let staged = stage_shelf_artifacts(repo, &current, parent)?;
+            install_staged_shelf_artifacts(staged.path(), &legacy)?;
+            verify_shelf_artifacts(&current, &legacy)?;
         }
-        std::fs::create_dir_all(&target).map_err(EngineError::from_gix)?;
-    } else {
-        if has_artifacts {
-            if target.exists() {
-                let mut entries = std::fs::read_dir(&target).map_err(EngineError::from_gix)?;
-                if entries.next().is_some() {
-                    return Err(EngineError::GitOperation {
-                        message: "shelve: migration target must be empty".into(),
-                    });
-                }
-                std::fs::remove_dir(&target).map_err(EngineError::from_gix)?;
-            } else if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(EngineError::from_gix)?;
-            }
-            let tmp = target.with_extension(format!("arbor-shelf-migrate-{}", std::process::id()));
-            if tmp.exists() {
-                std::fs::remove_dir_all(&tmp).map_err(EngineError::from_gix)?;
-            }
-            std::fs::create_dir_all(&tmp).map_err(EngineError::from_gix)?;
-            for name in artifacts {
-                copy_shelf_artifact(&current.join(name), &tmp.join(name))?;
-                if current.join(name).exists() {
-                    verify_shelf_artifact(&current.join(name), &tmp.join(name))?;
-                }
-            }
-            std::fs::rename(&tmp, &target).map_err(EngineError::from_gix)?;
+        // Removing the marker is the commit point. Until then readers continue
+        // using the retained custom source even if installation is interrupted.
+        remove_shelf_location_marker(&legacy)?;
+        return Ok(repo.git_dir().to_path_buf());
+    }
+
+    let target_owned = ensure_custom_shelf_target(repo, &target)?;
+    let parent = target.parent().ok_or_else(|| EngineError::GitOperation {
+        message: "shelve: storage target has no parent".into(),
+    })?;
+    std::fs::create_dir_all(parent).map_err(EngineError::from_gix)?;
+    if has_artifacts {
+        let staged = stage_shelf_artifacts(repo, &current, parent)?;
+        if target_owned {
+            install_staged_shelf_artifacts(staged.path(), &target)?;
+            write_shelf_storage_owner(repo, &target)?;
         } else {
-            std::fs::create_dir_all(&target).map_err(EngineError::from_gix)?;
+            if target.exists() {
+                std::fs::remove_dir(&target).map_err(EngineError::from_gix)?;
+            }
+            std::fs::rename(staged.path(), &target).map_err(EngineError::from_gix)?;
         }
+        verify_shelf_artifacts(&current, &target)?;
+    } else if !target_owned {
+        std::fs::create_dir_all(&target).map_err(EngineError::from_gix)?;
+        write_shelf_storage_owner(repo, &target)?;
     }
-    let marker = legacy.join(SHELF_LOCATION_FILE);
-    let tmp_marker = marker.with_extension("tmp");
-    std::fs::write(&tmp_marker, format!("{}\n", target.display()))
-        .map_err(EngineError::from_gix)?;
-    if let Err(error) = std::fs::rename(&tmp_marker, &marker) {
-        let _ = std::fs::remove_file(&tmp_marker);
-        return Err(EngineError::from_gix(error));
-    }
+    write_shelf_location_marker(&legacy, &target)?;
     Ok(target)
 }
 
