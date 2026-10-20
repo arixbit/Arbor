@@ -30,6 +30,7 @@ targets:
       - path: Workspace
       - path: Lfs
       - path: Hooks
+      - path: MainWindow
       - path: LogGraphView.swift
       - path: PushDialogView.swift
       - path: PullDialogView.swift

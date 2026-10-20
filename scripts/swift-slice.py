@@ -436,6 +436,7 @@ def main() -> int:
     ap.add_argument("--rules", type=Path)
     ap.add_argument("--prefix", default=None)
     ap.add_argument("--unclassified", type=int, default=0, help="print N largest unclassified members")
+    ap.add_argument("--keep", action="append", default=[], help="top-level declaration kept in <stem>.swift")
     args = ap.parse_args()
 
     rules = DEFAULT_RULES
@@ -446,11 +447,18 @@ def main() -> int:
     lines = text.split("\n")
     depths = depth_map(lines)
     blocks = top_level_blocks(lines)
+    # 保留原文件的 import，切片文件各自复制同一份；硬编码 import 会在
+    # `import Combine` 之类被丢掉时炸掉。
+    imports = [line for line, depth in zip(lines, depths) if depth == 0 and line.startswith("import ")]
     stem = args.prefix or args.path.stem
 
     # (container, bucket) -> blocks; container None means file scope
+    keep = set(args.keep)
     groups: dict[tuple[str | None, str], list[Block]] = {}
     for block in blocks:
+        if block.kind != "extension" and block.name in keep:
+            groups.setdefault((None, "__kept__"), []).append(block)
+            continue
         if block.kind == "extension":
             for member in extension_members(lines, depths, block):
                 groups.setdefault((block.name, classify(member.name, rules, args.default)), []).append(member)
@@ -478,7 +486,7 @@ def main() -> int:
     emitted: dict[Path, list[str]] = {}
     claimed: set[int] = set()
     for (container, bucket), bs in groups.items():
-        body = ["import SwiftUI", "import AppKit", "import UniformTypeIdentifiers", ""]
+        body = list(imports) + [""]
         if container is not None:
             body.append(f"extension {container} {{")
         for b in sorted(bs, key=lambda b: b.start):
@@ -488,7 +496,12 @@ def main() -> int:
                 body.append("")
         if container is not None:
             body.append("}")
-        filename = f"{stem}+{bucket.capitalize()}.swift" if container is None else f"{stem}+{container}.{bucket.capitalize()}.swift"
+        if bucket == "__kept__":
+            filename = f"{stem}.swift"
+        elif container is None:
+            filename = f"{stem}+{bucket.capitalize()}.swift"
+        else:
+            filename = f"{stem}+{container}.{bucket.capitalize()}.swift"
         emitted[args.out / filename] = body
 
     # verification: every code line must be emitted exactly once; only blank
