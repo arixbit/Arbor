@@ -545,10 +545,10 @@ func restorePersistedPullPreservation(for repositoryPath: String) {
                 }) == URL(fileURLWithPath: repositoryPath).standardizedFileURL.path else {
                     return
                 }
-                self.pendingPullShelfName = preservation.shelfName
-                self.pendingPullStashPop = preservation.stashID != nil || preservation.stashMessage != nil
-                self.pendingPullStashID = preservation.stashID
-                self.pendingPullStashMessage = preservation.stashMessage
+                self.stashRecovery.pendingPullShelfName = preservation.shelfName
+                self.stashRecovery.pendingPullStashPop = preservation.stashID != nil || preservation.stashMessage != nil
+                self.stashRecovery.pendingPullStashID = preservation.stashID
+                self.stashRecovery.pendingPullStashMessage = preservation.stashMessage
                 guard state == nil else { return }
                 self.feedbackCenter.warning(
                     "Pull local changes pending",
@@ -1369,14 +1369,14 @@ func showStashRestoreConflict(
     notificationID: String? = nil,
     stashID: String? = nil
 ) {
-    pendingStashConflictNotificationID = notificationID
-    stashPopConflictInProgress = true
-    stashApplyConflictInProgress = false
-    pendingStashPopIndex = 0
-    pendingStashPopID = stashID
-    pendingPullStashPop = false
-    pendingPullStashID = nil
-    pendingPullStashMessage = nil
+    stashRecovery.pendingConflictNotificationID = notificationID
+    stashRecovery.popConflictInProgress = true
+    stashRecovery.applyConflictInProgress = false
+    stashRecovery.pendingPopIndex = 0
+    stashRecovery.pendingPopID = stashID
+    stashRecovery.pendingPullStashPop = false
+    stashRecovery.pendingPullStashID = nil
+    stashRecovery.pendingPullStashMessage = nil
     mergeInProgress = true
     mergeInitialPath = paths.first
     if toolWindowMode != .log {

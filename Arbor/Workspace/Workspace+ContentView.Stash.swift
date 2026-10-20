@@ -34,15 +34,15 @@ func completeMultiRootResolverStash(_ root: MultiRootConflictResolverRoot) {
                 }
             }
             await MainActor.run {
-                self.multiRootStashConflicts[root.rootPath] = nil
-                self.multiRootStashConflictIndexes[root.rootPath] = nil
-                self.multiRootStashConflictIDs[root.rootPath] = nil
-                self.multiRootStashConflictPopModes[root.rootPath] = nil
+                self.stashRecovery.multiRootConflicts[root.rootPath] = nil
+                self.stashRecovery.multiRootConflictIndexes[root.rootPath] = nil
+                self.stashRecovery.multiRootConflictIDs[root.rootPath] = nil
+                self.stashRecovery.multiRootConflictPopModes[root.rootPath] = nil
                 if isPop {
                     if let stashID {
                         self.clearStashDiffIfMatching(rootPath: root.rootPath, stashID: stashID)
                     }
-                    self.multiRootUpdateStashedRoots.remove(root.rootPath)
+                    self.stashRecovery.multiRootUpdateStashedRoots.remove(root.rootPath)
                 }
                 self.multiRootResolverWorking = false
                 self.feedbackCenter.success(
@@ -100,7 +100,7 @@ func recoverMultiRootUpdateStashesAfterFailure(_ results: [RootOperationResult])
                         )
                     }
                     await MainActor.run {
-                        self.multiRootUpdateStashedRoots.remove(rootPath)
+                        self.stashRecovery.multiRootUpdateStashedRoots.remove(rootPath)
                         self.loadMultiRoots()
                         self.feedbackCenter.success(
                             "Local changes restored",
@@ -797,14 +797,14 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
         } catch {
             if case let .StashApplyConflict(paths, conflictStashID) = error as? EngineError {
                 await MainActor.run {
-                    self.stashPopConflictInProgress = true
-                    self.stashApplyConflictInProgress = false
-                    self.pendingStashConflictNotificationID = nil
-                    self.pendingStashPopIndex = self.stashes.firstIndex(
+                    self.stashRecovery.popConflictInProgress = true
+                    self.stashRecovery.applyConflictInProgress = false
+                    self.stashRecovery.pendingConflictNotificationID = nil
+                    self.stashRecovery.pendingPopIndex = self.stashes.firstIndex(
                         where: { $0.id == (conflictStashID ?? stashID) }
                     ) ?? 0
-                    self.pendingStashPopID = conflictStashID ?? stashID
-                    self.pendingPullStashPop = false
+                    self.stashRecovery.pendingPopID = conflictStashID ?? stashID
+                    self.stashRecovery.pendingPullStashPop = false
                     self.mergeInProgress = true
                     self.mergeInitialPath = paths.first
                     if self.toolWindowMode != .log {
@@ -849,12 +849,12 @@ func stashApply(stashID: String, restoreIndex: Bool = false) {
         } catch {
             if case let .StashApplyConflict(paths, conflictStashID) = error as? EngineError {
                 await MainActor.run {
-                    self.stashPopConflictInProgress = false
-                    self.stashApplyConflictInProgress = true
-                    self.pendingStashConflictNotificationID = nil
-                    self.pendingStashPopIndex = nil
-                    self.pendingStashPopID = conflictStashID ?? stashID
-                    self.pendingPullStashPop = false
+                    self.stashRecovery.popConflictInProgress = false
+                    self.stashRecovery.applyConflictInProgress = true
+                    self.stashRecovery.pendingConflictNotificationID = nil
+                    self.stashRecovery.pendingPopIndex = nil
+                    self.stashRecovery.pendingPopID = conflictStashID ?? stashID
+                    self.stashRecovery.pendingPullStashPop = false
                     self.mergeInProgress = true
                     self.mergeInitialPath = paths.first
                     if self.toolWindowMode != .log {
@@ -1098,10 +1098,10 @@ func stashAndPull(
                 )
             }
             await MainActor.run {
-                self.pendingPullShelfName = preservation.shelfName
-                self.pendingPullStashPop = savedStash
-                self.pendingPullStashID = preservation.stashID
-                self.pendingPullStashMessage = preservation.stashMessage
+                self.stashRecovery.pendingPullShelfName = preservation.shelfName
+                self.stashRecovery.pendingPullStashPop = savedStash
+                self.stashRecovery.pendingPullStashID = preservation.stashID
+                self.stashRecovery.pendingPullStashMessage = preservation.stashMessage
                 self.runPull(
                     remote: remote,
                     remoteBranch: remoteBranch,
@@ -1119,7 +1119,7 @@ func stashAndPull(
             await MainActor.run {
                 let detail = errorMessage(error)
                 if case let .ShelveApplyConflict(name, paths) = error as? EngineError {
-                    self.pendingPullShelfName = nil
+                    self.stashRecovery.pendingPullShelfName = nil
                     self.presentShelveConflict(name: name, paths: paths, isPop: true)
                 }
                 self.mergeFeedback = detail
@@ -1130,11 +1130,11 @@ func stashAndPull(
 }
 
 func popPendingPullStash() {
-    guard let repo, pendingPullStashPop || pendingPullShelfName != nil else { return }
+    guard let repo, stashRecovery.pendingPullStashPop || stashRecovery.pendingPullShelfName != nil else { return }
     let repositoryPath = repo.workdir()
-    let shelfName = pendingPullShelfName
-    let stashID = pendingPullStashID
-    let stashMessage = pendingPullStashMessage
+    let shelfName = stashRecovery.pendingPullShelfName
+    let stashID = stashRecovery.pendingPullStashID
+    let stashMessage = stashRecovery.pendingPullStashMessage
     let pullRebaseSeed = rebaseUndoSeed
     let restoreCancel = GitCancelHandle()
     beginFeedbackOperation(
@@ -1177,10 +1177,10 @@ func popPendingPullStash() {
                 }
                 : nil
             await MainActor.run {
-                self.pendingPullStashPop = false
-                self.pendingPullStashID = nil
-                self.pendingPullStashMessage = nil
-                self.pendingPullShelfName = nil
+                self.stashRecovery.pendingPullStashPop = false
+                self.stashRecovery.pendingPullStashID = nil
+                self.stashRecovery.pendingPullStashMessage = nil
+                self.stashRecovery.pendingPullShelfName = nil
                 if let repositoryPath {
                     clearPendingPullPreservation(repositoryPath: repositoryPath)
                 }
@@ -1234,7 +1234,7 @@ func popPendingPullStash() {
                         stashID: conflictStashID ?? stashRestoreIDValue
                     )
                 case let .ShelveApplyConflict(name, paths):
-                    self.pendingPullShelfName = nil
+                    self.stashRecovery.pendingPullShelfName = nil
                     self.presentShelveConflict(name: name, paths: paths, isPop: true)
                 default:
                     let detail = errorMessage(error)

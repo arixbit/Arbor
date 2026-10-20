@@ -170,7 +170,7 @@ func runMerge(preserveLocalChanges: Bool) {
 }
 
 func finishMerge() {
-    if stashPopConflictInProgress || stashApplyConflictInProgress {
+    if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
         finishStashConflict()
         return
     }
@@ -1170,10 +1170,10 @@ func openMultiRootConflictResolver(
 ) {
     guard let projectPath else { return }
     let currentRootPath = preferredRootPath ?? multiRootResolverActiveRootPath
-    let pendingStashPaths = multiRootStashConflicts
-    let pendingStashIndexes = multiRootStashConflictIndexes
-    let pendingStashIDs = multiRootStashConflictIDs
-    let pendingStashPopModes = multiRootStashConflictPopModes
+    let pendingStashPaths = stashRecovery.multiRootConflicts
+    let pendingStashIndexes = stashRecovery.multiRootConflictIndexes
+    let pendingStashIDs = stashRecovery.multiRootConflictIDs
+    let pendingStashPopModes = stashRecovery.multiRootConflictPopModes
     multiRootResolverLoadGeneration += 1
     let generation = multiRootResolverLoadGeneration
     multiRootResolverWorking = true
@@ -1356,12 +1356,12 @@ func acceptMultiRootConflicts(_ targets: [MultiRootConflictTarget], pick: FilePi
 /// stash pop 的冲突不是分支 merge，不创建新的 merge commit；用户解决后，
 /// 只需确认所有冲突 stages 已清除，再删除已经成功应用的 stash 记录。
 func finishStashConflict() {
-    guard let repo, stashPopConflictInProgress || stashApplyConflictInProgress else { return }
-    let stashID = pendingStashPopID
-    let shouldDropStash = stashPopConflictInProgress
+    guard let repo, stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress else { return }
+    let stashID = stashRecovery.pendingPopID
+    let shouldDropStash = stashRecovery.popConflictInProgress
     let repositoryPath = repo.workdir()
     let pullRebaseSeed = rebaseUndoSeed
-    let conflictNotificationID = pendingStashConflictNotificationID
+    let conflictNotificationID = stashRecovery.pendingConflictNotificationID
     beginFeedbackOperation(
         "Complete stash restore",
         notificationID: conflictNotificationID
@@ -1404,14 +1404,14 @@ func finishStashConflict() {
                 }
                 : nil
             await MainActor.run {
-                self.stashPopConflictInProgress = false
-                self.stashApplyConflictInProgress = false
-                self.pendingStashConflictNotificationID = nil
-                self.pendingStashPopIndex = nil
-                self.pendingStashPopID = nil
-                self.pendingPullStashPop = false
-                self.pendingPullStashID = nil
-                self.pendingPullStashMessage = nil
+                self.stashRecovery.popConflictInProgress = false
+                self.stashRecovery.applyConflictInProgress = false
+                self.stashRecovery.pendingConflictNotificationID = nil
+                self.stashRecovery.pendingPopIndex = nil
+                self.stashRecovery.pendingPopID = nil
+                self.stashRecovery.pendingPullStashPop = false
+                self.stashRecovery.pendingPullStashID = nil
+                self.stashRecovery.pendingPullStashMessage = nil
                 if let repositoryPath {
                     clearPendingPullPreservation(repositoryPath: repositoryPath)
                 }
@@ -1907,10 +1907,10 @@ func presentMultiRootStashConflict(
         }
         return index
     }()
-    multiRootStashConflicts[rootPath] = paths
-    multiRootStashConflictIndexes[rootPath] = resolvedIndex
-    multiRootStashConflictIDs[rootPath] = stashID
-    multiRootStashConflictPopModes[rootPath] = isPop
+    stashRecovery.multiRootConflicts[rootPath] = paths
+    stashRecovery.multiRootConflictIndexes[rootPath] = resolvedIndex
+    stashRecovery.multiRootConflictIDs[rootPath] = stashID
+    stashRecovery.multiRootConflictPopModes[rootPath] = isPop
     feedbackCenter.error(
         isPop ? "Stash pop paused" : "Stash apply paused",
         detail: "\(rootPath): \(paths.joined(separator: ", "))",
@@ -1936,7 +1936,7 @@ func presentMultiRootShelveConflict(
 }
 
 func openMultiRootStashConflict(rootPath: String) {
-    guard multiRootStashConflicts[rootPath] != nil else { return }
+    guard stashRecovery.multiRootConflicts[rootPath] != nil else { return }
     // The unified resolver re-reads status before presenting the root.
     openMultiRootConflictResolver(preferredRootPath: rootPath)
 }

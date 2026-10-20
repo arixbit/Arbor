@@ -526,7 +526,7 @@ func runPull(
             if mo.conflicts.isEmpty, let shelfToRestore {
                 do {
                     try repo.shelvePopWithCancel(name: shelfToRestore, cancel: cancel)
-                    await MainActor.run { self.pendingPullShelfName = nil }
+                    await MainActor.run { self.stashRecovery.pendingPullShelfName = nil }
                 } catch {
                     if case .Cancelled = error as? EngineError {
                         shelfPopCancelled = true
@@ -552,9 +552,9 @@ func runPull(
                         cancel: cancel
                     )
                     await MainActor.run {
-                        self.pendingPullStashPop = false
-                        self.pendingPullStashID = nil
-                        self.pendingPullStashMessage = nil
+                        self.stashRecovery.pendingPullStashPop = false
+                        self.stashRecovery.pendingPullStashID = nil
+                        self.stashRecovery.pendingPullStashMessage = nil
                     }
                 } catch {
                     if case .Cancelled = error as? EngineError {
@@ -652,17 +652,17 @@ func runPull(
                 if localRestoreCompleted, let repositoryPath, let stashPopIDValue {
                     self.clearStashDiffIfMatching(rootPath: repositoryPath, stashID: stashPopIDValue)
                 }
-                self.stashPopConflictInProgress = stashPopConflictPaths != nil
-                self.stashApplyConflictInProgress = false
-                self.pendingStashPopIndex = stashPopConflictPaths != nil ? 0 : nil
-                self.pendingStashPopID = stashPopConflictIDValue
+                self.stashRecovery.popConflictInProgress = stashPopConflictPaths != nil
+                self.stashRecovery.applyConflictInProgress = false
+                self.stashRecovery.pendingPopIndex = stashPopConflictPaths != nil ? 0 : nil
+                self.stashRecovery.pendingPopID = stashPopConflictIDValue
                 if stashPopConflictPaths != nil {
-                    self.pendingStashPopIndex = stashPopIndexValue
-                    self.pendingPullStashPop = false
-                    self.pendingPullStashID = nil
-                    self.pendingPullStashMessage = nil
+                    self.stashRecovery.pendingPopIndex = stashPopIndexValue
+                    self.stashRecovery.pendingPullStashPop = false
+                    self.stashRecovery.pendingPullStashID = nil
+                    self.stashRecovery.pendingPullStashMessage = nil
                 }
-                if shelfPopConflictNameValue != nil { self.pendingPullShelfName = nil }
+                if shelfPopConflictNameValue != nil { self.stashRecovery.pendingPullShelfName = nil }
                 if let shelfPopConflictNameValue, let shelfPopConflictsValue {
                     self.presentShelveConflict(
                         name: shelfPopConflictNameValue,
@@ -803,7 +803,7 @@ func runPull(
             if !rebaseStillActive, let shelfToRestore {
                 do {
                     try repo.shelvePopPreservation(name: shelfToRestore)
-                    await MainActor.run { self.pendingPullShelfName = nil }
+                    await MainActor.run { self.stashRecovery.pendingPullShelfName = nil }
                 } catch {
                     if case let .ShelveApplyConflict(name, paths) = error as? EngineError {
                         shelfRestoreConflictName = name
@@ -826,9 +826,9 @@ func runPull(
                         restoreIndex: true
                     )
                     await MainActor.run {
-                        self.pendingPullStashPop = false
-                        self.pendingPullStashID = nil
-                        self.pendingPullStashMessage = nil
+                        self.stashRecovery.pendingPullStashPop = false
+                        self.stashRecovery.pendingPullStashID = nil
+                        self.stashRecovery.pendingPullStashMessage = nil
                     }
                 } catch let error as EngineError {
                 if case let .StashApplyConflict(paths, conflictStashID) = error {
@@ -906,7 +906,7 @@ func runPull(
                     }
                     : nil
                 if let shelfRestoreConflictNameValue, let shelfRestoreConflictPathsValue {
-                    self.pendingPullShelfName = nil
+                    self.stashRecovery.pendingPullShelfName = nil
                     self.presentShelveConflict(
                         name: shelfRestoreConflictNameValue,
                         paths: shelfRestoreConflictPathsValue,
@@ -919,10 +919,10 @@ func runPull(
                         operationName: "Pull",
                         stashID: stashRestoreConflictIDValue ?? stashRestoreIDValue
                     )
-                    self.pendingStashPopIndex = stashRestoreIndexValue
-                    self.pendingPullStashPop = false
-                    self.pendingPullStashID = nil
-                    self.pendingPullStashMessage = nil
+                    self.stashRecovery.pendingPopIndex = stashRestoreIndexValue
+                    self.stashRecovery.pendingPullStashPop = false
+                    self.stashRecovery.pendingPullStashID = nil
+                    self.stashRecovery.pendingPullStashMessage = nil
                 }
                 let untrackedPaths: [String]? = {
                     guard case let .UntrackedWouldBeOverwritten(paths) = error as? EngineError else {
@@ -1037,10 +1037,10 @@ func temporarilySaveWorkspaceAndRetryPull(
                 )
             }
             await MainActor.run {
-                self.pendingPullShelfName = preservation.shelfName
-                self.pendingPullStashPop = savedStash
-                self.pendingPullStashID = preservation.stashID
-                self.pendingPullStashMessage = preservation.stashMessage
+                self.stashRecovery.pendingPullShelfName = preservation.shelfName
+                self.stashRecovery.pendingPullStashPop = savedStash
+                self.stashRecovery.pendingPullStashID = preservation.stashID
+                self.stashRecovery.pendingPullStashMessage = preservation.stashMessage
                 self.mergeFeedback = "已临时保存本地文件，正在重试 pull：\(paths.joined(separator: ", "))"
                 self.runPull(
                         remote: remote,

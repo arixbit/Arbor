@@ -315,7 +315,7 @@ func refreshAll(
                 }
                 self.fileContentRefreshToken &+= 1
                 self.headId = hid
-                self.mergeInProgress = mergePending || self.stashPopConflictInProgress || self.stashApplyConflictInProgress
+                self.mergeInProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
                 self.operationState = opState
                 if let opState, let rootPath = repo.workdir() {
                     self.feedbackCenter.expire(
@@ -338,7 +338,7 @@ func refreshAll(
                     )
                 }
                 self.resolvedConflictPaths = resolvedPaths
-                if (mergePending || self.stashPopConflictInProgress),
+                if (mergePending || self.stashRecovery.popConflictInProgress),
                    self.toolWindowMode != .log,
                    self.selection == nil {
                     self.selection = st.first(where: {
@@ -533,8 +533,8 @@ func openProjectPath(_ projectPath: String) {
     logList.isLoading = toolWindowMode == .log
     loadError = nil
     commitFeedback = nil
-    stashPopConflictInProgress = false
-    stashApplyConflictInProgress = false
+    stashRecovery.popConflictInProgress = false
+    stashRecovery.applyConflictInProgress = false
     shelveConflictInProgress = false
     shelveConflictIsPop = false
     shelveConflictIsDirectPatch = false
@@ -543,13 +543,13 @@ func openProjectPath(_ projectPath: String) {
     pendingShelveConflictChangeList = nil
     pendingShelveConflictPatch = nil
     pendingShelveConflictNotificationID = nil
-    pendingStashConflictNotificationID = nil
-    pendingStashPopIndex = nil
-    pendingStashPopID = nil
-    pendingPullStashPop = false
-    pendingPullStashID = nil
-    pendingPullStashMessage = nil
-    pendingPullShelfName = nil
+    stashRecovery.pendingConflictNotificationID = nil
+    stashRecovery.pendingPopIndex = nil
+    stashRecovery.pendingPopID = nil
+    stashRecovery.pendingPullStashPop = false
+    stashRecovery.pendingPullStashID = nil
+    stashRecovery.pendingPullStashMessage = nil
+    stashRecovery.pendingPullShelfName = nil
     showMergeRevisionsDialog = false
     // The split workspaces keep their own selections. Clear them before the
     // new repository starts publishing data so a previous project's diff or
@@ -791,7 +791,7 @@ func openProjectPath(_ projectPath: String) {
                                 self.stagingModel = staging
                                 self.lastIndexRevision = staging?.indexRevision
                         self.operationState = operationState
-                        self.mergeInProgress = mergePending || self.stashPopConflictInProgress || self.stashApplyConflictInProgress
+                        self.mergeInProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
                                 self.stashes = ss; self.remotes = rs
                                 self.isShallowRepository = isShallow
                                 self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
@@ -953,8 +953,8 @@ func resetProjectState() {
     compareSelectedPaths = []
     mergeInProgress = false
     mergeInitialHead = nil
-    stashPopConflictInProgress = false
-    stashApplyConflictInProgress = false
+    stashRecovery.popConflictInProgress = false
+    stashRecovery.applyConflictInProgress = false
     shelveConflictInProgress = false
     shelveConflictIsPop = false
     shelveConflictIsDirectPatch = false
@@ -963,13 +963,13 @@ func resetProjectState() {
     pendingShelveConflictChangeList = nil
     pendingShelveConflictPatch = nil
     pendingShelveConflictNotificationID = nil
-    pendingStashConflictNotificationID = nil
-    pendingStashPopIndex = nil
-    pendingStashPopID = nil
-    pendingPullStashPop = false
-    pendingPullStashID = nil
-    pendingPullStashMessage = nil
-    pendingPullShelfName = nil
+    stashRecovery.pendingConflictNotificationID = nil
+    stashRecovery.pendingPopIndex = nil
+    stashRecovery.pendingPopID = nil
+    stashRecovery.pendingPullStashPop = false
+    stashRecovery.pendingPullStashID = nil
+    stashRecovery.pendingPullStashMessage = nil
+    stashRecovery.pendingPullShelfName = nil
     showMergeRevisionsDialog = false
     loadError = nil
 }
@@ -1644,7 +1644,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 // Rebuild this state from Git's stash stack on every refresh.
                 // That makes a temporary Update stash discoverable after the
                 // app is reopened instead of relying on in-memory bookkeeping.
-                self.multiRootUpdateStashedRoots = updateStashRoots
+                self.stashRecovery.multiRootUpdateStashedRoots = updateStashRoots
                 self.scanPendingApplyRestores()
                 if externalLogSelectionChanged {
                     if self.logRuntime.aggregateRootPaths.isEmpty {
@@ -1687,7 +1687,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.multiRoots = []
                 self.multiRootBranchSnapshots = []
                 self.multiRootConflictGroups = []
-                self.multiRootUpdateStashedRoots = []
+                self.stashRecovery.multiRootUpdateStashedRoots = []
                 self.shelfRootLoadGeneration += 1
                 self.shelfRootPath = nil
                 self.shelfRootSnapshots = [:]
@@ -2338,11 +2338,11 @@ func executeMultiRootUpdate(rebase: Bool) {
                 self.multiRootRunning = false
                 for result in results {
                     if result.success || result.skipped {
-                        self.multiRootUpdateStashedRoots.remove(result.rootPath)
+                        self.stashRecovery.multiRootUpdateStashedRoots.remove(result.rootPath)
                     } else if result.message.localizedCaseInsensitiveContains("local changes remain in stash")
                                 || result.message.localizedCaseInsensitiveContains("local changes remain in shelf")
                                 || result.message.localizedCaseInsensitiveContains("local restore conflicted") {
-                        self.multiRootUpdateStashedRoots.insert(result.rootPath)
+                        self.stashRecovery.multiRootUpdateStashedRoots.insert(result.rootPath)
                     }
                 }
                 self.loadMultiRoots()
@@ -2720,7 +2720,7 @@ func runMultiRootResolverRecovery(
     stageTrackedBeforeContinue: Bool = false
 ) {
     guard !multiRootResolverWorking else { return }
-    let restoresUpdateLocalChanges = multiRootUpdateStashedRoots.contains(rootPath)
+    let restoresUpdateLocalChanges = stashRecovery.multiRootUpdateStashedRoots.contains(rootPath)
     let batchRebaseSessionID = multiRootRebaseSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
         ? multiRootRebaseSession?.id
         : nil
@@ -2870,14 +2870,14 @@ func runMultiRootResolverRecovery(
                     self.rawRebaseMessageText = ""
                 }
                 if let resolvedStashConflictPaths {
-                    self.multiRootStashConflicts[rootPath] = resolvedStashConflictPaths
-                    self.multiRootStashConflictIndexes[rootPath] = resolvedStashConflictIndex ?? 0
-                    self.multiRootStashConflictIDs[rootPath] = resolvedStashConflictID
-                    self.multiRootStashConflictPopModes[rootPath] = true
+                    self.stashRecovery.multiRootConflicts[rootPath] = resolvedStashConflictPaths
+                    self.stashRecovery.multiRootConflictIndexes[rootPath] = resolvedStashConflictIndex ?? 0
+                    self.stashRecovery.multiRootConflictIDs[rootPath] = resolvedStashConflictID
+                    self.stashRecovery.multiRootConflictPopModes[rootPath] = true
                 } else if resolvedStashRestoreFailure == nil
                             && !resolvedShelfRestoreConflict
                             && restoresUpdateLocalChanges {
-                    self.multiRootUpdateStashedRoots.remove(rootPath)
+                    self.stashRecovery.multiRootUpdateStashedRoots.remove(rootPath)
                 }
                 if resolvedShelfRestoreConflict {
                     self.multiRootResolverError = nil

@@ -8,6 +8,9 @@ struct ContentView: View {
     /// Stash / Unstash 工作页状态（对话框、预览、请求身份）。
     @StateObject var stashUI = StashWorkspaceState()
 
+    /// Stash 恢复与冲突状态（multi-root stash、pull 现场保存）。
+    @StateObject var stashRecovery = StashRecoveryState()
+
     /// Log 列表与过滤状态（过滤条件、分页、当前 root）。
     @StateObject var logList = LogListState()
 
@@ -663,10 +666,6 @@ struct ContentView: View {
     @State var multiRootCheckoutUpdateRetryAvailable = false
     @State var multiRootCheckoutUpdateRetryContext: MultiRootCheckoutUpdateRetryContext?
     @State var multiRootPushRetryContext: MultiRootPushRetryContext?
-    @State var multiRootStashConflicts: [String: [String]] = [:]
-    @State var multiRootStashConflictIndexes: [String: Int] = [:]
-    @State var multiRootStashConflictIDs: [String: String] = [:]
-    @State var multiRootStashConflictPopModes: [String: Bool] = [:]
     /// 项目级统一冲突 resolver：一次维护所有 root 的 pending queue，
     /// 当前 root 的三栏编辑器由 active* 状态驱动。
     @State var showMultiRootConflictResolver = false
@@ -679,7 +678,6 @@ struct ContentView: View {
     @State var multiRootResolverWorking = false
     @State var multiRootResolverError: String?
     @State var multiRootResolverLoadGeneration = 0
-    @State var multiRootUpdateStashedRoots: Set<String> = []
     /// The Log dashboard may be scoped to a nested Git root without changing
     /// the project's primary repository context used by Commit/Status panes.
     /// External Git Log windows can aggregate all or a selected subset of the
@@ -963,8 +961,6 @@ struct ContentView: View {
     /// ORIG_HEAD fallback covers a merge resumed after the view was recreated;
     /// the in-memory value is preferred while this session owns the boundary.
     @State var mergeInitialHead: String?
-    @State var stashPopConflictInProgress = false
-    @State var stashApplyConflictInProgress = false
     @State var shelveConflictInProgress = false
     @State var shelveConflictIsPop = false
     @State var shelveConflictIsDirectPatch = false
@@ -973,19 +969,12 @@ struct ContentView: View {
     @State var pendingShelveConflictChangeList: String?
     @State var pendingShelveConflictPatch: String?
     @State var pendingShelveConflictNotificationID: String?
-    @State var pendingStashConflictNotificationID: String?
     /// Legacy stack position retained for compatibility with the multi-root
     /// resolver. Single-root conflict completion prefers the stable stash ID.
-    @State var pendingStashPopIndex: Int?
     /// Stable stash object identity retained while a pop restore is paused.
     /// The stash stack can be reordered while the conflict resolver is open.
-    @State var pendingStashPopID: String?
-    @State var pendingPullStashPop = false
     /// Stable identity for the temporary Pull stash. The message remains as
     /// a compatibility fallback for markers written by older builds.
-    @State var pendingPullStashID: String?
-    @State var pendingPullStashMessage: String?
-    @State var pendingPullShelfName: String?
     @State var showHostingSettings = false
     @State var showHostingHub = false
     @State var showHostingAuthPrompt = false
@@ -4010,9 +3999,9 @@ struct ContentView: View {
                         },
                         conflictBatchWorking: multiRootConflictBatchWorking,
                         conflictBatchError: multiRootConflictBatchError,
-                        stashConflicts: multiRootStashConflicts,
+                        stashConflicts: stashRecovery.multiRootConflicts,
                         onResolveStashConflict: openMultiRootStashConflict,
-                        updateStashRoots: multiRootUpdateStashedRoots,
+                        updateStashRoots: stashRecovery.multiRootUpdateStashedRoots,
                         onRestoreUpdateStash: restoreMultiRootUpdateStash,
                         onRefresh: { loadMultiRoots() },
                         onShowChanges: openMultiRootChanges
@@ -5034,7 +5023,7 @@ struct ContentView: View {
 
     /// CONFLICT-001：merge/rebase/cherry-pick/revert 进入同一冲突工作台。
     private var mergeRevisionsMode: MergeRevisionsDialogView.Mode {
-        if stashPopConflictInProgress || stashApplyConflictInProgress {
+        if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
             return .stashRestore
         }
         if shelveConflictInProgress {
@@ -5055,7 +5044,7 @@ struct ContentView: View {
         if shelveConflictInProgress {
             return { abortShelveConflict() }
         }
-        if stashPopConflictInProgress || stashApplyConflictInProgress {
+        if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
             return nil
         }
         return {

@@ -690,11 +690,11 @@ func retryMultiRootUpdateFailedRoots(
                 self.multiRootRunning = false
                 for result in retryResults {
                     if result.success || result.skipped {
-                        self.multiRootUpdateStashedRoots.remove(result.rootPath)
+                        self.stashRecovery.multiRootUpdateStashedRoots.remove(result.rootPath)
                     } else if result.message.localizedCaseInsensitiveContains("local changes remain in stash")
                                 || result.message.localizedCaseInsensitiveContains("local changes remain in shelf")
                                 || result.message.localizedCaseInsensitiveContains("local restore conflicted") {
-                        self.multiRootUpdateStashedRoots.insert(result.rootPath)
+                        self.stashRecovery.multiRootUpdateStashedRoots.insert(result.rootPath)
                     }
                 }
                 self.loadMultiRoots()
@@ -1141,7 +1141,7 @@ func openOperationRecovery(rootPath: String, preferredPath: String? = nil) {
 /// OPS-001 恢复动作：根据 operation_state() 的类别分派
 /// continue/skip/abort（引擎层已按 origin 分派到引擎实现或系统 git）。
 func doOperationContinue() {
-    if stashPopConflictInProgress || stashApplyConflictInProgress {
+    if stashRecovery.popConflictInProgress || stashRecovery.applyConflictInProgress {
         finishStashConflict()
         return
     }
@@ -1156,10 +1156,10 @@ func doOperationContinue() {
         ? (pendingMergeDeleteBranch ?? repo.mergeSourceReference())
         : nil
     let protectedPatterns = effectiveProtectedBranchPatterns
-    let pendingPullStash = pendingPullStashPop
-    let pendingPullStashIDValue = pendingPullStashID
-    let pendingPullStashMessageValue = pendingPullStashMessage
-    let pendingPullShelfNameValue = pendingPullShelfName
+    let pendingPullStash = stashRecovery.pendingPullStashPop
+    let pendingPullStashIDValue = stashRecovery.pendingPullStashID
+    let pendingPullStashMessageValue = stashRecovery.pendingPullStashMessage
+    let pendingPullShelfNameValue = stashRecovery.pendingPullShelfName
     let singleRootRebaseSeed = state.kind == .rebase && rebaseSessionID == nil
         ? rebaseUndoSeed
         : nil
@@ -1295,14 +1295,14 @@ func doOperationContinue() {
                         notificationID: operationNotificationID,
                         stashID: pullStashRestoreConflictIDValue ?? pullRestoreStashIDValue
                     )
-                    self.pendingStashPopIndex = pullStashRestoreIndexValue
-                    self.pendingPullStashPop = false
-                    self.pendingPullStashID = nil
-                    self.pendingPullStashMessage = nil
+                    self.stashRecovery.pendingPopIndex = pullStashRestoreIndexValue
+                    self.stashRecovery.pendingPullStashPop = false
+                    self.stashRecovery.pendingPullStashID = nil
+                    self.stashRecovery.pendingPullStashMessage = nil
                 } else if let pullShelfRestoreConflictNameValue,
                           let pullShelfRestoreConflictPathsValue
                 {
-                    self.pendingPullShelfName = nil
+                    self.stashRecovery.pendingPullShelfName = nil
                     self.presentShelveConflict(
                         name: pullShelfRestoreConflictNameValue,
                         paths: pullShelfRestoreConflictPathsValue,
@@ -1310,10 +1310,10 @@ func doOperationContinue() {
                         notificationID: operationNotificationID
                     )
                 } else if pullChangesRestoredValue {
-                    self.pendingPullStashPop = false
-                    self.pendingPullStashID = nil
-                    self.pendingPullStashMessage = nil
-                    self.pendingPullShelfName = nil
+                    self.stashRecovery.pendingPullStashPop = false
+                    self.stashRecovery.pendingPullStashID = nil
+                    self.stashRecovery.pendingPullStashMessage = nil
+                    self.stashRecovery.pendingPullShelfName = nil
                     if let rebaseRootPath {
                         clearPendingPullPreservation(repositoryPath: rebaseRootPath)
                     }

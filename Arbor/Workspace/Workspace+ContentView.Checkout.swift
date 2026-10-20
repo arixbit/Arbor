@@ -699,7 +699,7 @@ func retryMultiRootCheckoutAndUpdateFailedRoots(
         retryableRootPaths = Set(multiRootResults.compactMap { result -> String? in
             guard !result.success,
                   requestedRootPaths.contains(result.rootPath),
-                  !multiRootUpdateStashedRoots.contains(result.rootPath),
+                  !stashRecovery.multiRootUpdateStashedRoots.contains(result.rootPath),
                   multiRoots.first(where: { $0.path == result.rootPath })?.operation == nil else {
                 return nil
             }
@@ -707,7 +707,7 @@ func retryMultiRootCheckoutAndUpdateFailedRoots(
         })
     } else {
         retryableRootPaths = Set(requestedRootPaths.filter { rootPath in
-            !multiRootUpdateStashedRoots.contains(rootPath)
+            !stashRecovery.multiRootUpdateStashedRoots.contains(rootPath)
                 && multiRoots.first(where: { $0.path == rootPath })?.operation == nil
         })
     }
