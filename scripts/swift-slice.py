@@ -267,16 +267,16 @@ def top_level_blocks(lines: list[str]) -> list[Block]:
         if kind in DECL_KEYWORDS:
             starts.append(i)
     blocks: list[Block] = []
+    cursor = 0
     for idx, start in enumerate(starts):
         nxt = starts[idx + 1] if idx + 1 < len(starts) else n
-        end = block_end(depths, start, nxt)
+        end = trim_tail(lines, start, block_end(depths, start, nxt))
         kind, name = decl_header(lines[start])
-        end = trim_tail(lines, start, end)
-        # attach leading doc comments
-        doc = start
-        while doc > 0 and is_comment_line(lines[doc - 1]):
-            doc -= 1
+        # contiguous partition: everything since the previous declaration
+        # (blank lines, doc comments, attributes) belongs to this one
+        doc = max(cursor, 0)
         blocks.append(Block(start=doc, end=max(end, start), kind=kind, name=name))
+        cursor = max(end, start) + 1
     return blocks
 
 
@@ -293,22 +293,27 @@ def extension_members(lines: list[str], depths: list[int], block: Block) -> list
         # can also start with an identifier, so require a declaration keyword or
         # attribute at the head of the line
         head = stripped.lstrip()
+        if head.startswith("@"):
+            # a standalone attribute line belongs to the declaration below it
+            head = re.sub(r"@[A-Za-z_0-9.]+(\([^)]*\))?\s*", "", head)
         m = re.match(r"([A-Za-z_]+)\b", head)
-        looks_like = False
-        if head.startswith("@") or (m and m.group(1) in DECL_KEYWORDS) or (m and m.group(1) in MODIFIERS):
-            looks_like = True
+        looks_like = bool(m and (m.group(1) in DECL_KEYWORDS or m.group(1) in MODIFIERS))
         if looks_like:
             starts.append(i)
     members: list[Block] = []
+    opener = block.start
+    for probe in range(block.start, block.end + 1):
+        if lines[probe].lstrip().startswith("extension "):
+            opener = probe
+            break
+    cursor = opener + 1  # skip the `extension Foo {` line
     for idx, start in enumerate(starts):
         nxt = starts[idx + 1] if idx + 1 < len(starts) else block.end + 1
-        end = block_end(depths, start, nxt)
+        end = trim_tail(lines, start, block_end(depths, start, nxt))
         kind, name = decl_header(lines[start])
-        end = trim_tail(lines, start, end)
-        doc = start
-        while doc > block.start and is_comment_line(lines[doc - 1]):
-            doc -= 1
-        members.append(Block(start=doc, end=max(end, start), kind=kind, name=name))
+        doc = cursor if cursor <= start else start
+        members.append(Block(start=min(doc, start), end=max(end, start), kind=kind, name=name))
+        cursor = max(end, start) + 1
     return members
 
 
@@ -345,7 +350,6 @@ DEFAULT_RULES: list[tuple[str, str]] = [
     ("stash", "stash"),
     ("patch", "patch"),
     ("apply", "patch"),
-    ("pop", "unshelve"),
     ("fetch", "fetch"),
     ("push", "push"),
     ("pull", "pull"),
@@ -361,11 +365,12 @@ DEFAULT_RULES: list[tuple[str, str]] = [
     ("amend", "commit"),
     ("signoff", "commit"),
     ("branch", "branch"),
-    ("tag", "tag"),
-    ("checkout", "checkout"),
+    ("staging", "staging"),
     ("stage", "staging"),
     ("changelist", "staging"),
     ("hunk", "staging"),
+    ("tag", "tag"),
+    ("checkout", "checkout"),
     ("diff", "diff"),
     ("blame", "diff"),
     ("annotate", "diff"),
@@ -392,11 +397,19 @@ DEFAULT_RULES: list[tuple[str, str]] = [
 
 
 def classify(name: str, rules: list[tuple[str, str]], default: str) -> str:
+    # the product prefix is on half the view types and would swallow the feature
+    normalised = re.sub(r"^Rebased", "", name)
     for needle, bucket in rules:
+        name = normalised
         haystack = name if needle != needle.lower() else name.lower()
         if needle in haystack:
             return bucket
     return default
+
+
+def is_leading_decorator(line: str) -> bool:
+    stripped = line.strip()
+    return stripped.startswith("@") and not stripped.endswith("=")
 
 
 def is_comment_line(line: str) -> bool:

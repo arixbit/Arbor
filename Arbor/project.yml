@@ -20,11 +20,11 @@ targets:
       - path: FileReferenceComparisonView.swift
       - path: RevisionBrowserView.swift
       - path: FileContentView.swift
-      - path: LogSidebar.swift
+      - path: Log
       - path: SubmoduleChangeView.swift
       - path: RepoSidebar.swift
-      - path: RebasedWorkspaceViews.swift
-      - path: RebasedDialogs.swift
+      - path: Panels
+      - path: Dialogs
       - path: CommitDetailView.swift
       - path: DiffDetailView.swift
       - path: Workspace
