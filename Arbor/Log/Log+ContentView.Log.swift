@@ -1607,17 +1607,17 @@ func loadLogSignatureStatuses() {
 
 
 func synchronizeReflogSelection() {
-    let validIDs = Set(reflogEntries.map(reflogEntryIdentifier))
-    let normalized = reflogSelectedIDs.intersection(validIDs)
-    if normalized != reflogSelectedIDs {
-        reflogSelectedIDs = normalized
+    let validIDs = Set(reflog.entries.map(reflogEntryIdentifier))
+    let normalized = reflog.selectedIDs.intersection(validIDs)
+    if normalized != reflog.selectedIDs {
+        reflog.selectedIDs = normalized
         return
     }
-    if let reflogSelection, normalized.contains(reflogSelection) {
+    if let selection = reflog.selection, normalized.contains(selection) {
         return
     }
-    reflogSelection = orderedReflogSelection(
-        entries: reflogEntries,
+    reflog.selection = orderedReflogSelection(
+        entries: reflog.entries,
         selectedIDs: normalized
     ).first.map(reflogEntryIdentifier)
 }
@@ -1709,7 +1709,7 @@ var shouldShowLogError: Bool {
 
 
 var hasSelectedReflogEntries: Bool {
-    !reflogSelectedIDs.isEmpty
+    !reflog.selectedIDs.isEmpty
 }
 
 
@@ -1718,11 +1718,11 @@ var reflogHistoryContent: some View {
         HStack(spacing: 8) {
             Text("Reflog")
                 .font(.headline)
-            Text("\(reflogEntries.count) entries")
+            Text("\(reflog.entries.count) entries")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if hasSelectedReflogEntries {
-                Text("\(reflogSelectedIDs.count) selected")
+                Text("\(reflog.selectedIDs.count) selected")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -1750,20 +1750,20 @@ var reflogHistoryContent: some View {
             .help("Refresh Reflog")
             Menu {
                 Button("Select All") {
-                    reflogSelectedIDs = Set(reflogEntries.map(reflogEntryIdentifier))
-                    reflogSelection = reflogEntries.first.map(reflogEntryIdentifier)
+                    reflog.selectedIDs = Set(reflog.entries.map(reflogEntryIdentifier))
+                    reflog.selection = reflog.entries.first.map(reflogEntryIdentifier)
                 }
-                .disabled(reflogEntries.isEmpty)
+                .disabled(reflog.entries.isEmpty)
                 Button("Clear") {
-                    reflogSelectedIDs = []
-                    reflogSelection = nil
+                    reflog.selectedIDs = []
+                    reflog.selection = nil
                 }
-                .disabled(reflogSelectedIDs.isEmpty)
+                .disabled(reflog.selectedIDs.isEmpty)
                 Divider()
                 Button("Copy Selected Revision IDs") {
                     copySelectedReflogIDs()
                 }
-                .disabled(reflogSelectedIDs.isEmpty)
+                .disabled(reflog.selectedIDs.isEmpty)
                 if !selectedReflogCommits.isEmpty {
                     Divider()
                     Menu("Reflog actions") {
@@ -1819,8 +1819,8 @@ var reflogHistoryContent: some View {
         .frame(height: 34)
         .overlay(alignment: .bottom) { Divider() }
 
-        List(selection: $reflogSelectedIDs) {
-            ForEach(reflogEntries, id: \.self) { entry in
+        List(selection: $reflog.selectedIDs) {
+            ForEach(reflog.entries, id: \.self) { entry in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.message).lineLimit(1)
                     Text("\(entry.oldId.prefix(7)) → \(entry.newId.prefix(7)) · \(dateStr(entry.time))")
@@ -1829,13 +1829,13 @@ var reflogHistoryContent: some View {
                 }
                 .tag(reflogEntryIdentifier(entry))
                 .simultaneousGesture(TapGesture().onEnded {
-                    reflogSelection = reflogEntryIdentifier(entry)
+                    reflog.selection = reflogEntryIdentifier(entry)
                 })
                 .contextMenu {
                     Button("View Commit Details") {
                         let id = reflogEntryIdentifier(entry)
-                        reflogSelection = id
-                        reflogSelectedIDs = [id]
+                        reflog.selection = id
+                        reflog.selectedIDs = [id]
                     }
                     Button("Copy Revision ID") {
                         NSPasteboard.general.clearContents()
@@ -1860,10 +1860,10 @@ var reflogHistoryContent: some View {
             }
         }
         .listStyle(.inset)
-        if reflogHasMore || isLoadingMoreReflog {
+        if reflog.hasMore || reflog.isLoadingMore {
             HStack(spacing: 8) {
                 Spacer()
-                if isLoadingMoreReflog {
+                if reflog.isLoadingMore {
                     ProgressView()
                         .controlSize(.small)
                     Text("Loading older entries…")
@@ -1890,20 +1890,20 @@ var logGraphPanel: some View {
             guard let id else { return }
             loadCommitDetailsIfNeeded(id)
         }
-    .onChange(of: reflogSelection) { _, selection in
+    .onChange(of: reflog.selection) { _, selection in
         guard logList.viewMode == .reflog, let selection else { return }
-        if !reflogSelectedIDs.contains(selection) {
-            reflogSelectedIDs.insert(selection)
+        if !reflog.selectedIDs.contains(selection) {
+            reflog.selectedIDs.insert(selection)
         }
     }
-    .onChange(of: reflogSelectedIDs) { _, _ in
+    .onChange(of: reflog.selectedIDs) { _, _ in
         synchronizeReflogSelection()
         loadReflogCommitDetails()
         if externalLogWindow {
             persistExternalLogTabs()
         }
     }
-        .onChange(of: reflogEntries.map(reflogEntryIdentifier)) { _, _ in
+        .onChange(of: reflog.entries.map(reflogEntryIdentifier)) { _, _ in
             synchronizeReflogSelection()
             loadReflogCommitDetails()
         }
@@ -2054,7 +2054,7 @@ var logGraphHistoryContent: some View {
                 actionAvailability: logActionAvailability,
                 isFileHistory: isFileHistory,
                 onReachedEnd: loadMoreLog,
-                hasMore: isCommand ? hasMoreLogCommand : logList.hasMore,
+                hasMore: isCommand ? logRuntime.hasMoreCommand : logList.hasMore,
                 isLoadingMore: isCommand ? logRuntime.isLoadingCommand : logList.isLoadingMore,
                 pullRequestRemotesForCommit: pullRequestRemotesForCommit,
                 onOpenPullRequest: openPullRequestsForCommit,
@@ -2085,8 +2085,8 @@ var logGraphHistoryContent: some View {
                 },
                 onPushUpToCommit: pushUpToCommitFromLog,
                 onAddCommitsToRemoteBranch: addCommitsToRemoteBranchFromLog,
-                highlightedCherryPickedCommitIDs: logCherryPickedCommitIDs,
-                cherryPickComparisonReady: logCherryPickComparisonReady,
+                highlightedCherryPickedCommitIDs: logCherryPick.cherryPickedCommitIDs,
+                cherryPickComparisonReady: logCherryPick.comparisonReady,
                 hostedRemotesForCommit: hostedRemotesForCommit,
                 onBrowseHostedRevision: browseHostedRevisionFromLog,
                 onBrowseRevision: browseRevisionFromLog,
@@ -2612,9 +2612,9 @@ var logGraphGearMenu: some View {
                 if !logCherryPickCompareBranch.isEmpty {
                     Text("Target: \(cherryPickTargetBranchLabel)")
                 }
-                if logCherryPickComparisonInProgress {
+                if logCherryPick.inProgress {
                     Label(
-                        "Comparing cherry-picked commits… (\(logCherryPickComparisonCompletedRoots)/\(logCherryPickComparisonTotalRoots))",
+                        "Comparing cherry-picked commits… (\(logCherryPick.completedRoots)/\(logCherryPick.totalRoots))",
                         systemImage: "hourglass"
                     )
                     Button("Cancel Comparison") {

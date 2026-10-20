@@ -6,14 +6,14 @@ extension ContentView {
 /// Mirrors IntelliJ's `stopTaskAndUnhighlight`: cancelling must also remove
 /// fallback/trailer highlighting instead of leaving stale decoration visible.
 func cancelCherryPickedHighlighting() {
-    logCherryPickComparisonTask?.cancel()
-    logCherryPickComparisonTask = nil
-    logCherryPickComparisonCancelHandle?.cancel()
-    logCherryPickComparisonCancelHandle = nil
-    logCherryPickComparisonGeneration += 1
-    logCherryPickComparisonInProgress = false
-    logCherryPickedCommitIDs = []
-    logCherryPickComparisonReady = false
+    logCherryPick.comparisonTask?.cancel()
+    logCherryPick.comparisonTask = nil
+    logCherryPick.cancelHandle?.cancel()
+    logCherryPick.cancelHandle = nil
+    logCherryPick.generation += 1
+    logCherryPick.inProgress = false
+    logCherryPick.cherryPickedCommitIDs = []
+    logCherryPick.comparisonReady = false
     logHighlightCherryPicked = false
 }
 

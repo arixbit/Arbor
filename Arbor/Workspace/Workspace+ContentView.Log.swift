@@ -116,17 +116,17 @@ func disposeExternalLogSession() {
     logRuntime.commandTask = nil
     logSelectionState.detailLoadTask?.cancel()
     logSelectionState.detailLoadTask = nil
-    reflogDetailLoadTask?.cancel()
-    reflogDetailLoadTask = nil
-    reflogLoadTask?.cancel()
-    reflogLoadTask = nil
-    reflogLoadMoreTask?.cancel()
-    reflogLoadMoreTask = nil
+    reflog.detailLoadTask?.cancel()
+    reflog.detailLoadTask = nil
+    reflog.loadTask?.cancel()
+    reflog.loadTask = nil
+    reflog.loadMoreTask?.cancel()
+    reflog.loadMoreTask = nil
     compareLoadTask?.cancel()
     compareLoadTask = nil
     cancelBranchComparisonTasks()
-    logShowMyTask?.cancel()
-    logShowMyTask = nil
+    logBranchesPanel.showMyTask?.cancel()
+    logBranchesPanel.showMyTask = nil
     repositoryChangeDeliveryTask?.cancel()
     repositoryChangeDeliveryTask = nil
     repositoryChangeBatch.removeAll()
@@ -141,10 +141,10 @@ func disposeExternalLogSession() {
     logList.generation &+= 1
     logRuntime.signatureGeneration &+= 1
     logRuntime.commandGeneration &+= 1
-    reflogGeneration &+= 1
+    reflog.generation &+= 1
     logRuntime.aggregateRepositories.removeAll()
     logList.activeRepo = nil
-    reflogRootRepo = nil
+    reflog.rootRepo = nil
     activeCompareRepo = nil
     projectRepo = nil
     multiRoots = []
@@ -346,11 +346,11 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
             : nil,
         selection: logSelectionState.selection,
         selectedIDs: logSelectionState.selectedIDs,
-        reflogRootPath: reflogRootPath.map(canonicalExternalLogPath),
-        reflogSelection: reflogSelection,
+        reflogRootPath: reflog.rootPath.map(canonicalExternalLogPath),
+        reflogSelection: reflog.selection,
         reflogSelectedIDs: persistedReflogSelectionIDs(
-            entries: reflogEntries,
-            selectedIDs: reflogSelectedIDs
+            entries: reflog.entries,
+            selectedIDs: reflog.selectedIDs
         )
     )
 }
@@ -545,7 +545,7 @@ func runLogCommand(reset: Bool = true) {
         logSelectionState.selectedIDs = []
         logSelectionState.selection = nil
     }
-    hasMoreLogCommand = !commandHasExplicitLimit
+    logRuntime.hasMoreCommand = !commandHasExplicitLimit
     logRuntime.commandError = nil
     let task = Task.detached(priority: .userInitiated) { [commandRepositories] in
         do {
@@ -579,7 +579,7 @@ func runLogCommand(reset: Bool = true) {
                           == requestedDiscoveredRootPaths else { return }
                 self.logRuntime.isLoadingCommand = false
                 self.logRuntime.commandEntries = entries
-                self.hasMoreLogCommand = !commandHasExplicitLimit && entries.count >= commandLimit
+                self.logRuntime.hasMoreCommand = !commandHasExplicitLimit && entries.count >= commandLimit
             }
         } catch {
             guard !Task.isCancelled else { return }
@@ -598,7 +598,7 @@ func runLogCommand(reset: Bool = true) {
                 self.logRuntime.isLoadingCommand = false
                 self.logRuntime.commandError = errorMessage(error)
                 if reset {
-                    self.hasMoreLogCommand = false
+                    self.logRuntime.hasMoreCommand = false
                 }
             }
         }
@@ -629,19 +629,19 @@ func selectReflogRoot(_ rootPath: String, preservingSelection: Bool = false) {
         return
     }
 
-    reflogRootPath = normalizedPath
-    reflogRootRepo = rootRepo
-    reflogLoadMoreTask?.cancel()
-    reflogLoadMoreTask = nil
-    isLoadingMoreReflog = false
+    reflog.rootPath = normalizedPath
+    reflog.rootRepo = rootRepo
+    reflog.loadMoreTask?.cancel()
+    reflog.loadMoreTask = nil
+    reflog.isLoadingMore = false
     if !preservingSelection {
-        reflogEntries = []
-        reflogSelection = nil
-        reflogSelectedIDs = []
-        reflogDetailCommit = nil
-        reflogDetailCommits = []
-        reflogDetailLoadTask?.cancel()
-        reflogDetailLoadTask = nil
+        reflog.entries = []
+        reflog.selection = nil
+        reflog.selectedIDs = []
+        reflog.detailCommit = nil
+        reflog.detailCommits = []
+        reflog.detailLoadTask?.cancel()
+        reflog.detailLoadTask = nil
     }
     logRuntime.aggregateBranchFilters = []
     logRuntime.aggregateRevisionRanges = []
@@ -673,7 +673,7 @@ func selectReflogRoot(_ rootPath: String, preservingSelection: Bool = false) {
 }
 
 func prepareReflogRoot() {
-    let rootPath = reflogRootPath
+    let rootPath = reflog.rootPath
         ?? logList.activeRootPath
         ?? repo?.workdir()
         ?? availableReflogRootPaths.first
@@ -681,7 +681,7 @@ func prepareReflogRoot() {
         logList.error = "No Git root is available for Reflog."
         return
     }
-    if reflogRootPath == rootPath, reflogRootRepo != nil {
+    if reflog.rootPath == rootPath, reflog.rootRepo != nil {
         loadReflog()
     } else {
         selectReflogRoot(rootPath, preservingSelection: true)
@@ -690,21 +690,21 @@ func prepareReflogRoot() {
 
 func loadReflog() {
     guard logList.viewMode == .reflog else { return }
-    guard let rootPath = reflogRootPath, !rootPath.isEmpty else {
+    guard let rootPath = reflog.rootPath, !rootPath.isEmpty else {
         prepareReflogRoot()
         return
     }
-    reflogLoadTask?.cancel()
-    reflogLoadMoreTask?.cancel()
-    reflogLoadMoreTask = nil
-    reflogGeneration += 1
-    let generation = reflogGeneration
+    reflog.loadTask?.cancel()
+    reflog.loadMoreTask?.cancel()
+    reflog.loadMoreTask = nil
+    reflog.generation += 1
+    let generation = reflog.generation
     let tabID = currentLogTabID
-    let requestedRepo = reflogRootRepo
+    let requestedRepo = reflog.rootRepo
     let pageSize: UInt32 = 100
     logList.isLoading = true
-    isLoadingMoreReflog = false
-    reflogHasMore = false
+    reflog.isLoadingMore = false
+    reflog.hasMore = false
     logList.error = nil
 
     let task = Task.detached(priority: .userInitiated) {
@@ -718,40 +718,40 @@ func loadReflog() {
             let page = try rootRepo.reflogPage(limit: pageSize + 1, offset: 0)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard generation == self.reflogGeneration,
+                guard generation == self.reflog.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.logList.viewMode == .reflog,
-                      self.reflogRootPath == rootPath else { return }
-                if self.reflogRootRepo == nil {
-                    self.reflogRootRepo = rootRepo
+                      self.reflog.rootPath == rootPath else { return }
+                if self.reflog.rootRepo == nil {
+                    self.reflog.rootRepo = rootRepo
                 }
                 let entries = Array(page.prefix(Int(pageSize)))
                 let selectionState = reconciledReflogSelection(
                     entries: entries,
-                    previousSelection: self.reflogSelection,
-                    previousSelectedIDs: self.reflogSelectedIDs
+                    previousSelection: self.reflog.selection,
+                    previousSelectedIDs: self.reflog.selectedIDs
                 )
-                self.reflogEntries = entries
-                self.reflogSelection = selectionState.selection
-                self.reflogSelectedIDs = selectionState.selectedIDs
-                self.reflogHasMore = page.count > Int(pageSize)
+                self.reflog.entries = entries
+                self.reflog.selection = selectionState.selection
+                self.reflog.selectedIDs = selectionState.selectedIDs
+                self.reflog.hasMore = page.count > Int(pageSize)
                 self.logList.isLoading = false
                 self.logList.error = nil
                 self.loadReflogCommitDetails()
             }
         } catch {
             await MainActor.run {
-                guard generation == self.reflogGeneration,
+                guard generation == self.reflog.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.logList.viewMode == .reflog,
-                      self.reflogRootPath == rootPath else { return }
+                      self.reflog.rootPath == rootPath else { return }
                 self.logList.isLoading = false
-                self.reflogHasMore = false
+                self.reflog.hasMore = false
                 self.logList.error = errorMessage(error)
             }
         }
     }
-    reflogLoadTask = task
+    reflog.loadTask = task
 }
 
 /// Append older HEAD reflog records without replacing the current root or
@@ -759,20 +759,20 @@ func loadReflog() {
 /// never needs a second request merely to discover that the file ended.
 func loadMoreReflog() {
     guard logList.viewMode == .reflog,
-          reflogHasMore,
+          reflog.hasMore,
           !logList.isLoading,
-          !isLoadingMoreReflog,
-          let rootPath = reflogRootPath,
+          !reflog.isLoadingMore,
+          let rootPath = reflog.rootPath,
           !rootPath.isEmpty else { return }
 
-    reflogLoadMoreTask?.cancel()
-    reflogGeneration += 1
-    let generation = reflogGeneration
+    reflog.loadMoreTask?.cancel()
+    reflog.generation += 1
+    let generation = reflog.generation
     let tabID = currentLogTabID
-    let requestedRepo = reflogRootRepo
-    let offset = reflogEntries.count
+    let requestedRepo = reflog.rootRepo
+    let offset = reflog.entries.count
     let pageSize: UInt32 = 100
-    isLoadingMoreReflog = true
+    reflog.isLoadingMore = true
 
     let task = Task.detached(priority: .userInitiated) {
         do {
@@ -788,31 +788,31 @@ func loadMoreReflog() {
             )
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard generation == self.reflogGeneration,
+                guard generation == self.reflog.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.logList.viewMode == .reflog,
-                      self.reflogRootPath == rootPath else { return }
+                      self.reflog.rootPath == rootPath else { return }
                 let entries = appendedReflogEntries(
-                    existing: self.reflogEntries,
+                    existing: self.reflog.entries,
                     page: Array(page.prefix(Int(pageSize)))
                 )
-                self.reflogEntries.append(contentsOf: entries)
-                self.reflogHasMore = page.count > Int(pageSize)
-                self.isLoadingMoreReflog = false
+                self.reflog.entries.append(contentsOf: entries)
+                self.reflog.hasMore = page.count > Int(pageSize)
+                self.reflog.isLoadingMore = false
                 self.loadReflogCommitDetails()
             }
         } catch {
             await MainActor.run {
-                guard generation == self.reflogGeneration,
+                guard generation == self.reflog.generation,
                       self.externalLogTabIsAlive(tabID),
                       self.logList.viewMode == .reflog,
-                      self.reflogRootPath == rootPath else { return }
-                self.isLoadingMoreReflog = false
+                      self.reflog.rootPath == rootPath else { return }
+                self.reflog.isLoadingMore = false
                 self.logList.error = errorMessage(error)
             }
         }
     }
-    reflogLoadMoreTask = task
+    reflog.loadMoreTask = task
 }
 
 func reloadLogView() {
@@ -1141,12 +1141,12 @@ func loadLog(reset: Bool = true) {
         logList.isLoadingMore = false
         logList.isShowingCachedSnapshot = false
         logSelectionState.detailCommit = nil
-        reflogDetailCommit = nil
-        reflogDetailCommits = []
-        reflogSelectedIDs = []
-        reflogSelection = nil
-        reflogDetailLoadTask?.cancel()
-        reflogDetailLoadTask = nil
+        reflog.detailCommit = nil
+        reflog.detailCommits = []
+        reflog.selectedIDs = []
+        reflog.selection = nil
+        reflog.detailLoadTask?.cancel()
+        reflog.detailLoadTask = nil
     } else {
         logList.isLoadingMore = true
     }
@@ -1497,10 +1497,10 @@ func loadAggregatedLog(reset: Bool) {
         logRuntime.aggregatePageCursors = [:]
         logSelectionState.detailCommit = nil
         logRuntime.aggregateRepositories = [:]
-        logCherryPickedCommitIDs = []
-        logCherryPickComparisonReady = false
-        logCherryPickComparisonCompletedRoots = 0
-        logCherryPickComparisonTotalRoots = 0
+        logCherryPick.cherryPickedCommitIDs = []
+        logCherryPick.comparisonReady = false
+        logCherryPick.completedRoots = 0
+        logCherryPick.totalRoots = 0
     } else {
         logList.isLoadingMore = true
     }
@@ -1901,13 +1901,13 @@ func isActiveLogNavigationRepository(
 /// resolve the selected object IDs together and preserve the visible Reflog
 /// order while loading them off the main actor.
 func loadReflogCommitDetails() {
-    reflogDetailLoadTask?.cancel()
-    reflogDetailLoadTask = nil
-    reflogDetailCommit = nil
-    reflogDetailCommits = []
-    guard let repo = reflogRepository, !reflogSelectedIDs.isEmpty else { return }
+    reflog.detailLoadTask?.cancel()
+    reflog.detailLoadTask = nil
+    reflog.detailCommit = nil
+    reflog.detailCommits = []
+    guard let repo = reflogRepository, !reflog.selectedIDs.isEmpty else { return }
 
-    let expectedSelection = reflogSelectedIDs
+    let expectedSelection = reflog.selectedIDs
     let expectedEntryIDs = selectedReflogEntries.map(reflogEntryIdentifier)
     let commitIDs = orderedUniqueReflogCommitIDs(selectedReflogEntries)
     let tabID = currentLogTabID
@@ -1934,17 +1934,17 @@ func loadReflogCommitDetails() {
         await MainActor.run {
             guard self.externalLogTabIsAlive(tabID),
                   self.isActiveLogRepository(repo),
-                  self.reflogSelectedIDs == expectedSelection,
+                  self.reflog.selectedIDs == expectedSelection,
                   self.selectedReflogEntries.map(reflogEntryIdentifier) == expectedEntryIDs else { return }
-            self.reflogDetailCommits = loadedCommits
+            self.reflog.detailCommits = loadedCommits
         }
     }
-    reflogDetailLoadTask = task
+    reflog.detailLoadTask = task
 }
 
 func loadMoreLog() {
     if logList.viewMode == .command {
-        guard hasMoreLogCommand else { return }
+        guard logRuntime.hasMoreCommand else { return }
         runLogCommand(reset: false)
         return
     }
@@ -2520,8 +2520,8 @@ func resetFromLog(_ commits: [CommitInfo]) {
 
 /// Reword the current HEAD without changing its tree or consuming staged files.
 func submitLogHeadReword() {
-    guard let repo = logRepository, let commit = logRewordCommit else { return }
-    let message = logRewordMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let repo = logRepository, let commit = logRewrite.rewordCommit else { return }
+    let message = logRewrite.rewordMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !message.isEmpty else {
         feedbackCenter.warning(
             "Commit message required",
@@ -2530,8 +2530,8 @@ func submitLogHeadReword() {
         )
         return
     }
-    if logRewordUsesRootRebase {
-        showLogRewordDialog = false
+    if logRewrite.rewordUsesRootRebase {
+        logRewrite.showRewordDialog = false
         let cancel = GitCancelHandle()
         beginFeedbackOperation("Reword Root History", cancelHandle: cancel)
         let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
@@ -2583,8 +2583,8 @@ func submitLogHeadReword() {
                     expectedBranch: expectedBranch
                 )
                 await MainActor.run {
-                    self.logRewordCommit = nil
-                    self.logRewordUsesRootRebase = false
+                    self.logRewrite.rewordCommit = nil
+                    self.logRewrite.rewordUsesRootRebase = false
                     self.feedbackCenter.expire(
                         notificationID: self.commitNotificationID(rootPath: rootPath)
                     )
@@ -2608,7 +2608,7 @@ func submitLogHeadReword() {
             } catch {
                 if case .Cancelled = error as? EngineError {
                     await MainActor.run {
-                        self.showLogRewordDialog = true
+                        self.logRewrite.showRewordDialog = true
                         self.operationFeedback = "Root reword cancelled; saved local changes were restored"
                         self.feedbackCenter.warning(
                             "Root reword cancelled",
@@ -2621,7 +2621,7 @@ func submitLogHeadReword() {
                 await MainActor.run {
                     // Keep the draft available so repository-state or todo
                     // mapping errors can be reviewed and retried.
-                    self.showLogRewordDialog = true
+                    self.logRewrite.showRewordDialog = true
                     self.feedbackCenter.error(
                         "Root commit reword failed",
                         detail: errorMessage(error),
@@ -2634,12 +2634,12 @@ func submitLogHeadReword() {
         return
     }
     guard commit.isHead else {
-        showLogRewordDialog = false
-        logRewordCommit = nil
-        logRewordUsesRootRebase = false
+        logRewrite.showRewordDialog = false
+        logRewrite.rewordCommit = nil
+        logRewrite.rewordUsesRootRebase = false
         return
     }
-    showLogRewordDialog = false
+    logRewrite.showRewordDialog = false
     beginFeedbackOperation("Reword HEAD")
     Task.detached(priority: .userInitiated) {
         do {
@@ -2658,8 +2658,8 @@ func submitLogHeadReword() {
                 expectedBranch: expectedBranch
             )
             await MainActor.run {
-                self.logRewordCommit = nil
-                self.logRewordUsesRootRebase = false
+                self.logRewrite.rewordCommit = nil
+                self.logRewrite.rewordUsesRootRebase = false
                 self.feedbackCenter.expire(
                     notificationID: self.commitNotificationID(rootPath: rootPath)
                 )
@@ -2684,7 +2684,7 @@ func submitLogHeadReword() {
             await MainActor.run {
                 // Keep the draft available so a hook/index/permission error can
                 // be reviewed and retried without rebuilding the message.
-                self.showLogRewordDialog = true
+                self.logRewrite.showRewordDialog = true
                 self.feedbackCenter.error(
                     "Reword HEAD failed",
                     detail: errorMessage(error),

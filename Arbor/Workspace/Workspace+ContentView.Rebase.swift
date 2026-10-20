@@ -424,7 +424,7 @@ func rebaseUndoFeedbackAction(for target: RebaseUndoTarget) -> FeedbackAction {
 /// fixups. The resulting tree is identical to pick+squash, while the root
 /// keeps exactly the message edited in the IntelliJ-style dialog.
 func submitLogSquash() {
-    let message = logSquashMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    let message = logRewrite.squashMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !message.isEmpty else {
         feedbackCenter.warning(
             "Commit message required",
@@ -433,7 +433,7 @@ func submitLogSquash() {
         )
         return
     }
-    let indexes = logSquashIndexes.sorted()
+    let indexes = logRewrite.squashIndexes.sorted()
     guard let first = indexes.first,
           indexes.count >= 2,
           indexes.allSatisfy({ $0 >= 0 && $0 < rebaseTodoItems.count }) else {
@@ -442,7 +442,7 @@ func submitLogSquash() {
             detail: "The selected commits are no longer available in the prepared history range.",
             nextStep: "Refresh the Log and select the commits again."
         )
-        showLogSquashDialog = false
+        logRewrite.showSquashDialog = false
         return
     }
     rebaseTodoItems[first].action = .reword
@@ -451,9 +451,9 @@ func submitLogSquash() {
         rebaseTodoItems[index].action = .fixup
         rebaseTodoItems[index].message = nil
     }
-    showLogSquashDialog = false
-    logSquashIndexes = []
-    logSquashSummaries = []
+    logRewrite.showSquashDialog = false
+    logRewrite.squashIndexes = []
+    logRewrite.squashSummaries = []
     startTodoRebase()
 }
 

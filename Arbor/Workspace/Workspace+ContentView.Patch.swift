@@ -125,7 +125,7 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     logList.until = tab.untilText
     logRuntime.commandFilter = tab.commandFilter
     logRuntime.commandEntries = []
-    hasMoreLogCommand = true
+    logRuntime.hasMoreCommand = true
     logRuntime.commandError = nil
     logList.follow = tab.follow
     logRuntime.sortModeRaw = tab.graphSortModeRaw
@@ -146,18 +146,18 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     logSelectionState.selection = tab.selection
     logSelectionState.selectedIDs = tab.selectedIDs
     logList.pageCursor = nil
-    reflogEntries = []
+    reflog.entries = []
     let restoredReflogRoot = tab.reflogRootPath
         ?? (tab.viewMode == .reflog ? tab.rootPath : nil)
-    reflogRootPath = restoredReflogRoot.map(canonicalExternalLogPath)
-    reflogRootRepo = nil
-    reflogSelection = tab.reflogSelection
-    reflogSelectedIDs = Set(tab.reflogSelectedIDs ?? [])
+    reflog.rootPath = restoredReflogRoot.map(canonicalExternalLogPath)
+    reflog.rootRepo = nil
+    reflog.selection = tab.reflogSelection
+    reflog.selectedIDs = Set(tab.reflogSelectedIDs ?? [])
     logSelectionState.detailCommit = nil
-    reflogDetailCommit = nil
-    reflogDetailCommits = []
-    reflogDetailLoadTask?.cancel()
-    reflogDetailLoadTask = nil
+    reflog.detailCommit = nil
+    reflog.detailCommits = []
+    reflog.detailLoadTask?.cancel()
+    reflog.detailLoadTask = nil
     logList.hasMore = true
 }
 

@@ -154,12 +154,12 @@ func checkoutRecentBranch(_ name: String) {
 /// Git's configured identity. Keep the expensive reachability work off the UI
 /// actor and discard results after a project/root refresh.
 func setLogBranchesShowOnlyMy(_ enabled: Bool) {
-    logBranchesShowOnlyMy = enabled
-    logShowMyTask?.cancel()
-    logShowMyTask = nil
+    logBranchesPanel.showOnlyMy = enabled
+    logBranchesPanel.showMyTask?.cancel()
+    logBranchesPanel.showMyTask = nil
 
     guard enabled else {
-        logMyBranchIDs = []
+        logBranchesPanel.myBranchIDs = []
         isLoadingMyBranches = false
         return
     }
@@ -174,14 +174,14 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
     }
     rootPaths = Array(Set(rootPaths)).sorted()
     guard !rootPaths.isEmpty else {
-        logMyBranchIDs = []
+        logBranchesPanel.myBranchIDs = []
         isLoadingMyBranches = false
         return
     }
 
     let projectToken = projectPath
     isLoadingMyBranches = true
-    logShowMyTask = Task.detached(priority: .utility) { [rootPaths] in
+    logBranchesPanel.showMyTask = Task.detached(priority: .utility) { [rootPaths] in
         var branchIDs = Set<String>()
         for rootPath in rootPaths {
             guard !Task.isCancelled,
@@ -206,16 +206,16 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
         let resolvedBranchIDs = branchIDs
         await MainActor.run {
             guard self.projectPath == projectToken,
-                  self.logBranchesShowOnlyMy else { return }
-            self.logMyBranchIDs = resolvedBranchIDs
+                  self.logBranchesPanel.showOnlyMy else { return }
+            self.logBranchesPanel.myBranchIDs = resolvedBranchIDs
             self.isLoadingMyBranches = false
-            self.logShowMyTask = nil
+            self.logBranchesPanel.showMyTask = nil
         }
     }
 }
 
 func refreshLogMyBranches() {
-    guard logBranchesShowOnlyMy else { return }
+    guard logBranchesPanel.showOnlyMy else { return }
     setLogBranchesShowOnlyMy(true)
 }
 

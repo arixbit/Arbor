@@ -16,6 +16,18 @@ struct ContentView: View {
 
     /// Log 的选中 / 详情 / tab / 导航状态。
     @StateObject var logSelectionState: LogSelectionState
+
+    /// Reflog 列表与详情。
+    @StateObject var reflog = ReflogState()
+
+    /// Log 左侧分支面板（分组 / 只看我的）。
+    @StateObject var logBranchesPanel: LogBranchesPanelState
+
+    /// Cherry-pick 对比（日志里「已被挑过」标记）。
+    @StateObject var logCherryPick = LogCherryPickState()
+
+    /// Reword / Squash 对话框。
+    @StateObject var logRewrite = LogRewriteState()
     let externalLogWindow: Bool
     let initialExternalLogRootPaths: Set<String>
     let externalLogProviderSession: ExternalLogProviderSession?
@@ -77,21 +89,9 @@ struct ContentView: View {
     @AppStorage("arbor.log.collapseGraph.v1") var logCollapseGraph = false
     @AppStorage("arbor.log.noMerges.v1") var logNoMerges = false
     @AppStorage("arbor.log.branches.visible.v1") var logBranchesVisible = false
-    @State var logBranchesGroupByDirectory = GitBranchesPopupSettings.defaultGroupByDirectory
-    @State var logBranchesGroupByRepository = GitBranchesPopupSettings.defaultGroupByRepository
-    @State var logBranchesSelectionActionRaw = LogBranchSelectionAction.navigate.rawValue
-    @State var logBranchesShowOnlyMy = false
-    @State var logMyBranchIDs: Set<String> = []
-    @State var logShowMyTask: Task<Void, Never>?
     @State var isLoadingMyBranches = false
     @AppStorage("arbor.log.highlightCherryPicked.v1") var logHighlightCherryPicked = false
     @AppStorage("arbor.log.highlightCherryPicked.branch.v1") var logCherryPickCompareBranch = ""
-    @State var logCherryPickComparisonTask: Task<Void, Never>?
-    @State var logCherryPickComparisonCancelHandle: GitCancelHandle?
-    @State var logCherryPickComparisonInProgress = false
-    @State var logCherryPickComparisonGeneration = 0
-    @State var logCherryPickComparisonCompletedRoots = 0
-    @State var logCherryPickComparisonTotalRoots = 0
     /// Global fallback for IntelliJ's project-level FETCH/LS_REMOTE
     /// incoming-change strategy. Project overrides are loaded below by the
     /// normalized project path, so one window never changes another project.
@@ -316,13 +316,13 @@ struct ContentView: View {
     }
 
     var reflogRootTitle: String {
-        guard let path = reflogRootPath, !path.isEmpty else { return "Repository" }
+        guard let path = reflog.rootPath, !path.isEmpty else { return "Repository" }
         let name = URL(fileURLWithPath: path).lastPathComponent
         return name.isEmpty ? path : name
     }
 
     var reflogRepository: Repository? {
-        reflogRootRepo ?? (isLogAggregate ? nil : logRepository)
+        reflog.rootRepo ?? (isLogAggregate ? nil : logRepository)
     }
 
     /// Graph selection is root-qualified only for an aggregate multi-root
@@ -540,7 +540,6 @@ struct ContentView: View {
     /// 逐行暂存入口：侧栏「逐行」点击后选中文件并让 diff 视图进入选择模式
     @State var selectionModePath: String?
     // 日志模式
-    @State var hasMoreLogCommand = true
     /// IntelliJ shows an action-group popup when a commit has multiple
     /// parents or children. Keep the resolved records separate from the
     /// paged graph so the popup can include commits outside the viewport.
@@ -558,8 +557,6 @@ struct ContentView: View {
     /// A commit referenced by a notification or reflog may not be in the
     /// currently visible history page. Keep that detail record separate from
     /// the paged graph so the inspector never falls back to an empty pane.
-    @State var reflogDetailCommit: CommitInfo?
-    @State var reflogDetailCommits: [CommitInfo] = []
     @State var revisionBrowserCommit: CommitInfo?
     @State var revisionBrowserPath: String?
     @State var showRevisionBrowser = false
@@ -586,7 +583,6 @@ struct ContentView: View {
     @State var gitHooksFeedback: String?
     @State var lfsTrackedPaths: Set<String> = []
     @State var lfsPointerPaths: Set<String> = []
-    @State var reflogDetailLoadTask: Task<Void, Never>?
     @State var compareLoadTask: Task<Void, Never>?
     /// REPO-001:多 root 发现与聚合结果
     @State var multiRoots: [GitRootInfo] = []
@@ -696,8 +692,6 @@ struct ContentView: View {
     /// Each aggregate-log root owns an independent engine pagination cursor.
     /// Keeping this separate from the merged row count prevents a later page
     /// from re-querying the entire root history just to discard its prefix.
-    @State var logCherryPickedCommitIDs: Set<String> = []
-    @State var logCherryPickComparisonReady = false
     @State var compareRev1: String = ""
     @State var compareRev2: String = ""
     @State var compareRepositoryPath: String?
@@ -726,19 +720,9 @@ struct ContentView: View {
     @State var branchCompareFirstError: String?
     @State var branchCompareSecondError: String?
     @State var branchCompareError: String?
-    @State var reflogEntries: [ReflogEntry] = []
-    @State var reflogSelection: String?
-    @State var reflogSelectedIDs: Set<String> = []
     /// Reflog is a repository-local history. Keep its root separate from the
     /// aggregate VCS Log filters so switching from a multi-root graph cannot
     /// leave the Reflog panel showing an unrelated or stale repository.
-    @State var reflogRootPath: String?
-    @State var reflogRootRepo: Repository?
-    @State var reflogLoadTask: Task<Void, Never>?
-    @State var reflogLoadMoreTask: Task<Void, Never>?
-    @State var reflogGeneration = 0
-    @State var reflogHasMore = false
-    @State var isLoadingMoreReflog = false
     @State var rebasePaused = false
     /// OPS-001 统一操作状态（merge/rebase/cherry-pick/revert），Recovery Bar 数据源。
     @State var operationState: OperationState?
@@ -766,14 +750,6 @@ struct ContentView: View {
     @State var rawRebaseMessageText = ""
     @State var rawRebaseMessageRepository: Repository?
     /// Log HEAD Reword uses Git's `--amend --only` path so staged changes stay staged.
-    @State var showLogRewordDialog = false
-    @State var logRewordCommit: CommitInfo?
-    @State var logRewordMessage = ""
-    @State var logRewordUsesRootRebase = false
-    @State var showLogSquashDialog = false
-    @State var logSquashMessage = ""
-    @State var logSquashIndexes: [Int] = []
-    @State var logSquashSummaries: [String] = []
     /// Log Fixup/Squash keeps IntelliJ's optional Commit and Rebase executor
     /// available until the generated commit is created.
     @State var pendingAutoSquashRebase: PendingAutoSquashRebase?
@@ -1144,17 +1120,19 @@ struct ContentView: View {
         ))
         _projectPath = State(initialValue: recoveredPath)
         _path = State(initialValue: recoveredPath ?? "")
-        _logBranchesSelectionActionRaw = State(initialValue: GitBranchesPopupSettings.stringValue(
-            GitBranchesPopupSettings.logSelectionActionKey,
-            for: recoveredPath
-        ))
-        _logBranchesGroupByDirectory = State(initialValue: GitBranchesPopupSettings.value(
-            GitBranchesPopupSettings.groupByDirectoryKey,
-            for: recoveredPath
-        ))
-        _logBranchesGroupByRepository = State(initialValue: GitBranchesPopupSettings.value(
-            GitBranchesPopupSettings.groupByRepositoryKey,
-            for: recoveredPath
+        _logBranchesPanel = StateObject(wrappedValue: LogBranchesPanelState(
+            groupByDirectory: GitBranchesPopupSettings.value(
+                GitBranchesPopupSettings.groupByDirectoryKey,
+                for: recoveredPath
+            ),
+            groupByRepository: GitBranchesPopupSettings.value(
+                GitBranchesPopupSettings.groupByRepositoryKey,
+                for: recoveredPath
+            ),
+            selectionActionRaw: GitBranchesPopupSettings.stringValue(
+                GitBranchesPopupSettings.logSelectionActionKey,
+                for: recoveredPath
+            )
         ))
         let rememberedMode = UserDefaults.standard.string(forKey: "arbor.toolWindowMode")
             .flatMap(ToolWindowMode.init(rawValue:))
@@ -1356,15 +1334,15 @@ struct ContentView: View {
         return commits.first { $0.id == branchCompareSelectionID }
     }
     var selectedReflogEntry: ReflogEntry? {
-        guard let reflogSelection else { return nil }
-        return reflogEntries.first { reflogEntryIdentifier($0) == reflogSelection }
+        guard let selection = reflog.selection else { return nil }
+        return reflog.entries.first { reflogEntryIdentifier($0) == reflog.selection }
     }
     var selectedReflogEntries: [ReflogEntry] {
-        orderedReflogSelection(entries: reflogEntries, selectedIDs: reflogSelectedIDs)
+        orderedReflogSelection(entries: reflog.entries, selectedIDs: reflog.selectedIDs)
     }
     var selectedReflogCommits: [CommitInfo] {
-        if !reflogDetailCommits.isEmpty {
-            return reflogDetailCommits
+        if !reflog.detailCommits.isEmpty {
+            return reflog.detailCommits
         }
         var seen = Set<String>()
         return selectedReflogEntries.compactMap { entry in
@@ -1384,8 +1362,8 @@ struct ContentView: View {
                 || commit.id.hasPrefix(entry.newId)
                 || entry.newId.hasPrefix(commit.id)
         }
-        return reflogDetailCommits.first(where: matches)
-            ?? reflogDetailCommit.flatMap { matches($0) ? $0 : nil }
+        return reflog.detailCommits.first(where: matches)
+            ?? reflog.detailCommit.flatMap { matches($0) ? $0 : nil }
             ?? logList.entries.first(where: matches)
     }
 
@@ -2017,28 +1995,28 @@ struct ContentView: View {
                 onCancel: cancelRawRebaseMessage
             )
         }
-        .sheet(isPresented: $showLogRewordDialog) {
-            if let commit = logRewordCommit {
+        .sheet(isPresented: $logRewrite.showRewordDialog) {
+            if let commit = logRewrite.rewordCommit {
                 LogRewordDialogView(
                     commit: commit,
-                    message: $logRewordMessage,
+                    message: $logRewrite.rewordMessage,
                     onCancel: {
-                        showLogRewordDialog = false
-                        logRewordCommit = nil
-                        logRewordUsesRootRebase = false
+                        logRewrite.showRewordDialog = false
+                        logRewrite.rewordCommit = nil
+                        logRewrite.rewordUsesRootRebase = false
                     },
                     onConfirm: submitLogHeadReword
                 )
             }
         }
-        .sheet(isPresented: $showLogSquashDialog) {
+        .sheet(isPresented: $logRewrite.showSquashDialog) {
             LogSquashDialogView(
-                commitSummaries: logSquashSummaries,
-                message: $logSquashMessage,
+                commitSummaries: logRewrite.squashSummaries,
+                message: $logRewrite.squashMessage,
                 onCancel: {
-                    showLogSquashDialog = false
-                    logSquashIndexes = []
-                    logSquashSummaries = []
+                    logRewrite.showSquashDialog = false
+                    logRewrite.squashIndexes = []
+                    logRewrite.squashSummaries = []
                 },
                 onConfirm: submitLogSquash
             )
@@ -2049,8 +2027,8 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) {
                 pendingInitialCommitReword = nil
-                logRewordCommit = nil
-                logRewordUsesRootRebase = false
+                logRewrite.rewordCommit = nil
+                logRewrite.rewordUsesRootRebase = false
             }
         } message: {
             Text("The initial commit has no parent. Continue with this history rewrite?")

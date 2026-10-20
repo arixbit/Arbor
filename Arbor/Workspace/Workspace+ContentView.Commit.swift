@@ -112,16 +112,16 @@ func openRewordCommit(rootPath: String, commitID: String) {
                 self.logSelectionState.selection = commit.id
                 self.logSelectionState.selectedIDs = [commit.id]
                 self.logSelectionState.detailCommit = commit
-                self.logRewordCommit = commit
-                self.logRewordMessage = commit.messageBody.isEmpty
+                self.logRewrite.rewordCommit = commit
+                self.logRewrite.rewordMessage = commit.messageBody.isEmpty
                     ? commit.summary
                     : "\(commit.summary)\n\n\(commit.messageBody)"
-                self.logRewordUsesRootRebase = false
+                self.logRewrite.rewordUsesRootRebase = false
                 if commit.parentIds.isEmpty {
                     self.pendingInitialCommitReword = commit
                     self.showInitialCommitRewordAlert = true
                 } else {
-                    self.showLogRewordDialog = true
+                    self.logRewrite.showRewordDialog = true
                 }
             }
         } catch {
@@ -153,14 +153,14 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
         logSelectionState.detailCommit = visible
         return
     }
-    if forReflog, reflogDetailCommit?.id == normalized { return }
+    if forReflog, reflog.detailCommit?.id == normalized { return }
     logSelectionState.detailLoadTask?.cancel()
     if forReflog {
-        reflogDetailCommit = nil
+        reflog.detailCommit = nil
     } else {
         logSelectionState.detailCommit = nil
     }
-    let expectedReflogSelection = forReflog ? reflogSelection : nil
+    let expectedReflogSelection = forReflog ? reflog.selection : nil
     let expectedLogSelection = forReflog ? nil : logSelectionState.selection
     let tabID = currentLogTabID
     let task = Task.detached(priority: .userInitiated) {
@@ -181,9 +181,9 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
                 guard self.externalLogTabIsAlive(tabID),
                       self.isActiveLogRepository(repo) else { return }
                 if forReflog {
-                    guard self.reflogSelection == expectedReflogSelection,
+                    guard self.reflog.selection == expectedReflogSelection,
                           self.selectedReflogEntry?.newId == commit.id else { return }
-                    self.reflogDetailCommit = commit
+                    self.reflog.detailCommit = commit
                 } else if let selected = expectedLogSelection,
                           selected == normalized
                             || selected.hasPrefix(normalized)
@@ -1354,16 +1354,16 @@ func rewriteCommitFromLog(
     // this fast path separate from the todo editor: a Log reword must never
     // absorb unrelated staged changes from the Commit workspace.
     if action == .reword, commit.isHead {
-        logRewordUsesRootRebase = false
-        logRewordCommit = commit
-        logRewordMessage = commit.messageBody.isEmpty
+        logRewrite.rewordUsesRootRebase = false
+        logRewrite.rewordCommit = commit
+        logRewrite.rewordMessage = commit.messageBody.isEmpty
             ? commit.summary
             : "\(commit.summary)\n\n\(commit.messageBody)"
         if commit.parentIds.isEmpty {
             pendingInitialCommitReword = commit
             showInitialCommitRewordAlert = true
         } else {
-            showLogRewordDialog = true
+            logRewrite.showRewordDialog = true
         }
         return
     }
@@ -1371,12 +1371,12 @@ func rewriteCommitFromLog(
         // IntelliJ uses `git rebase --root` when the selected root is not
         // HEAD. Keep the same full-message editor, but route confirmation to
         // the engine's clean linear root-history rewrite path.
-        logRewordUsesRootRebase = true
-        logRewordCommit = commit
-        logRewordMessage = commit.messageBody.isEmpty
+        logRewrite.rewordUsesRootRebase = true
+        logRewrite.rewordCommit = commit
+        logRewrite.rewordMessage = commit.messageBody.isEmpty
             ? commit.summary
             : "\(commit.summary)\n\n\(commit.messageBody)"
-        showLogRewordDialog = true
+        logRewrite.showRewordDialog = true
         return
     }
     if action == .drop, commit.parentIds.isEmpty {
@@ -1479,12 +1479,12 @@ func rewriteCommitFromLog(
 func confirmInitialCommitReword() {
     guard let commit = pendingInitialCommitReword else { return }
     pendingInitialCommitReword = nil
-    logRewordUsesRootRebase = false
-    logRewordCommit = commit
-    logRewordMessage = commit.messageBody.isEmpty
+    logRewrite.rewordUsesRootRebase = false
+    logRewrite.rewordCommit = commit
+    logRewrite.rewordMessage = commit.messageBody.isEmpty
         ? commit.summary
         : "\(commit.summary)\n\n\(commit.messageBody)"
-    showLogRewordDialog = true
+    logRewrite.showRewordDialog = true
 }
 
 /// Execute IntelliJ's direct multi-commit Drop path. The engine still builds
@@ -1885,14 +1885,14 @@ func rewriteSelectedCommitsFromLog(
                 self.rebaseTodoPreserveMerges = false
                 self.rebaseTodoRoot = rootRebase
                 if action == .squash {
-                    self.logSquashIndexes = preparedSquashIndexes
-                    self.logSquashSummaries = squashSummaries
-                    self.logSquashMessage = squashMessage
+                    self.logRewrite.squashIndexes = preparedSquashIndexes
+                    self.logRewrite.squashSummaries = squashSummaries
+                    self.logRewrite.squashMessage = squashMessage
                     self.feedbackCenter.success(
                         "Squash message ready",
                         detail: "Edit the combined message before rewriting \(squashSummaries.count) commits."
                     )
-                    self.showLogSquashDialog = true
+                    self.logRewrite.showSquashDialog = true
                 } else {
                     self.showRebaseTodoEditor = true
                 }

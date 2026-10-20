@@ -20,6 +20,7 @@ final class LogRuntimeState: ObservableObject {
     @Published var commandGeneration = 0
     @Published var commandTask: Task<Void, Never>?
     @Published var isLoadingCommand = false
+    @Published var hasMoreCommand = true
 
     // MARK: - 提交签名列
 

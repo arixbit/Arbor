@@ -518,11 +518,11 @@ func openProjectPath(_ projectPath: String) {
     logList.refreshTask = nil
     logList.loadTask?.cancel()
     logList.loadTask = nil
-    reflogLoadTask?.cancel()
-    reflogLoadTask = nil
-    reflogLoadMoreTask?.cancel()
-    reflogLoadMoreTask = nil
-    reflogGeneration += 1
+    reflog.loadTask?.cancel()
+    reflog.loadTask = nil
+    reflog.loadMoreTask?.cancel()
+    reflog.loadMoreTask = nil
+    reflog.generation += 1
     compareLoadTask?.cancel()
     compareLoadTask = nil
     cancelBranchComparisonTasks()
@@ -560,11 +560,11 @@ func openProjectPath(_ projectPath: String) {
     commitPreviewPath = nil
     commitPreviewVisible = false
     logSelectionState.selectedIDs = []
-    reflogRootPath = nil
-    reflogRootRepo = nil
-    reflogEntries = []
-    reflogSelection = nil
-    reflogSelectedIDs = []
+    reflog.rootPath = nil
+    reflog.rootRepo = nil
+    reflog.entries = []
+    reflog.selection = nil
+    reflog.selectedIDs = []
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
@@ -575,15 +575,15 @@ func openProjectPath(_ projectPath: String) {
     remoteProtectedBranchPatternsByRoot = [:]
     isShallowRepository = false
     let requestedPath = projectPath
-    logBranchesSelectionActionRaw = GitBranchesPopupSettings.stringValue(
+    logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
         GitBranchesPopupSettings.logSelectionActionKey,
         for: requestedPath
     )
-    logBranchesGroupByDirectory = GitBranchesPopupSettings.value(
+    logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByDirectoryKey,
         for: requestedPath
     )
-    logBranchesGroupByRepository = GitBranchesPopupSettings.value(
+    logBranchesPanel.groupByRepository = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByRepositoryKey,
         for: requestedPath
     )
@@ -606,15 +606,15 @@ func openProjectPath(_ projectPath: String) {
                 self.path = root
                 self.loadMergeDialogSettings(for: root)
                 self.loadRebaseDialogSettings(for: root)
-                self.logBranchesSelectionActionRaw = GitBranchesPopupSettings.stringValue(
+                self.logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
                     GitBranchesPopupSettings.logSelectionActionKey,
                     for: root
                 )
-                self.logBranchesGroupByDirectory = GitBranchesPopupSettings.value(
+                self.logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.value(
                     GitBranchesPopupSettings.groupByDirectoryKey,
                     for: root
                 )
-                self.logBranchesGroupByRepository = GitBranchesPopupSettings.value(
+                self.logBranchesPanel.groupByRepository = GitBranchesPopupSettings.value(
                     GitBranchesPopupSettings.groupByRepositoryKey,
                     for: root
                 )
@@ -624,8 +624,8 @@ func openProjectPath(_ projectPath: String) {
                 self.projectUpdateMethod = GitUpdateMethodSettings.method(for: root)
                 self.projectRepo = r
                 if shouldLoadReflog {
-                    self.reflogRootPath = root
-                    self.reflogRootRepo = r
+                    self.reflog.rootPath = root
+                    self.reflog.rootRepo = r
                     self.prepareReflogRoot()
                 }
                 self.logList.activeRootPath = nil
@@ -852,14 +852,14 @@ func resetProjectState() {
     logList.refreshTask = nil
     logList.loadTask?.cancel()
     logList.loadTask = nil
-    reflogLoadTask?.cancel()
-    reflogLoadTask = nil
-    reflogLoadMoreTask?.cancel()
-    reflogLoadMoreTask = nil
+    reflog.loadTask?.cancel()
+    reflog.loadTask = nil
+    reflog.loadMoreTask?.cancel()
+    reflog.loadMoreTask = nil
     logSelectionState.detailLoadTask?.cancel()
     logSelectionState.detailLoadTask = nil
-    reflogDetailLoadTask?.cancel()
-    reflogDetailLoadTask = nil
+    reflog.detailLoadTask?.cancel()
+    reflog.detailLoadTask = nil
     compareLoadTask?.cancel()
     compareLoadTask = nil
     activeCompareRepo = nil
@@ -876,19 +876,19 @@ func resetProjectState() {
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
     logList.generation += 1
-    reflogGeneration += 1
-    logShowMyTask?.cancel()
-    logShowMyTask = nil
-    logBranchesShowOnlyMy = false
-    logMyBranchIDs = []
+    reflog.generation += 1
+    logBranchesPanel.showMyTask?.cancel()
+    logBranchesPanel.showMyTask = nil
+    logBranchesPanel.showOnlyMy = false
+    logBranchesPanel.myBranchIDs = []
     isLoadingMyBranches = false
     feedbackCenter.clearHistory()
     projectRepo = nil
     projectIncomingCheckStrategyRaw = nil
     projectFetchTagsMode = .default
     projectUpdateMethod = .merge
-    logBranchesSelectionActionRaw = LogBranchSelectionAction.navigate.rawValue
-    logBranchesGroupByDirectory = GitBranchesPopupSettings.defaultGroupByDirectory
+    logBranchesPanel.selectionActionRaw = LogBranchSelectionAction.navigate.rawValue
+    logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.defaultGroupByDirectory
     multiRootRebaseSession = nil
     multiRootRebaseRollbackContext = nil
     entries = []
@@ -912,8 +912,8 @@ func resetProjectState() {
     branchCompareSecondError = nil
     branchCompareError = nil
     isLoadingBranchComparison = false
-    reflogDetailCommit = nil
-    reflogDetailCommits = []
+    reflog.detailCommit = nil
+    reflog.detailCommits = []
     logList.isLoading = false
     logList.isShowingCachedSnapshot = false
     branches = []
@@ -931,11 +931,11 @@ func resetProjectState() {
     worktrees = []
     worktreeFeedback = nil
     consoleResult = nil
-    reflogEntries = []
-    reflogSelection = nil
-    reflogSelectedIDs = []
-    reflogRootPath = nil
-    reflogRootRepo = nil
+    reflog.entries = []
+    reflog.selection = nil
+    reflog.selectedIDs = []
+    reflog.rootPath = nil
+    reflog.rootRepo = nil
     selection = nil
     fileSelection = nil
     selectionModePath = nil
@@ -981,20 +981,20 @@ func resetProjectState() {
 /// root and qualify returned ids with that root so identical object ids from
 /// separate repositories cannot cross-highlight.
 func refreshCherryPickedHighlights() {
-    logCherryPickComparisonTask?.cancel()
-    logCherryPickComparisonTask = nil
-    logCherryPickComparisonCancelHandle?.cancel()
-    logCherryPickComparisonCancelHandle = nil
-    logCherryPickComparisonGeneration += 1
-    let requestedComparisonGeneration = logCherryPickComparisonGeneration
-    logCherryPickComparisonInProgress = false
-    logCherryPickComparisonCompletedRoots = 0
-    logCherryPickComparisonTotalRoots = 0
+    logCherryPick.comparisonTask?.cancel()
+    logCherryPick.comparisonTask = nil
+    logCherryPick.cancelHandle?.cancel()
+    logCherryPick.cancelHandle = nil
+    logCherryPick.generation += 1
+    let requestedComparisonGeneration = logCherryPick.generation
+    logCherryPick.inProgress = false
+    logCherryPick.completedRoots = 0
+    logCherryPick.totalRoots = 0
 
     guard logHighlightCherryPicked,
           !logCherryPickCompareBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        logCherryPickedCommitIDs = []
-        logCherryPickComparisonReady = false
+        logCherryPick.cherryPickedCommitIDs = []
+        logCherryPick.comparisonReady = false
         return
     }
     let source = logCherryPickCompareBranch
@@ -1014,8 +1014,8 @@ func refreshCherryPickedHighlights() {
         requestedRepositories = []
     }
     guard !requestedRepositories.isEmpty else {
-        logCherryPickedCommitIDs = []
-        logCherryPickComparisonReady = false
+        logCherryPick.cherryPickedCommitIDs = []
+        logCherryPick.comparisonReady = false
         return
     }
 
@@ -1036,15 +1036,15 @@ func refreshCherryPickedHighlights() {
         )
     }
     guard !eligibleRepositories.isEmpty else {
-        logCherryPickedCommitIDs = []
-        logCherryPickComparisonReady = false
+        logCherryPick.cherryPickedCommitIDs = []
+        logCherryPick.comparisonReady = false
         return
     }
-    logCherryPickComparisonReady = false
-    logCherryPickComparisonInProgress = true
-    logCherryPickComparisonTotalRoots = eligibleRepositories.count
+    logCherryPick.comparisonReady = false
+    logCherryPick.inProgress = true
+    logCherryPick.totalRoots = eligibleRepositories.count
     let cancel = GitCancelHandle()
-    logCherryPickComparisonCancelHandle = cancel
+    logCherryPick.cancelHandle = cancel
     let task = Task.detached(priority: .userInitiated) {
         var highlighted: Set<String> = []
         var successfulComparisons = 0
@@ -1083,11 +1083,11 @@ func refreshCherryPickedHighlights() {
             completedComparisons += 1
             let completed = completedComparisons
             await MainActor.run {
-                guard self.logCherryPickComparisonGeneration == requestedComparisonGeneration,
+                guard self.logCherryPick.generation == requestedComparisonGeneration,
                       self.logList.generation == requestedLogGeneration,
                       self.logHighlightCherryPicked,
                       self.logCherryPickCompareBranch == source else { return }
-                self.logCherryPickComparisonCompletedRoots = completed
+                self.logCherryPick.completedRoots = completed
             }
         }
 
@@ -1100,7 +1100,7 @@ func refreshCherryPickedHighlights() {
         await MainActor.run {
             guard isCurrentCherryPickedComparison(
                 highlightingEnabled: self.logHighlightCherryPicked,
-                currentComparisonGeneration: self.logCherryPickComparisonGeneration,
+                currentComparisonGeneration: self.logCherryPick.generation,
                 resultComparisonGeneration: requestedComparisonGeneration,
                 currentLogGeneration: self.logList.generation,
                 resultLogGeneration: requestedLogGeneration,
@@ -1121,15 +1121,15 @@ func refreshCherryPickedHighlights() {
                           currentBranch: self.activeLogBranches.first(where: \.isCurrent)?.name
                       ) == target else { return }
             }
-            self.logCherryPickComparisonTask = nil
-            self.logCherryPickComparisonCancelHandle = nil
-            self.logCherryPickComparisonInProgress = false
+            self.logCherryPick.comparisonTask = nil
+            self.logCherryPick.cancelHandle = nil
+            self.logCherryPick.inProgress = false
             guard !comparisonWasCancelled else { return }
-            self.logCherryPickedCommitIDs = resultIDs
+            self.logCherryPick.cherryPickedCommitIDs = resultIDs
             // A successful comparison with zero picked commits is still a
             // completed comparison. The graph must remain unhighlighted,
             // rather than reviving the old trailer heuristic.
-            self.logCherryPickComparisonReady = resultCount > 0
+            self.logCherryPick.comparisonReady = resultCount > 0
             if resultCount == 0, let resultError {
                 self.feedbackCenter.error(
                     "Cherry-picked comparison failed",
@@ -1145,7 +1145,7 @@ func refreshCherryPickedHighlights() {
             }
         }
     }
-    logCherryPickComparisonTask = task
+    logCherryPick.comparisonTask = task
 }
 
 func loadTreeChanges() {
@@ -1602,7 +1602,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         rootPath: rootPath
                     )
                 }
-                if self.logBranchesShowOnlyMy {
+                if self.logBranchesPanel.showOnlyMy {
                     self.refreshLogMyBranches()
                 }
                 if let activeRootPath = self.logList.activeRootPath {

@@ -34,15 +34,15 @@ func handleContentViewAppear() {
     projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(for: projectPath)
     projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
     projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
-    logBranchesSelectionActionRaw = GitBranchesPopupSettings.stringValue(
+    logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
         GitBranchesPopupSettings.logSelectionActionKey,
         for: projectPath
     )
-    logBranchesGroupByDirectory = GitBranchesPopupSettings.value(
+    logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByDirectoryKey,
         for: projectPath
     )
-    logBranchesGroupByRepository = GitBranchesPopupSettings.value(
+    logBranchesPanel.groupByRepository = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByRepositoryKey,
         for: projectPath
     )
