@@ -402,7 +402,7 @@ func openTreeComparisonTab(
     toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
-    showBranchesPopover = false
+    branchWorkspace.showPopover = false
     saveCurrentLogTab()
     if let existing = logSelectionState.tabs.first(where: {
         $0.viewMode == .compare
@@ -436,7 +436,7 @@ func openBranchComparisonTab(rootPath: String, first: String, second: String) {
     toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
-    showBranchesPopover = false
+    branchWorkspace.showPopover = false
     saveCurrentLogTab()
     if let existing = logSelectionState.tabs.first(where: {
         $0.viewMode == .compareBranches
@@ -466,14 +466,14 @@ func loadMoreBranchComparison(_ side: BranchComparisonSide) {
 func refreshBranchComparison(_ side: BranchComparisonSide) {
     guard logList.viewMode == .compareBranches else { return }
     let selectedWasInSide = branchComparisonEntries(side).contains {
-        $0.id == branchCompareSelectionID
+        $0.id == branchComparison.selectionID
     }
     cancelBranchComparisonTask(side)
     setBranchComparisonEntries([], side: side)
     setBranchComparisonHasMore(false, side: side)
     setBranchComparisonError(nil, side: side)
     if selectedWasInSide {
-        branchCompareSelectionID = nil
+        branchComparison.selectionID = nil
     }
     repairBranchComparisonSelection()
     startBranchComparisonLoad(side, reset: true)
@@ -481,7 +481,7 @@ func refreshBranchComparison(_ side: BranchComparisonSide) {
 
 func loadBranchComparison(reset: Bool = true) {
     guard reset, logList.viewMode == .compareBranches else { return }
-    branchCompareError = nil
+    branchComparison.error = nil
     refreshBranchComparison(.first)
     refreshBranchComparison(.second)
 }
@@ -489,21 +489,21 @@ func loadBranchComparison(reset: Bool = true) {
 func cancelBranchComparisonTasks() {
     cancelBranchComparisonTask(.first)
     cancelBranchComparisonTask(.second)
-    branchCompareError = nil
+    branchComparison.error = nil
 }
 
 func cancelBranchComparisonTask(_ side: BranchComparisonSide) {
     switch side {
     case .first:
-        branchCompareFirstLoadTask?.cancel()
-        branchCompareFirstLoadTask = nil
-        branchCompareFirstRequestGeneration += 1
-        branchCompareFirstLoading = false
+        branchComparison.firstLoadTask?.cancel()
+        branchComparison.firstLoadTask = nil
+        branchComparison.firstRequestGeneration += 1
+        branchComparison.firstLoading = false
     case .second:
-        branchCompareSecondLoadTask?.cancel()
-        branchCompareSecondLoadTask = nil
-        branchCompareSecondRequestGeneration += 1
-        branchCompareSecondLoading = false
+        branchComparison.secondLoadTask?.cancel()
+        branchComparison.secondLoadTask = nil
+        branchComparison.secondRequestGeneration += 1
+        branchComparison.secondLoading = false
     }
     updateBranchComparisonLoadingState()
 }
@@ -516,13 +516,13 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
     let requestGeneration: Int
     switch side {
     case .first:
-        branchCompareFirstRequestGeneration += 1
-        requestGeneration = branchCompareFirstRequestGeneration
-        branchCompareFirstLoading = true
+        branchComparison.firstRequestGeneration += 1
+        requestGeneration = branchComparison.firstRequestGeneration
+        branchComparison.firstLoading = true
     case .second:
-        branchCompareSecondRequestGeneration += 1
-        requestGeneration = branchCompareSecondRequestGeneration
-        branchCompareSecondLoading = true
+        branchComparison.secondRequestGeneration += 1
+        requestGeneration = branchComparison.secondRequestGeneration
+        branchComparison.secondLoading = true
     }
     updateBranchComparisonLoadingState()
 
@@ -572,7 +572,7 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
         : Int(continuationLogPageLimit)
     let range = side == .first ? "\(second)..\(first)" : "\(first)..\(second)"
     let afterID = reset ? nil : branchComparisonEntries(side).last?.id
-    let contextGeneration = branchCompareGeneration
+    let contextGeneration = branchComparison.generation
     let filterSnapshot = filter
 
     let task = Task.detached(priority: .userInitiated) {
@@ -603,7 +603,7 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
             )
             await MainActor.run {
                 guard !Task.isCancelled,
-                      self.branchCompareGeneration == contextGeneration,
+                      self.branchComparison.generation == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
                       self.logList.viewMode == .compareBranches,
                       self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
@@ -631,7 +631,7 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
         } catch {
             await MainActor.run {
                 guard !Task.isCancelled,
-                      self.branchCompareGeneration == contextGeneration,
+                      self.branchComparison.generation == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
                       self.logList.viewMode == .compareBranches,
                       self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
@@ -650,9 +650,9 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
     }
     switch side {
     case .first:
-        branchCompareFirstLoadTask = task
+        branchComparison.firstLoadTask = task
     case .second:
-        branchCompareSecondLoadTask = task
+        branchComparison.secondLoadTask = task
     }
 }
 
@@ -672,76 +672,76 @@ func finishBranchComparisonLoad(
     }
     switch side {
     case .first:
-        branchCompareFirstLoading = false
-        branchCompareFirstLoadTask = nil
+        branchComparison.firstLoading = false
+        branchComparison.firstLoadTask = nil
     case .second:
-        branchCompareSecondLoading = false
-        branchCompareSecondLoadTask = nil
+        branchComparison.secondLoading = false
+        branchComparison.secondLoadTask = nil
     }
-    branchCompareError = branchCompareFirstError ?? branchCompareSecondError
+    branchComparison.error = branchComparison.firstError ?? branchComparison.secondError
     updateBranchComparisonLoadingState()
 }
 
 func updateBranchComparisonLoadingState() {
-    isLoadingBranchComparison = branchCompareFirstLoading || branchCompareSecondLoading
+    branchComparison.isLoading = branchComparison.firstLoading || branchComparison.secondLoading
 }
 
 func branchComparisonIsLoading(_ side: BranchComparisonSide) -> Bool {
-    side == .first ? branchCompareFirstLoading : branchCompareSecondLoading
+    side == .first ? branchComparison.firstLoading : branchComparison.secondLoading
 }
 
 func branchComparisonSideHasMore(_ side: BranchComparisonSide) -> Bool {
-    side == .first ? branchCompareFirstHasMore : branchCompareSecondHasMore
+    side == .first ? branchComparison.firstHasMore : branchComparison.secondHasMore
 }
 
 func branchComparisonFilter(_ side: BranchComparisonSide) -> BranchComparisonFilter {
-    side == .first ? branchCompareFirstFilter : branchCompareSecondFilter
+    side == .first ? branchComparison.firstFilter : branchComparison.secondFilter
 }
 
 func branchComparisonEntries(_ side: BranchComparisonSide) -> [CommitInfo] {
-    side == .first ? branchCompareFirstEntries : branchCompareSecondEntries
+    side == .first ? branchComparison.firstEntries : branchComparison.secondEntries
 }
 
 func branchComparisonRequestGeneration(_ side: BranchComparisonSide) -> Int {
-    side == .first ? branchCompareFirstRequestGeneration : branchCompareSecondRequestGeneration
+    side == .first ? branchComparison.firstRequestGeneration : branchComparison.secondRequestGeneration
 }
 
 func setBranchComparisonEntries(_ entries: [CommitInfo], side: BranchComparisonSide) {
     switch side {
     case .first:
-        branchCompareFirstEntries = entries
+        branchComparison.firstEntries = entries
     case .second:
-        branchCompareSecondEntries = entries
+        branchComparison.secondEntries = entries
     }
 }
 
 func setBranchComparisonHasMore(_ hasMore: Bool, side: BranchComparisonSide) {
     switch side {
     case .first:
-        branchCompareFirstHasMore = hasMore
+        branchComparison.firstHasMore = hasMore
     case .second:
-        branchCompareSecondHasMore = hasMore
+        branchComparison.secondHasMore = hasMore
     }
 }
 
 func setBranchComparisonError(_ error: String?, side: BranchComparisonSide) {
     switch side {
     case .first:
-        branchCompareFirstError = error
+        branchComparison.firstError = error
     case .second:
-        branchCompareSecondError = error
+        branchComparison.secondError = error
     }
-    branchCompareError = branchCompareFirstError ?? branchCompareSecondError
+    branchComparison.error = branchComparison.firstError ?? branchComparison.secondError
 }
 
 func repairBranchComparisonSelection() {
     let selection = branchComparisonSelectionAfterRefresh(
-        selectedID: branchCompareSelectionID,
-        firstIDs: branchCompareFirstEntries.map(\.id),
-        secondIDs: branchCompareSecondEntries.map(\.id)
+        selectedID: branchComparison.selectionID,
+        firstIDs: branchComparison.firstEntries.map(\.id),
+        secondIDs: branchComparison.secondEntries.map(\.id)
     )
-    branchCompareSelectionSide = selection.side
-    branchCompareSelectionID = selection.id
+    branchComparison.selectionSide = selection.side
+    branchComparison.selectionID = selection.id
 }
 
 func activateComparisonRepository(_ rootRepo: Repository, rootPath: String) {

@@ -829,8 +829,8 @@ func restoreDeletedBranchesFromSemanticTargets(
     if let notificationID = branchDeleteNotificationID() {
         feedbackCenter.expire(notificationID: notificationID)
     }
-    branchDeleteRecovery = nil
-    multiRootBranchDeleteRecovery = nil
+    branchWorkspace.deleteRecovery = nil
+    branchWorkspace.multiRootDeleteRecovery = nil
     beginFeedbackOperation("Restore deleted branches")
     Task.detached(priority: .userInitiated) {
         var failures: [String] = []
@@ -902,7 +902,7 @@ func restoreDeletedBranches(_ contexts: [BranchDeleteRecoveryContext]) {
     if let notificationID = branchDeleteNotificationID() {
         feedbackCenter.expire(notificationID: notificationID)
     }
-    multiRootBranchDeleteRecovery = nil
+    branchWorkspace.multiRootDeleteRecovery = nil
     beginFeedbackOperation("Restore multi-root branches")
     Task.detached(priority: .userInitiated) {
         var failures: [String] = []
@@ -944,7 +944,7 @@ func restoreDeletedBranches(_ contexts: [BranchDeleteRecoveryContext]) {
                     detail: contexts.first?.preview.branchName ?? ""
                 )
             } else {
-                self.multiRootBranchDeleteRecovery = remainingContexts.isEmpty
+                self.branchWorkspace.multiRootDeleteRecovery = remainingContexts.isEmpty
                     ? nil
                     : MultiRootBranchDeleteRecoveryContext(
                         branchName: contexts.first?.preview.branchName ?? "",
@@ -1320,7 +1320,7 @@ func restoreDeletedBranch(_ context: BranchDeleteRecoveryContext) {
             }
             let restoreUpstreamError = upstreamError
             await MainActor.run {
-                self.branchDeleteRecovery = nil
+                self.branchWorkspace.deleteRecovery = nil
                 if let rootPath = context.rootPath {
                     self.loadMultiRoots()
                     if let restoreUpstreamError {
@@ -1332,7 +1332,7 @@ func restoreDeletedBranch(_ context: BranchDeleteRecoveryContext) {
                         self.feedbackCenter.success("Branch restored", detail: "\(context.preview.branchName) · \(rootPath)")
                     }
                 } else {
-                    self.branches = (try? context.repo.branchList()) ?? self.branches
+                    self.branchWorkspace.branches = (try? context.repo.branchList()) ?? self.branchWorkspace.branches
                     self.loadRepoData()
                     if let restoreUpstreamError {
                         self.feedbackCenter.warning(

@@ -280,17 +280,17 @@ func deleteTrackedRemoteBranch(
         let failuresToReport = failures
         let cancelledToReport = cancelled
         await MainActor.run {
-            if let context = self.branchDeleteRecovery,
+            if let context = self.branchWorkspace.deleteRecovery,
                context.trackedRemoteBranch == normalizedRemoteBranch,
                succeededIDs.contains(context.id) {
-                self.branchDeleteRecovery = BranchDeleteRecoveryContext(
+                self.branchWorkspace.deleteRecovery = BranchDeleteRecoveryContext(
                     repo: context.repo,
                     preview: context.preview,
                     rootPath: context.rootPath,
                     trackedRemoteBranch: nil
                 )
             }
-            if let context = self.multiRootBranchDeleteRecovery {
+            if let context = self.branchWorkspace.multiRootDeleteRecovery {
                 let updatedContexts = context.contexts.map { item in
                     guard item.trackedRemoteBranch == normalizedRemoteBranch,
                           succeededIDs.contains(item.id) else { return item }
@@ -301,7 +301,7 @@ func deleteTrackedRemoteBranch(
                         trackedRemoteBranch: nil
                     )
                 }
-                self.multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+                self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
                     branchName: context.branchName,
                     contexts: updatedContexts
                 )
@@ -344,16 +344,16 @@ func chooseUpstreamFeedbackAction(for error: Error) -> FeedbackAction? {
     }
     guard !branch.isEmpty else { return nil }
     return FeedbackAction(title: "Choose Upstream Branch") {
-        self.upstreamLocalBranch = branch
+        self.branchWorkspace.upstreamLocalBranch = branch
         self.loadRepoData(includeComparisons: false)
-        self.showUpstreamDialog = true
+        self.branchWorkspace.showUpstreamDialog = true
     }
 }
 
 func resetCurrentBranchToRemote() {
     guard let repository = repo else { return }
     guard multiRoots.count == 1,
-          branches.contains(where: { $0.isCurrent }),
+          branchWorkspace.branches.contains(where: { $0.isCurrent }),
           currentSyncStatus?.trackingExists == true,
           !(currentSyncStatus?.upstream.isEmpty ?? true) else {
         feedbackCenter.warning(
@@ -363,7 +363,7 @@ func resetCurrentBranchToRemote() {
         )
         return
     }
-    guard let currentBranch = branches.first(where: { $0.isCurrent })?.name,
+    guard let currentBranch = branchWorkspace.branches.first(where: { $0.isCurrent })?.name,
           let sync = currentSyncStatus,
           let separator = sync.upstream.firstIndex(of: "/") else {
         feedbackCenter.warning(
@@ -719,17 +719,17 @@ func presentMultiRootRemoteDeleteDialog(branch: String) {
         )
         return
     }
-    multiRootRemoteDeleteBranchName = branch
-    multiRootRemoteDeleteSelectedRootPaths = Set(eligible.map(\.rootPath))
-    multiRootRemoteDeleteTracking = false
-    showMultiRootRemoteDeleteDialog = true
+    branchWorkspace.multiRootRemoteDeleteName = branch
+    branchWorkspace.multiRootRemoteDeleteSelectedRootPaths = Set(eligible.map(\.rootPath))
+    branchWorkspace.multiRootRemoteDeleteTracking = false
+    branchWorkspace.showMultiRootRemoteDeleteDialog = true
 }
 
 func dismissMultiRootRemoteDeleteDialog() {
-    showMultiRootRemoteDeleteDialog = false
-    multiRootRemoteDeleteBranchName = ""
-    multiRootRemoteDeleteSelectedRootPaths = []
-    multiRootRemoteDeleteTracking = false
+    branchWorkspace.showMultiRootRemoteDeleteDialog = false
+    branchWorkspace.multiRootRemoteDeleteName = ""
+    branchWorkspace.multiRootRemoteDeleteSelectedRootPaths = []
+    branchWorkspace.multiRootRemoteDeleteTracking = false
 }
 
 /// Delete one remote branch across selected roots. IntelliJ first asks once
@@ -879,11 +879,11 @@ func deleteMultiRootRemoteBranch(
         ).sorted()
         await MainActor.run {
             self.multiRootRunning = false
-            self.showMultiRootRemoteDeleteDialog = false
+            self.branchWorkspace.showMultiRootRemoteDeleteDialog = false
             self.multiRootResults = resultsToApply
             self.loadMultiRoots()
             if !recoveryContextsToOffer.isEmpty {
-                self.multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+                self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
                     branchName: restoredBranchNames.joined(separator: ", "),
                     contexts: recoveryContextsToOffer
                 )
@@ -1016,7 +1016,7 @@ func presentUpstreamDialogInRoot(rootPath: String, displayName: String, branch: 
                 $0.branch == normalizedBranch && $0.trackingExists
             }?.upstream
             await MainActor.run {
-                self.multiRootUpstreamContext = MultiRootUpstreamContext(
+                self.branchWorkspace.multiRootUpstreamContext = MultiRootUpstreamContext(
                     rootPath: normalizedRoot,
                     displayName: displayName,
                     localBranch: normalizedBranch,
@@ -1293,7 +1293,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
             self.multiRootResults = completedResults
             self.loadMultiRoots()
             if !completedRecoveryContexts.isEmpty {
-                self.multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+                self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
                     branchName: groups.map(\.remoteBranch).joined(separator: ", "),
                     contexts: completedRecoveryContexts
                 )
@@ -1463,8 +1463,8 @@ func deleteRemoteBranch(_ branch: RemoteBranchInfo) {
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")
-    let currentLocalBranches = Set(branches.filter(\.isCurrent).map(\.name))
-    let trackingLocalBranches = syncStatuses
+    let currentLocalBranches = Set(branchWorkspace.branches.filter(\.isCurrent).map(\.name))
+    let trackingLocalBranches = branchWorkspace.syncStatuses
         .filter {
             $0.upstream == branch.name
                 && $0.trackingExists

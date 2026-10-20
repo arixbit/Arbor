@@ -13,7 +13,7 @@ var cherryPickTargetBranchLabel: String {
         sourceBranch: logCherryPickCompareBranch,
         firstBranch: compareRev1,
         secondBranch: compareRev2,
-        currentBranch: branches.first(where: \.isCurrent)?.name
+        currentBranch: branchWorkspace.branches.first(where: \.isCurrent)?.name
     )
 }
 
@@ -29,7 +29,7 @@ var logBranchesPanelView: some View {
             selectionActionRaw: $logBranchesPanel.selectionActionRaw,
             showOnlyMy: $logBranchesPanel.showOnlyMy,
             myBranchIDs: logBranchesPanel.myBranchIDs,
-            isLoadingMyBranches: isLoadingMyBranches,
+            isLoadingMyBranches: logBranchesPanel.isLoadingMy,
             onShowOnlyMyChanged: setLogBranchesShowOnlyMy,
             onNavigate: navigateLogToBranch,
             onCompare: compareLogBranch,
@@ -154,18 +154,18 @@ var logBranchesPanelView: some View {
     } else {
         LogBranchesPanel(
             projectPath: projectPath,
-            branches: branches,
-            remoteBranches: remoteBranches,
+            branches: branchWorkspace.branches,
+            remoteBranches: branchWorkspace.remoteBranches,
             remotes: remotes,
             tags: tagWorkspace.tags,
             hasHeadCommit: headId != nil,
-            syncStatuses: syncStatuses,
+            syncStatuses: branchWorkspace.syncStatuses,
             protectedBranchPatterns: effectiveProtectedBranchPatterns,
             groupByDirectory: $logBranchesPanel.groupByDirectory,
             selectionActionRaw: $logBranchesPanel.selectionActionRaw,
             showOnlyMy: $logBranchesPanel.showOnlyMy,
             myBranchIDs: logBranchesPanel.myBranchIDs,
-            isLoadingMyBranches: isLoadingMyBranches,
+            isLoadingMyBranches: logBranchesPanel.isLoadingMy,
             onShowOnlyMyChanged: setLogBranchesShowOnlyMy,
             onNavigate: { branch in
                 navigateLogToBranch(rootPath: nil, branch: branch)
@@ -183,7 +183,7 @@ var logBranchesPanelView: some View {
             onDelete: branchDelete,
             onCheckout: { reference, isRemote in
                 if isRemote {
-                    guard let branch = remoteBranches.first(where: { $0.name == reference }) else { return }
+                    guard let branch = branchWorkspace.remoteBranches.first(where: { $0.name == reference }) else { return }
                     checkoutRemoteBranch(branch)
                 } else {
                     switchBranch(reference)
@@ -254,13 +254,13 @@ var logBranchesPanelView: some View {
                 beginPushDialog(branch: branch)
             },
             onFetch: { reference in
-                guard let branch = remoteBranches.first(where: { $0.name == reference }) else { return }
+                guard let branch = branchWorkspace.remoteBranches.first(where: { $0.name == reference }) else { return }
                 fetchRemoteBranch(branch)
             },
             onFetchAll: { doFetchAll() },
             onSetUpstream: { branch in
-                upstreamLocalBranch = branch
-                showUpstreamDialog = true
+                branchWorkspace.upstreamLocalBranch = branch
+                branchWorkspace.showUpstreamDialog = true
             },
             onUnsetUpstream: unsetBranchUpstream,
             onRename: renameBranchFromPopup,

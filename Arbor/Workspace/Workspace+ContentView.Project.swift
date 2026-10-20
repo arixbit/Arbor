@@ -399,9 +399,9 @@ func refreshAll(
                     self.isShallowRepository = isShallow
                     self.stagingModel = staging
                     self.lastIndexRevision = staging?.indexRevision
-                    self.remoteBranches = remoteBranches
-                    self.recentBranches = recentBranches
-                    self.syncStatuses = syncStatuses
+                    self.branchWorkspace.remoteBranches = remoteBranches
+                    self.branchWorkspace.recentBranches = recentBranches
+                    self.branchWorkspace.syncStatuses = syncStatuses
                 }
             }
         } catch {
@@ -660,7 +660,7 @@ func openProjectPath(_ projectPath: String) {
                 // wait for repository-wide reachability scans before exposing
                 // the graph: large repositories such as IntelliJ can contain
                 // millions of packed objects.
-                self.branches = bs
+                self.branchWorkspace.branches = bs
                 self.refreshLogMyBranches()
                 self.selection = nil; self.fileSelection = nil
                 self.logSelectionState.selection = nil
@@ -795,8 +795,8 @@ func openProjectPath(_ projectPath: String) {
                                 self.stashUI.stashes = ss; self.remotes = rs
                                 self.isShallowRepository = isShallow
                                 self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
-                                self.remoteBranches = remoteBranches
-                                self.recentBranches = recentBranches; self.syncStatuses = syncStatuses
+                                self.branchWorkspace.remoteBranches = remoteBranches
+                                self.branchWorkspace.recentBranches = recentBranches; self.branchWorkspace.syncStatuses = syncStatuses
                                 self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
                         self.submodules = submodules
                         self.worktrees = worktrees
@@ -881,7 +881,7 @@ func resetProjectState() {
     logBranchesPanel.showMyTask = nil
     logBranchesPanel.showOnlyMy = false
     logBranchesPanel.myBranchIDs = []
-    isLoadingMyBranches = false
+    logBranchesPanel.isLoadingMy = false
     feedbackCenter.clearHistory()
     projectRepo = nil
     projectIncomingCheckStrategyRaw = nil
@@ -902,22 +902,22 @@ func resetProjectState() {
     logSelectionState.tabs = [LogTabDescriptor()]
     logSelectionState.activeTabID = nil
     logSelectionState.detailCommit = nil
-    branchCompareFirstEntries = []
-    branchCompareSecondEntries = []
-    branchCompareSelectionID = nil
+    branchComparison.firstEntries = []
+    branchComparison.secondEntries = []
+    branchComparison.selectionID = nil
     cancelBranchComparisonTasks()
-    branchCompareFirstHasMore = false
-    branchCompareSecondHasMore = false
-    branchCompareFirstError = nil
-    branchCompareSecondError = nil
-    branchCompareError = nil
-    isLoadingBranchComparison = false
+    branchComparison.firstHasMore = false
+    branchComparison.secondHasMore = false
+    branchComparison.firstError = nil
+    branchComparison.secondError = nil
+    branchComparison.error = nil
+    branchComparison.isLoading = false
     reflog.detailCommit = nil
     reflog.detailCommits = []
     logList.isLoading = false
     logList.isShowingCachedSnapshot = false
-    branches = []
-    branchComparisons = [:]
+    branchWorkspace.branches = []
+    branchWorkspace.comparisons = [:]
     stashUI.stashes = []
     shelfWorkspace.shelves = []
     shelfWorkspace.deletedShelves = []
@@ -925,8 +925,8 @@ func resetProjectState() {
     isShallowRepository = false
     remoteProtectedBranchPatterns = []
     remoteProtectedBranchPatternsByRoot = [:]
-    remoteBranches = []
-    syncStatuses = []
+    branchWorkspace.remoteBranches = []
+    branchWorkspace.syncStatuses = []
     tagWorkspace.tags = []
     worktrees = []
     worktreeFeedback = nil
@@ -1886,16 +1886,16 @@ func loadMultiRootChanges() {
 func validateMultiRootRenameName(_ value: String) -> String? {
     let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !candidate.isEmpty else { return nil }
-    guard candidate != multiRootRenameOldName else {
+    guard candidate != branchWorkspace.multiRootRenameOldName else {
         return String(localized: "The new name must be different.")
     }
     let selected = multiRootBranchSnapshots.filter { snapshot in
-        multiRootRenameSelectedRootPaths.contains(snapshot.rootPath)
-            && snapshot.branches.contains(where: { $0.name == multiRootRenameOldName })
+        branchWorkspace.multiRootRenameSelectedRootPaths.contains(snapshot.rootPath)
+            && snapshot.branches.contains(where: { $0.name == branchWorkspace.multiRootRenameOldName })
     }
     for snapshot in selected {
         if let conflict = branchRenameConflictMessage(
-            oldName: multiRootRenameOldName,
+            oldName: branchWorkspace.multiRootRenameOldName,
             newName: candidate,
             localBranchNames: snapshot.branches.map(\.name),
             remoteBranchNames: snapshot.remoteBranches.map(\.name)
@@ -2158,7 +2158,7 @@ func updateRootRecoveryActions(
         actions.append(
             FeedbackAction(title: "Open Branches") {
                 self.loadMultiRoots()
-                self.showBranchesPopover = true
+                self.branchWorkspace.showPopover = true
             }
         )
     }
@@ -3019,14 +3019,14 @@ func loadRepoData(includeComparisons: Bool = true) {
             let identity = (try? repo.gitIdentity()) ?? GitIdentity(name: nil, email: nil, signingKey: nil, signingFormat: nil, signCommits: false)
             await MainActor.run {
                 guard self.projectRepo === repo else { return }
-                self.branches = bs; self.ignoredRules = ignoredRules
+                self.branchWorkspace.branches = bs; self.ignoredRules = ignoredRules
                 self.refreshLogMyBranches()
-                if let comparisons { self.branchComparisons = comparisons }
+                if let comparisons { self.branchWorkspace.comparisons = comparisons }
                 self.stashUI.stashes = ss; self.remotes = rs
                 self.isShallowRepository = isShallow
                 self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
-                self.remoteBranches = remoteBranches
-                self.recentBranches = recentBranches; self.syncStatuses = syncStatuses
+                self.branchWorkspace.remoteBranches = remoteBranches
+                self.branchWorkspace.recentBranches = recentBranches; self.branchWorkspace.syncStatuses = syncStatuses
                 self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
                 self.refreshLfsPathMarkers()
                 self.submodules = submodules

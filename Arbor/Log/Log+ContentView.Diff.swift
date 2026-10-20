@@ -13,13 +13,13 @@ var branchComparisonPagination: BranchComparisonPagination {
         onRefresh: refreshBranchComparison,
         onLoadMore: loadMoreBranchComparison,
         hasMore: { side in
-            side == .first ? branchCompareFirstHasMore : branchCompareSecondHasMore
+            side == .first ? branchComparison.firstHasMore : branchComparison.secondHasMore
         },
         isLoading: { side in
-            side == .first ? branchCompareFirstLoading : branchCompareSecondLoading
+            side == .first ? branchComparison.firstLoading : branchComparison.secondLoading
         },
         error: { side in
-            side == .first ? branchCompareFirstError : branchCompareSecondError
+            side == .first ? branchComparison.firstError : branchComparison.secondError
         }
     )
 }
@@ -472,7 +472,7 @@ var cherryPickCompareBranchChoices: [String] {
             snapshot.branches.map(\.name) + snapshot.remoteBranches.map(\.name)
         }
     } else {
-        names = branches.map(\.name) + remoteBranches.map(\.name)
+        names = branchWorkspace.branches.map(\.name) + branchWorkspace.remoteBranches.map(\.name)
     }
     if !logCherryPickCompareBranch.isEmpty && !names.contains(logCherryPickCompareBranch) {
         names.append(logCherryPickCompareBranch)

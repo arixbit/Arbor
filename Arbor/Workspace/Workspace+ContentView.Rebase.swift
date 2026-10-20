@@ -1272,8 +1272,8 @@ func branchCreateAndRebase(
     reset: Bool = false,
     repository repositoryOverride: Repository? = nil
 ) {
-    guard let targetRepo = repositoryOverride ?? newBranchRepositoryOverride ?? repo else { return }
-    let name = GitBranchNameCleanup.cleanUp(newBranchName)
+    guard let targetRepo = repositoryOverride ?? branchWorkspace.newRepositoryOverride ?? repo else { return }
+    let name = GitBranchNameCleanup.cleanUp(branchWorkspace.newName)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else { return }
     let base = baseRevision?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1322,13 +1322,13 @@ func branchCreateAndRebase(
             let bs = try targetRepo.branchList()
             await MainActor.run {
                 if self.repo?.workdir() == targetRepo.workdir() {
-                    self.branches = bs
+                    self.branchWorkspace.branches = bs
                     self.loadRepoData()
                 } else {
                     self.loadMultiRoots()
                 }
-                self.newBranchName = ""
-                self.newBranchBase = ""
+                self.branchWorkspace.newName = ""
+                self.branchWorkspace.newBase = ""
                 if self.toolWindowMode == .log { self.loadLog() }
                 self.checkoutAndRebaseOntoCurrent(repo: targetRepo, name: name)
             }

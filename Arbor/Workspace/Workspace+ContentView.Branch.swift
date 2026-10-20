@@ -61,31 +61,31 @@ func presentNewBranchDialog(
     afterCreateRebase: Bool = false,
     repositoryOverride: Repository? = nil
 ) {
-    newBranchName = suggestedName ?? ""
-    newBranchBase = baseRevision ?? ""
-    newBranchDialogTitle = title ?? String(localized: "New Branch")
-    newBranchCheckout = true
-    newBranchResetExisting = false
-    newBranchAfterCreateRebase = afterCreateRebase
-    newBranchRepositoryOverride = repositoryOverride
+    branchWorkspace.newName = suggestedName ?? ""
+    branchWorkspace.newBase = baseRevision ?? ""
+    branchWorkspace.newDialogTitle = title ?? String(localized: "New Branch")
+    branchWorkspace.newCheckout = true
+    branchWorkspace.newResetExisting = false
+    branchWorkspace.newAfterCreateRebase = afterCreateRebase
+    branchWorkspace.newRepositoryOverride = repositoryOverride
     if let targetRepo = repositoryOverride ?? repo {
-        newBranchDialogBranches = (try? targetRepo.branchList()) ?? branches
+        branchWorkspace.newDialogBranches = (try? targetRepo.branchList()) ?? branchWorkspace.branches
     } else {
-        newBranchDialogBranches = branches
+        branchWorkspace.newDialogBranches = branchWorkspace.branches
     }
-    showNewBranchDialog = true
+    branchWorkspace.showNewDialog = true
 }
 
 func dismissNewBranchDialog() {
-    showNewBranchDialog = false
-    newBranchDialogTitle = String(localized: "New Branch")
-    newBranchName = ""
-    newBranchBase = ""
-    newBranchCheckout = true
-    newBranchResetExisting = false
-    newBranchAfterCreateRebase = false
-    newBranchRepositoryOverride = nil
-    newBranchDialogBranches = []
+    branchWorkspace.showNewDialog = false
+    branchWorkspace.newDialogTitle = String(localized: "New Branch")
+    branchWorkspace.newName = ""
+    branchWorkspace.newBase = ""
+    branchWorkspace.newCheckout = true
+    branchWorkspace.newResetExisting = false
+    branchWorkspace.newAfterCreateRebase = false
+    branchWorkspace.newRepositoryOverride = nil
+    branchWorkspace.newDialogBranches = []
 }
 
 /// Shared Branch Dashboard semantics for a single Git root. IntelliJ's
@@ -160,7 +160,7 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
 
     guard enabled else {
         logBranchesPanel.myBranchIDs = []
-        isLoadingMyBranches = false
+        logBranchesPanel.isLoadingMy = false
         return
     }
 
@@ -175,12 +175,12 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
     rootPaths = Array(Set(rootPaths)).sorted()
     guard !rootPaths.isEmpty else {
         logBranchesPanel.myBranchIDs = []
-        isLoadingMyBranches = false
+        logBranchesPanel.isLoadingMy = false
         return
     }
 
     let projectToken = projectPath
-    isLoadingMyBranches = true
+    logBranchesPanel.isLoadingMy = true
     logBranchesPanel.showMyTask = Task.detached(priority: .utility) { [rootPaths] in
         var branchIDs = Set<String>()
         for rootPath in rootPaths {
@@ -208,7 +208,7 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
             guard self.projectPath == projectToken,
                   self.logBranchesPanel.showOnlyMy else { return }
             self.logBranchesPanel.myBranchIDs = resolvedBranchIDs
-            self.isLoadingMyBranches = false
+            self.logBranchesPanel.isLoadingMy = false
             self.logBranchesPanel.showMyTask = nil
         }
     }
@@ -225,17 +225,17 @@ func presentMultiRootNewBranchDialog() {
         feedbackCenter.warning("New branch unavailable", detail: "No Git roots were discovered.")
         return
     }
-    multiRootNewBranchName = ""
-    multiRootNewBranchBase = ""
-    multiRootNewBranchCheckout = true
-    multiRootNewBranchResetExisting = false
-    multiRootExistingBranchNames = Dictionary(
+    branchWorkspace.multiRootNewName = ""
+    branchWorkspace.multiRootNewBase = ""
+    branchWorkspace.multiRootNewCheckout = true
+    branchWorkspace.multiRootNewResetExisting = false
+    branchWorkspace.multiRootExistingNames = Dictionary(
         uniqueKeysWithValues: multiRootBranchSnapshots.map { snapshot in
             (snapshot.rootPath, Set(snapshot.branches.map(\.name)))
         }
     )
-    multiRootSelectedRootPaths = Set(multiRootBranchSnapshots.map(\.rootPath))
-    showMultiRootNewBranchDialog = true
+    branchWorkspace.multiRootNewSelectedRootPaths = Set(multiRootBranchSnapshots.map(\.rootPath))
+    branchWorkspace.showMultiRootNewDialog = true
 }
 
 /// IntelliJ's Checkout as New Branch action keeps the selected reference as
@@ -276,27 +276,27 @@ func presentMultiRootNewBranchFromReference(
         suggestedName = trimmedReference
     }
 
-    multiRootNewBranchName = suggestedName + "-copy"
-    multiRootNewBranchBase = trimmedReference
-    multiRootNewBranchCheckout = true
-    multiRootNewBranchResetExisting = false
-    multiRootExistingBranchNames = Dictionary(
+    branchWorkspace.multiRootNewName = suggestedName + "-copy"
+    branchWorkspace.multiRootNewBase = trimmedReference
+    branchWorkspace.multiRootNewCheckout = true
+    branchWorkspace.multiRootNewResetExisting = false
+    branchWorkspace.multiRootExistingNames = Dictionary(
         uniqueKeysWithValues: multiRootBranchSnapshots.map { snapshot in
             (snapshot.rootPath, Set(snapshot.branches.map(\.name)))
         }
     )
-    multiRootSelectedRootPaths = [rootPath]
-    showMultiRootNewBranchDialog = true
+    branchWorkspace.multiRootNewSelectedRootPaths = [rootPath]
+    branchWorkspace.showMultiRootNewDialog = true
 }
 
 func dismissMultiRootNewBranchDialog() {
-    showMultiRootNewBranchDialog = false
-    multiRootNewBranchName = ""
-    multiRootNewBranchBase = ""
-    multiRootNewBranchCheckout = true
-    multiRootNewBranchResetExisting = false
-    multiRootExistingBranchNames = [:]
-    multiRootSelectedRootPaths = []
+    branchWorkspace.showMultiRootNewDialog = false
+    branchWorkspace.multiRootNewName = ""
+    branchWorkspace.multiRootNewBase = ""
+    branchWorkspace.multiRootNewCheckout = true
+    branchWorkspace.multiRootNewResetExisting = false
+    branchWorkspace.multiRootExistingNames = [:]
+    branchWorkspace.multiRootNewSelectedRootPaths = []
 }
 
 func presentMultiRootRenameBranchDialog(name: String) {
@@ -307,19 +307,19 @@ func presentMultiRootRenameBranchDialog(name: String) {
         feedbackCenter.warning("Rename branch unavailable", detail: "No Git root contains " + name + ".")
         return
     }
-    multiRootRenameOldName = name
-    multiRootRenameNewName = name
-    multiRootRenameUnsetUpstream = false
-    multiRootRenameSelectedRootPaths = Set(eligible.map(\.rootPath))
-    showMultiRootRenameBranchDialog = true
+    branchWorkspace.multiRootRenameOldName = name
+    branchWorkspace.multiRootRenameNewName = name
+    branchWorkspace.multiRootRenameUnsetUpstream = false
+    branchWorkspace.multiRootRenameSelectedRootPaths = Set(eligible.map(\.rootPath))
+    branchWorkspace.showMultiRootRenameDialog = true
 }
 
 func dismissMultiRootRenameBranchDialog() {
-    showMultiRootRenameBranchDialog = false
-    multiRootRenameOldName = ""
-    multiRootRenameNewName = ""
-    multiRootRenameUnsetUpstream = false
-    multiRootRenameSelectedRootPaths = []
+    branchWorkspace.showMultiRootRenameDialog = false
+    branchWorkspace.multiRootRenameOldName = ""
+    branchWorkspace.multiRootRenameNewName = ""
+    branchWorkspace.multiRootRenameUnsetUpstream = false
+    branchWorkspace.multiRootRenameSelectedRootPaths = []
 }
 
 /// Rename the same local branch in selected Git roots. A failure in one root
@@ -427,7 +427,7 @@ func renameMultiRootBranch(
         let failuresToReport = failures
         await MainActor.run {
             self.multiRootRunning = false
-            self.showMultiRootRenameBranchDialog = false
+            self.branchWorkspace.showMultiRootRenameDialog = false
             self.multiRootResults = resultsToApply
             self.loadMultiRoots()
             if failuresToReport.isEmpty {
@@ -647,15 +647,15 @@ func presentMultiRootDeleteBranchDialog(name: String) {
         )
         return
     }
-    multiRootDeleteBranchName = name
-    multiRootDeleteSelectedRootPaths = Set(eligible.map(\.rootPath))
-    showMultiRootDeleteBranchDialog = true
+    branchWorkspace.multiRootDeleteName = name
+    branchWorkspace.multiRootDeleteSelectedRootPaths = Set(eligible.map(\.rootPath))
+    branchWorkspace.showMultiRootDeleteDialog = true
 }
 
 func dismissMultiRootDeleteBranchDialog() {
-    showMultiRootDeleteBranchDialog = false
-    multiRootDeleteBranchName = ""
-    multiRootDeleteSelectedRootPaths = []
+    branchWorkspace.showMultiRootDeleteDialog = false
+    branchWorkspace.multiRootDeleteName = ""
+    branchWorkspace.multiRootDeleteSelectedRootPaths = []
 }
 
 /// Delete a shared local branch using IntelliJ's multi-repository semantics:
@@ -758,11 +758,11 @@ func deleteMultiRootBranch(
         let forceDeletedRootsToReport = forceDeletedRoots
         await MainActor.run {
             self.multiRootRunning = false
-            self.showMultiRootDeleteBranchDialog = false
+            self.branchWorkspace.showMultiRootDeleteDialog = false
             self.multiRootResults = resultsToApply
             self.loadMultiRoots()
             if failuresToReport.isEmpty {
-                self.multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+                self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
                     branchName: branchName,
                     contexts: contextsToOffer
                 )
@@ -815,7 +815,7 @@ func presentMultiRootBranchDeleteRollback(
     alert.addButton(withTitle: "Rollback Successful Roots")
     alert.addButton(withTitle: "Keep Partial Deletions")
     guard alert.runModal() == .alertFirstButtonReturn else {
-        multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+        branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
             branchName: branchName,
             contexts: contexts
         )
@@ -1228,8 +1228,8 @@ func branchCreate(
     reset: Bool = false,
     repository repositoryOverride: Repository? = nil
 ) {
-    guard let targetRepo = repositoryOverride ?? newBranchRepositoryOverride ?? repo else { return }
-    let name = GitBranchNameCleanup.cleanUp(newBranchName)
+    guard let targetRepo = repositoryOverride ?? branchWorkspace.newRepositoryOverride ?? repo else { return }
+    let name = GitBranchNameCleanup.cleanUp(branchWorkspace.newName)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else { return }
     let base = baseRevision?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1252,13 +1252,13 @@ func branchCreate(
             let bs = try targetRepo.branchList()
             await MainActor.run {
                 if self.repo?.workdir() == targetRootPath {
-                    self.branches = bs
+                    self.branchWorkspace.branches = bs
                     self.loadRepoData()
                 } else {
                     self.loadMultiRoots()
                 }
-                self.newBranchName = ""
-                self.newBranchBase = ""
+                self.branchWorkspace.newName = ""
+                self.branchWorkspace.newBase = ""
                 self.feedbackCenter.success(
                     "Branch created",
                     detail: checkout
@@ -1282,7 +1282,7 @@ func branchDelete(_ name: String) {
             try repo.branchDelete(name: name, force: false)
             let bs = try repo.branchList()
             await MainActor.run {
-                self.branches = bs
+                self.branchWorkspace.branches = bs
                 if let preview {
                     let context = BranchDeleteRecoveryContext(
                         repo: repo,
@@ -1295,7 +1295,7 @@ func branchDelete(_ name: String) {
                             protectedPatterns: protectedPatterns
                         )
                     )
-                    self.branchDeleteRecovery = context
+                    self.branchWorkspace.deleteRecovery = context
                     self.feedbackCenter.success(
                         "Branch deleted",
                         detail: name,
@@ -1409,7 +1409,7 @@ func forceDeleteBranch(
                         notificationGroup: .standard
                     )
                 } else {
-                    self.branches = bs
+                    self.branchWorkspace.branches = bs
                     self.feedbackCenter.success(
                         "Branch deleted",
                         detail: "\(preview.branchName) (force)",
@@ -1422,7 +1422,7 @@ func forceDeleteBranch(
                     self.loadRepoData()
                     if self.toolWindowMode == .log { self.loadLog() }
                 }
-                self.branchDeleteRecovery = context
+                self.branchWorkspace.deleteRecovery = context
             }
         } catch {
             await MainActor.run {
@@ -1434,8 +1434,8 @@ func forceDeleteBranch(
 }
 
 func nextBranchCleanupGeneration() -> Int {
-    branchCleanupGeneration += 1
-    return branchCleanupGeneration
+    branchCleanup.windowGeneration += 1
+    return branchCleanup.windowGeneration
 }
 
 nonisolated func loadBranchCleanupRoots(scanRoot: String) throws -> [BranchCleanupRoot] {
@@ -1472,7 +1472,7 @@ func beginBranchCleanup() {
         do {
             let roots = try loadBranchCleanupRoots(scanRoot: scanRoot)
             await MainActor.run {
-                guard self.branchCleanupGeneration == generation else { return }
+                guard self.branchCleanup.windowGeneration == generation else { return }
                 self.branchCleanupWindow.present(roots: roots)
                 self.feedbackCenter.success("Branch cleanup loaded", detail: "\(roots.count) repositories")
             }
@@ -1497,7 +1497,7 @@ func refreshBranchCleanup() {
         do {
             let roots = try loadBranchCleanupRoots(scanRoot: scanRoot)
             await MainActor.run {
-                guard self.branchCleanupGeneration == generation else { return }
+                guard self.branchCleanup.windowGeneration == generation else { return }
                 self.branchCleanupWindow.updateRoots(roots)
                 self.feedbackCenter.success("Branch cleanup refreshed", detail: "\(roots.count) repositories")
             }
@@ -1516,7 +1516,7 @@ func reloadBranchCleanupContext(for generation: Int) {
         do {
             let roots = try loadBranchCleanupRoots(scanRoot: scanRoot)
             await MainActor.run {
-                guard self.branchCleanupGeneration == generation else { return }
+                guard self.branchCleanup.windowGeneration == generation else { return }
                 self.branchCleanupWindow.updateRoots(roots)
             }
         } catch {
@@ -1541,7 +1541,7 @@ func calculateBranchCleanup(target: String, prefix: String) {
             result.error.map { "\(result.root.displayName): \($0)" }
         }
         await MainActor.run {
-            guard self.branchCleanupGeneration == generation else { return }
+            guard self.branchCleanup.windowGeneration == generation else { return }
             self.branchCleanupWindow.updateRoots(rootsToApply)
             if failuresToReport.isEmpty {
                 self.feedbackCenter.success("Branch merge status calculated", detail: target)
@@ -1575,7 +1575,7 @@ func deleteBranchCleanup(_ selections: [BranchCleanupSelection]) {
         let deletedToReport = deleted
         let failuresToReport = failures
         await MainActor.run {
-            guard self.branchCleanupGeneration == generation else { return }
+            guard self.branchCleanup.windowGeneration == generation else { return }
             self.loadRepoData()
             if failuresToReport.isEmpty {
                 self.feedbackCenter.success("Selected branches deleted", detail: deletedToReport.joined(separator: ", "))
@@ -1592,8 +1592,8 @@ func deleteBranchCleanup(_ selections: [BranchCleanupSelection]) {
 }
 
 func branchRename() {
-    guard let repo, !renameOld.isEmpty, !renameNew.isEmpty else { return }
-    let old = renameOld, new = renameNew
+    guard let repo, !branchWorkspace.renameOld.isEmpty, !branchWorkspace.renameNew.isEmpty else { return }
+    let old = branchWorkspace.renameOld, new = branchWorkspace.renameNew
     beginFeedbackOperation("Rename branch")
     Task.detached(priority: .userInitiated) {
         do {
@@ -1615,7 +1615,7 @@ func branchRename() {
             try repo.branchRename(old: old, new: new)
             let bs = try repo.branchList()
             await MainActor.run {
-                self.branches = bs; self.renameOld = ""; self.renameNew = ""
+                self.branchWorkspace.branches = bs; self.branchWorkspace.renameOld = ""; self.branchWorkspace.renameNew = ""
                 self.feedbackCenter.success("Branch renamed", detail: "\(old) → \(new)")
                 self.loadRepoData()
                 if self.toolWindowMode == .log { self.loadLog() }
@@ -2085,23 +2085,23 @@ func presentSingleRootRenameBranchDialog(rootPath: String, oldName: String) {
         )
         return
     }
-    singleRootRenameRootPath = rootPath
-    singleRootRenameOldName = oldName
-    singleRootRenameNewName = oldName
-    singleRootRenameUnsetUpstream = false
-    singleRootRenameHasUpstream = ((try? rootRepo.syncStatus()) ?? []).contains {
+    branchWorkspace.renameRootPath = rootPath
+    branchWorkspace.renameOldName = oldName
+    branchWorkspace.renameNewName = oldName
+    branchWorkspace.renameUnsetUpstream = false
+    branchWorkspace.renameHasUpstream = ((try? rootRepo.syncStatus()) ?? []).contains {
         $0.branch == oldName && $0.trackingExists
     }
-    showSingleRootRenameBranchDialog = true
+    branchWorkspace.showRenameDialog = true
 }
 
 func dismissSingleRootRenameBranchDialog() {
-    showSingleRootRenameBranchDialog = false
-    singleRootRenameRootPath = ""
-    singleRootRenameOldName = ""
-    singleRootRenameNewName = ""
-    singleRootRenameUnsetUpstream = false
-    singleRootRenameHasUpstream = false
+    branchWorkspace.showRenameDialog = false
+    branchWorkspace.renameRootPath = ""
+    branchWorkspace.renameOldName = ""
+    branchWorkspace.renameNewName = ""
+    branchWorkspace.renameUnsetUpstream = false
+    branchWorkspace.renameHasUpstream = false
 }
 
 func renameBranchInRoot(rootPath: String, oldName: String) {
@@ -2209,7 +2209,7 @@ func deleteBranchInRoot(rootPath: String, name: String, confirm: Bool = true) {
                             protectedPatterns: protectedPatterns
                         )
                     )
-                    self.branchDeleteRecovery = context
+                    self.branchWorkspace.deleteRecovery = context
                     self.feedbackCenter.success(
                         "Branch deleted",
                         detail: "\(name) · \(rootPath)",
@@ -2408,7 +2408,7 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
             }
 
             let label = "selected branches"
-            self.multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+            self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
                 branchName: label,
                 contexts: completedRecoveryContexts
             )

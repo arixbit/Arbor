@@ -46,7 +46,7 @@ func checkoutAndUpdate(_ name: String, rebase: Bool) {
     }
     guard let upstream = checkoutAndUpdateUpstream(
         branch: name,
-        syncStatuses: syncStatuses
+        syncStatuses: branchWorkspace.syncStatuses
     ) else {
         feedbackCenter.warning(
             "Checkout and Update unavailable",

@@ -1175,8 +1175,8 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                 self.entries = st; self.headId = hid
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
-                self.branches = branchList
-                self.syncStatuses = syncStatuses
+                self.branchWorkspace.branches = branchList
+                self.branchWorkspace.syncStatuses = syncStatuses
                 self.logSelectionState.detailCommit = nil
                 if self.toolWindowMode == .log {
                     // The Log workspace stays live beside Commit in Rebased;
@@ -2363,13 +2363,13 @@ func viewDeletedBranchCommitsFromSemanticTargets(
         )
     }
     guard !contexts.isEmpty else { return }
-    branchDeleteRecovery = nil
-    multiRootBranchDeleteRecovery = nil
+    branchWorkspace.deleteRecovery = nil
+    branchWorkspace.multiRootDeleteRecovery = nil
     if contexts.count == 1 {
-        branchDeleteRecovery = contexts[0]
+        branchWorkspace.deleteRecovery = contexts[0]
     } else {
         let branchNames = Array(Set(contexts.map { $0.preview.branchName })).sorted()
-        multiRootBranchDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
+        branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
             branchName: branchNames.joined(separator: ", "),
             contexts: contexts
         )

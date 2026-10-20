@@ -40,7 +40,7 @@ func pullAfterCheckout(
 
 func pullSelectedBranch(_ name: String, rebase: Bool) {
     guard let repo else { return }
-    if branches.first(where: { $0.name == name })?.isCurrent == true {
+    if branchWorkspace.branches.first(where: { $0.name == name })?.isCurrent == true {
         doPull(nil, rebase: rebase)
         return
     }

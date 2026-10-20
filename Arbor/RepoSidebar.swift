@@ -23,22 +23,22 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("分支").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("新分支名", text: $newBranchName).textFieldStyle(.roundedBorder)
+                    TextField("新分支名", text: $branchWorkspace.newName).textFieldStyle(.roundedBorder)
                     Button("创建") { branchCreate() }
                 }
                 HStack(spacing: 6) {
-                    TextField("旧名", text: $renameOld).textFieldStyle(.roundedBorder)
-                    TextField("新名", text: $renameNew).textFieldStyle(.roundedBorder)
+                    TextField("旧名", text: $branchWorkspace.renameOld).textFieldStyle(.roundedBorder)
+                    TextField("新名", text: $branchWorkspace.renameNew).textFieldStyle(.roundedBorder)
                     Button("重命名") { branchRename() }
                 }
                 Button("删除已合并分支") { deleteMergedBranches() }
                     .help("删除已合并入 HEAD 的本地分支")
-                    .disabled(branches.isEmpty)
-                ForEach(branches, id: \.name) { b in
+                    .disabled(branchWorkspace.branches.isEmpty)
+                ForEach(branchWorkspace.branches, id: \.name) { b in
                     HStack(spacing: 6) {
                         Text(b.name).font(.system(.body, design: .monospaced)).bold(b.isCurrent)
                         Text(b.shortId).font(.caption).foregroundStyle(.secondary)
-                        if let compare = branchComparisons[b.name], compare.ahead > 0 || compare.behind > 0 {
+                        if let compare = branchWorkspace.comparisons[b.name], compare.ahead > 0 || compare.behind > 0 {
                             Text("↑\(compare.ahead) ↓\(compare.behind)")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)

@@ -133,8 +133,8 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     compareRev2 = tab.compareRevision2
     compareRepositoryPath = tab.compareRepositoryPath
     compareWithWorkingTree = tab.compareWithWorkingTree
-    branchCompareFirstFilter = tab.compareFirstFilter ?? BranchComparisonFilter()
-    branchCompareSecondFilter = tab.compareSecondFilter ?? BranchComparisonFilter()
+    branchComparison.firstFilter = tab.compareFirstFilter ?? BranchComparisonFilter()
+    branchComparison.secondFilter = tab.compareSecondFilter ?? BranchComparisonFilter()
     if let path = tab.compareRepositoryPath,
        let comparisonRepo = try? openRepository(path: path) {
         activateComparisonRepository(comparisonRepo, rootPath: path)

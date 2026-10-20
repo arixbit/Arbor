@@ -12,6 +12,7 @@ final class LogBranchesPanelState: ObservableObject {
     @Published var selectionActionRaw = LogBranchSelectionAction.navigate.rawValue
     @Published var showOnlyMy = false
     @Published var myBranchIDs: Set<String> = []
+    @Published var isLoadingMy = false
     @Published var showMyTask: Task<Void, Never>?
 
     /// 面板偏好按项目持久化，值由 `ContentView.init` 读出来注入。

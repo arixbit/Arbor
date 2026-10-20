@@ -34,6 +34,7 @@ targets:
       - path: Stash
       - path: Tags
       - path: Shelf
+      - path: Branches
       - path: LogGraphView.swift
       - path: PushDialogView.swift
       - path: PullDialogView.swift

@@ -11,6 +11,15 @@ struct ContentView: View {
     /// Stash 恢复与冲突状态（multi-root stash、pull 现场保存）。
     @StateObject var stashRecovery = StashRecoveryState()
 
+    /// 分支列表与创建、重命名、删除、上游设置的工作区状态。
+    @StateObject var branchWorkspace = BranchWorkspaceState()
+
+    /// 双栏分支比较的列表、过滤、选中与分页状态。
+    @StateObject var branchComparison = BranchComparisonState()
+
+    /// 分支清理窗口与 Find Merged 对话框的请求、扫描和报告状态。
+    @StateObject var branchCleanup = BranchCleanupState()
+
     /// Tag 列表与创建/删除状态。
     @StateObject var tagWorkspace = TagWorkspaceState()
 
@@ -98,7 +107,6 @@ struct ContentView: View {
     @AppStorage("arbor.log.collapseGraph.v1") var logCollapseGraph = false
     @AppStorage("arbor.log.noMerges.v1") var logNoMerges = false
     @AppStorage("arbor.log.branches.visible.v1") var logBranchesVisible = false
-    @State var isLoadingMyBranches = false
     @AppStorage("arbor.log.highlightCherryPicked.v1") var logHighlightCherryPicked = false
     @AppStorage("arbor.log.highlightCherryPicked.branch.v1") var logCherryPickCompareBranch = ""
     /// Global fallback for IntelliJ's project-level FETCH/LS_REMOTE
@@ -159,8 +167,8 @@ struct ContentView: View {
             rootPath: repositoryPath,
             displayName: displayName.isEmpty ? repositoryPath : displayName,
             relativePath: ".",
-            branches: branches,
-            remoteBranches: remoteBranches,
+            branches: branchWorkspace.branches,
+            remoteBranches: branchWorkspace.remoteBranches,
             tags: tagWorkspace.tags
         )]
     }
@@ -175,7 +183,7 @@ struct ContentView: View {
     var newWorktreeBranches: [BranchInfo] {
         guard let rootPath = newWorktreeRootPath,
               let snapshot = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath }) else {
-            return branches
+            return branchWorkspace.branches
         }
         return snapshot.branches
     }
@@ -433,11 +441,11 @@ struct ContentView: View {
     }
 
     var activeLogBranches: [BranchInfo] {
-        logList.activeRootPath == nil ? branches : logRuntime.activeBranches
+        logList.activeRootPath == nil ? branchWorkspace.branches : logRuntime.activeBranches
     }
 
     var activeLogRemoteBranches: [RemoteBranchInfo] {
-        logList.activeRootPath == nil ? remoteBranches : logRuntime.activeRemoteBranches
+        logList.activeRootPath == nil ? branchWorkspace.remoteBranches : logRuntime.activeRemoteBranches
     }
 
     var activeLogRemotes: [RemoteInfo] {
@@ -620,41 +628,15 @@ struct ContentView: View {
     @State var multiRootCommitSignOff = false
     @State var multiRootCommitCoAuthors = ""
     @State var multiRootCommitSelectedPaths: [MultiRootChangeSelection]?
-    @State var multiRootUpstreamContext: MultiRootUpstreamContext?
     @State var multiRootConflictGroups: [MultiRootConflictGroup] = []
     @State var multiRootConflictBatchWorking = false
     @State var multiRootConflictBatchError: String?
-    @State var showMultiRootNewBranchDialog = false
-    @State var multiRootNewBranchName = ""
-    @State var multiRootNewBranchBase = ""
-    @State var multiRootNewBranchCheckout = true
-    @State var multiRootNewBranchResetExisting = false
-    @State var multiRootExistingBranchNames: [String: Set<String>] = [:]
-    @State var multiRootSelectedRootPaths: Set<String> = []
-    @State var showMultiRootRenameBranchDialog = false
-    @State var multiRootRenameOldName = ""
-    @State var multiRootRenameNewName = ""
-    @State var multiRootRenameUnsetUpstream = false
-    @State var multiRootRenameSelectedRootPaths: Set<String> = []
-    @State var showSingleRootRenameBranchDialog = false
-    @State var singleRootRenameRootPath = ""
-    @State var singleRootRenameOldName = ""
-    @State var singleRootRenameNewName = ""
-    @State var singleRootRenameUnsetUpstream = false
-    @State var singleRootRenameHasUpstream = false
-    @State var showMultiRootDeleteBranchDialog = false
-    @State var multiRootDeleteBranchName = ""
-    @State var multiRootDeleteSelectedRootPaths: Set<String> = []
     @State var showMultiRootMergeDialog = false
     @State var multiRootMergeBranchName = ""
     @State var multiRootMergeSelectedRootPaths: Set<String> = []
     @State var multiRootMergeMergedBranchesByRoot: [String: Set<String>] = [:]
     @State var multiRootMergeDialogGeneration = 0
     @State var multiRootMergeRollbackContext: MultiRootMergeRollbackContext?
-    @State var showMultiRootRemoteDeleteDialog = false
-    @State var multiRootRemoteDeleteBranchName = ""
-    @State var multiRootRemoteDeleteSelectedRootPaths: Set<String> = []
-    @State var multiRootRemoteDeleteTracking = false
     @State var multiRootRunning = false
     /// Closes the small discovery window before Update Project can publish
     /// its ordinary multi-root runner state. It is deliberately separate from
@@ -702,25 +684,6 @@ struct ContentView: View {
     @State var compareSelection: String?
     @State var compareSelectedPaths: Set<String> = []
     @State var compareError: String?
-    @State var branchCompareFirstEntries: [CommitInfo] = []
-    @State var branchCompareSecondEntries: [CommitInfo] = []
-    @State var branchCompareFirstFilter = BranchComparisonFilter()
-    @State var branchCompareSecondFilter = BranchComparisonFilter()
-    @State var branchCompareSelectionID: String?
-    @State var branchCompareSelectionSide: BranchComparisonSide = .first
-    @State var isLoadingBranchComparison = false
-    @State var branchCompareFirstLoading = false
-    @State var branchCompareSecondLoading = false
-    @State var branchCompareFirstHasMore = false
-    @State var branchCompareSecondHasMore = false
-    @State var branchCompareGeneration = 0
-    @State var branchCompareFirstRequestGeneration = 0
-    @State var branchCompareSecondRequestGeneration = 0
-    @State var branchCompareFirstLoadTask: Task<Void, Never>?
-    @State var branchCompareSecondLoadTask: Task<Void, Never>?
-    @State var branchCompareFirstError: String?
-    @State var branchCompareSecondError: String?
-    @State var branchCompareError: String?
     /// Reflog is a repository-local history. Keep its root separate from the
     /// aggregate VCS Log filters so switching from a multi-root graph cannot
     /// leave the Reflog panel showing an unrelated or stale repository.
@@ -782,23 +745,9 @@ struct ContentView: View {
     @State var mergeNoVerify = false
     @State var mergeAllowUnrelatedHistories = false
     @State var mergeFeedback: String?
-    @State var newBranchName: String = ""
-    /// A Log commit can belong to a non-primary Git root. Keep the branch
-    /// dialog and its write operation pinned to that root instead of falling
-    /// back to the window's primary repository.
-    @State var newBranchRepositoryOverride: Repository?
-    @State var newBranchDialogBranches: [BranchInfo] = []
-    @State var renameOld: String = ""
-    @State var renameNew: String = ""
-    @State var branches: [BranchInfo] = []
-    @State var branchComparisons: [String: BranchCompare] = [:]
     // 远程
     @State var remotes: [RemoteInfo] = []
     @State var isShallowRepository = false
-    @State var remoteBranches: [RemoteBranchInfo] = []
-    /// BRANCH-001 Recent 分组（HEAD reflog 最近检出）。
-    @State var recentBranches: [String] = []
-    @State var syncStatuses: [SyncStatus] = []
     @State var pushForce = false
     @State var remoteProtectedBranchPatterns: [String] = []
     /// Hosted protection is repository-scoped. Keep it separate from the
@@ -818,19 +767,6 @@ struct ContentView: View {
     @State var multiRootRemoteConfigContext: MultiRootRemoteConfigContext?
     @State var multiRootRemoteConfigAggregateContext: MultiRootRemoteConfigAggregateContext?
     @StateObject var branchCleanupWindow = BranchCleanupWindowCoordinator()
-    @State var branchCleanupGeneration = 0
-    @State var showFindMergedBranchesDialog = false
-    @State var findMergedBranchesRoots: [BranchCleanupRoot] = []
-    @State var findMergedTargetBranch = ""
-    @State var findMergedPrefix = ""
-    @State var findMergedRunning = false
-    @State var findMergedHasCalculated = false
-    @State var findMergedSummary: FindMergedScanSummary?
-    @State var findMergedGeneration = 0
-    @State var findMergedTask: Task<Void, Never>?
-    @State var findMergedReportID: String?
-    @State var findMergedReportText = ""
-    @State var showFindMergedReport = false
     @State var multiRootRemoteName: String = ""
     @State var multiRootRemoteURL: String = ""
     @State var multiRootRemotePushURL: String = ""
@@ -942,15 +878,6 @@ struct ContentView: View {
     @State var reviewCommentRepository: HostingRepository?
     @State var showReviewComment = false
     // Rebased 页面级弹出与对话框
-    @State var showBranchesPopover = false
-    @State var showUpstreamDialog = false
-    @State var upstreamLocalBranch = ""
-    @State var showNewBranchDialog = false
-    @State var newBranchDialogTitle = "New Branch"
-    @State var newBranchBase = ""
-    @State var newBranchCheckout = true
-    @State var newBranchResetExisting = false
-    @State var newBranchAfterCreateRebase = false
     @State var showMergeActionDialog = false
     @State var showRebaseActionDialog = false
     @State var showPullDialog = false
@@ -977,8 +904,6 @@ struct ContentView: View {
     /// not replace the Log graph underneath it.
     @State var mergeInitialPath: String?
     @State var feedbackDetailMessage: FeedbackMessage?
-    @State var branchDeleteRecovery: BranchDeleteRecoveryContext?
-    @State var multiRootBranchDeleteRecovery: MultiRootBranchDeleteRecoveryContext?
 
     init(
         projectPath: String? = nil,
@@ -1256,10 +1181,10 @@ struct ContentView: View {
         orderedCompareSelection(changes: treeChanges, selectedPaths: compareSelectedPaths)
     }
     var selectedBranchComparisonCommit: CommitInfo? {
-        let commits = branchCompareSelectionSide == .first
-            ? branchCompareFirstEntries
-            : branchCompareSecondEntries
-        return commits.first { $0.id == branchCompareSelectionID }
+        let commits = branchComparison.selectionSide == .first
+            ? branchComparison.firstEntries
+            : branchComparison.secondEntries
+        return commits.first { $0.id == branchComparison.selectionID }
     }
     var selectedReflogEntry: ReflogEntry? {
         guard let selection = reflog.selection else { return nil }
@@ -1336,7 +1261,7 @@ struct ContentView: View {
     }
 
     var currentSyncStatus: SyncStatus? {
-        syncStatuses.first(where: { $0.branch == currentBranchName })
+        branchWorkspace.syncStatuses.first(where: { $0.branch == currentBranchName })
     }
 
     var currentBranchHasUnfetchedIncoming: Bool {
@@ -1623,7 +1548,7 @@ struct ContentView: View {
                 onClose: { showSubmoduleLog = false }
             )
         }
-        .sheet(item: $branchDeleteRecovery) { context in
+        .sheet(item: $branchWorkspace.deleteRecovery) { context in
             BranchDeleteRecoveryView(
                 preview: context.preview,
                 rootPath: context.rootPath,
@@ -1635,11 +1560,11 @@ struct ContentView: View {
                     deleteTrackedRemoteBranch(context)
                 },
                 onDone: {
-                    branchDeleteRecovery = nil
+                    branchWorkspace.deleteRecovery = nil
                 }
             )
         }
-        .sheet(item: $multiRootBranchDeleteRecovery) { context in
+        .sheet(item: $branchWorkspace.multiRootDeleteRecovery) { context in
             RebasedMultiRootBranchDeleteRecoveryView(
                 branchName: context.branchName,
                 contexts: context.contexts,
@@ -1650,7 +1575,7 @@ struct ContentView: View {
                     deleteTrackedRemoteBranch(remoteBranch, contexts: context.contexts)
                 },
                 onDone: {
-                    multiRootBranchDeleteRecovery = nil
+                    branchWorkspace.multiRootDeleteRecovery = nil
                 }
             )
         }
@@ -1735,15 +1660,15 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $showFindMergedBranchesDialog, onDismiss: dismissFindMergedBranches) {
+        .sheet(isPresented: $branchCleanup.showFindMergedDialog, onDismiss: dismissFindMergedBranches) {
             FindMergedBranchesDialogView(
-                roots: findMergedBranchesRoots,
+                roots: branchCleanup.roots,
                 projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "",
-                targetBranch: $findMergedTargetBranch,
-                prefix: $findMergedPrefix,
-                isRunning: findMergedRunning,
-                hasCalculated: findMergedHasCalculated,
-                summary: findMergedSummary,
+                targetBranch: $branchCleanup.targetBranch,
+                prefix: $branchCleanup.prefix,
+                isRunning: branchCleanup.isRunning,
+                hasCalculated: branchCleanup.hasCalculated,
+                summary: branchCleanup.summary,
                 onCalculate: calculateFindMergedBranches,
                 onOpenReport: openFindMergedReport,
                 onCopy: copyFindMergedBranches,
@@ -1751,8 +1676,8 @@ struct ContentView: View {
                 onCancel: cancelFindMergedBranches
             )
         }
-        .sheet(isPresented: $showFindMergedReport) {
-            FindMergedReportEditorView(report: findMergedReportText)
+        .sheet(isPresented: $branchCleanup.showReport) {
+            FindMergedReportEditorView(report: branchCleanup.reportText)
         }
         .sheet(isPresented: $showMultiRootChanges) {
             MultiRootChangesBrowser(
@@ -1881,26 +1806,26 @@ struct ContentView: View {
         .sheet(isPresented: $showRemoteConfigDialog) {
             remoteConfigSheet
         }
-        .sheet(isPresented: $showUpstreamDialog) {
+        .sheet(isPresented: $branchWorkspace.showUpstreamDialog) {
             SetUpstreamDialogView(
-                localBranch: upstreamLocalBranch,
-                remoteBranches: remoteBranches,
-                currentUpstream: syncStatuses.first {
-                    $0.branch == upstreamLocalBranch && $0.trackingExists
+                localBranch: branchWorkspace.upstreamLocalBranch,
+                remoteBranches: branchWorkspace.remoteBranches,
+                currentUpstream: branchWorkspace.syncStatuses.first {
+                    $0.branch == branchWorkspace.upstreamLocalBranch && $0.trackingExists
                 }?.upstream,
-                onCancel: { showUpstreamDialog = false },
+                onCancel: { branchWorkspace.showUpstreamDialog = false },
                 onSave: saveUpstreamFromDialog
             )
         }
-        .sheet(item: $multiRootUpstreamContext) { context in
+        .sheet(item: $branchWorkspace.multiRootUpstreamContext) { context in
             SetUpstreamDialogView(
                 localBranch: context.localBranch,
                 remoteBranches: context.remoteBranches,
                 currentUpstream: context.currentUpstream,
                 repositoryName: context.displayName,
-                onCancel: { multiRootUpstreamContext = nil },
+                onCancel: { branchWorkspace.multiRootUpstreamContext = nil },
                 onSave: { upstream in
-                    multiRootUpstreamContext = nil
+                    branchWorkspace.multiRootUpstreamContext = nil
                     setBranchUpstreamInRoot(
                         rootPath: context.rootPath,
                         branch: context.localBranch,
@@ -2064,7 +1989,7 @@ struct ContentView: View {
     }
 
     private var hasCurrentBranch: Bool {
-        branches.contains { $0.isCurrent }
+        branchWorkspace.branches.contains { $0.isCurrent }
     }
 
     private var hasConflicts: Bool {
@@ -2159,7 +2084,7 @@ struct ContentView: View {
             displayName: URL(fileURLWithPath: rootPath).lastPathComponent,
             relativePath: ".",
             isSubmodule: false,
-            headBranch: branches.first(where: { $0.isCurrent })?.name,
+            headBranch: branchWorkspace.branches.first(where: { $0.isCurrent })?.name,
             headId: nil,
             dirty: entries.contains {
                 $0.staged != .unchanged || $0.unstaged != .unchanged
@@ -2216,7 +2141,7 @@ struct ContentView: View {
                 onFetch: { doFetch(nil) },
                 onHosting: { showHostingHub = true },
                 isShallowRepository: isShallowRepository,
-                hasCurrentBranch: branches.contains { $0.isCurrent },
+                hasCurrentBranch: branchWorkspace.branches.contains { $0.isCurrent },
                 hasConflicts: entries.contains {
                     $0.staged == .conflicted || $0.unstaged == .conflicted
                 },
@@ -2293,7 +2218,7 @@ struct ContentView: View {
                         || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
                 }.count,
                 projectPath: projectPath,
-                onBranch: { showBranchesPopover = true },
+                onBranch: { branchWorkspace.showPopover = true },
                 feedbackCenter: feedbackCenter,
                 syncStatus: currentSyncStatus,
                 hasUnfetchedIncoming: currentBranchHasUnfetchedIncoming,
@@ -2451,14 +2376,14 @@ struct ContentView: View {
         .sheet(isPresented: $showPushDialog) {
             PushDialogView(
                 remotes: remotes,
-                branches: branches,
+                branches: branchWorkspace.branches,
                 commits: logList.entries,
                 mode: pushDialogMode,
                 defaultRemote: pushDialogRemote,
                 defaultBranch: pushDialogBranch
-                    ?? branches.first(where: { $0.isCurrent })?.name,
+                    ?? branchWorkspace.branches.first(where: { $0.isCurrent })?.name,
                 defaultSourceRevision: pushDialogSourceRevision,
-                currentHasUpstream: syncStatuses.first(where: {
+                currentHasUpstream: branchWorkspace.syncStatuses.first(where: {
                     $0.branch == (pushDialogSourceRevision ?? currentBranchName)
                 })?.trackingExists ?? false,
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
@@ -2734,42 +2659,42 @@ struct ContentView: View {
             .padding(18)
             .frame(minWidth: 700, minHeight: 460)
         }
-        .sheet(isPresented: $showNewBranchDialog) {
+        .sheet(isPresented: $branchWorkspace.showNewDialog) {
             RebasedNewBranchDialog(
-                title: newBranchDialogTitle,
-                name: $newBranchName,
-                baseRevision: $newBranchBase,
-                checkout: $newBranchCheckout,
-                resetExisting: $newBranchResetExisting,
+                title: branchWorkspace.newDialogTitle,
+                name: $branchWorkspace.newName,
+                baseRevision: $branchWorkspace.newBase,
+                checkout: $branchWorkspace.newCheckout,
+                resetExisting: $branchWorkspace.newResetExisting,
                 validateName: { value in
-                    guard let branchRepo = newBranchRepositoryOverride ?? repo else { return nil }
+                    guard let branchRepo = branchWorkspace.newRepositoryOverride ?? repo else { return nil }
                     do {
                         try branchRepo.validateBranchName(name: value)
                         return nil
                     } catch {
                         let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if newBranchResetExisting,
-                           newBranchDialogBranches.contains(where: { $0.name == normalized }) {
+                        if branchWorkspace.newResetExisting,
+                           branchWorkspace.newDialogBranches.contains(where: { $0.name == normalized }) {
                             return nil
                         }
                         return errorMessage(error)
                     }
                 },
-                branches: newBranchDialogBranches,
+                branches: branchWorkspace.newDialogBranches,
                 onCreate: {
-                    let base = newBranchBase.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if newBranchAfterCreateRebase {
+                    let base = branchWorkspace.newBase.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if branchWorkspace.newAfterCreateRebase {
                         branchCreateAndRebase(
                             at: base.isEmpty ? nil : base,
-                            reset: newBranchResetExisting,
-                            repository: newBranchRepositoryOverride
+                            reset: branchWorkspace.newResetExisting,
+                            repository: branchWorkspace.newRepositoryOverride
                         )
                     } else {
                         branchCreate(
                             at: base.isEmpty ? nil : base,
-                            checkout: newBranchCheckout,
-                            reset: newBranchResetExisting,
-                            repository: newBranchRepositoryOverride
+                            checkout: branchWorkspace.newCheckout,
+                            reset: branchWorkspace.newResetExisting,
+                            repository: branchWorkspace.newRepositoryOverride
                         )
                     }
                     dismissNewBranchDialog()
@@ -2809,24 +2734,24 @@ struct ContentView: View {
                 onCancel: dismissNewWorktreeDialog
             )
         }
-        .sheet(isPresented: $showMultiRootNewBranchDialog) {
+        .sheet(isPresented: $branchWorkspace.showMultiRootNewDialog) {
             RebasedMultiRootNewBranchDialog(
-                name: $multiRootNewBranchName,
-                baseRevision: $multiRootNewBranchBase,
-                checkout: $multiRootNewBranchCheckout,
-                resetExisting: $multiRootNewBranchResetExisting,
-                selectedRootPaths: $multiRootSelectedRootPaths,
+                name: $branchWorkspace.multiRootNewName,
+                baseRevision: $branchWorkspace.multiRootNewBase,
+                checkout: $branchWorkspace.multiRootNewCheckout,
+                resetExisting: $branchWorkspace.multiRootNewResetExisting,
+                selectedRootPaths: $branchWorkspace.multiRootNewSelectedRootPaths,
                 roots: multiRoots,
-                existingBranchNames: multiRootExistingBranchNames,
+                existingBranchNames: branchWorkspace.multiRootExistingNames,
                 validateName: { value in
                     let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !candidate.isEmpty else { return nil }
-                    let selectedPaths = multiRootSelectedRootPaths.isEmpty
+                    let selectedPaths = branchWorkspace.multiRootNewSelectedRootPaths.isEmpty
                         ? multiRoots.map(\.path)
-                        : Array(multiRootSelectedRootPaths)
+                        : Array(branchWorkspace.multiRootNewSelectedRootPaths)
                     for rootPath in selectedPaths {
-                        let exists = multiRootExistingBranchNames[rootPath]?.contains(candidate) == true
-                        if multiRootNewBranchResetExisting && exists {
+                        let exists = branchWorkspace.multiRootExistingNames[rootPath]?.contains(candidate) == true
+                        if branchWorkspace.multiRootNewResetExisting && exists {
                             continue
                         }
                         guard let rootRepo = try? openRepository(path: rootPath) else { continue }
@@ -2840,69 +2765,69 @@ struct ContentView: View {
                 },
                 onCreate: {
                     createMultiRootBranch(
-                        name: multiRootNewBranchName,
-                        baseRevision: multiRootNewBranchBase,
-                        checkout: multiRootNewBranchCheckout,
-                        reset: multiRootNewBranchResetExisting,
-                        selectedRootPaths: multiRootSelectedRootPaths
+                        name: branchWorkspace.multiRootNewName,
+                        baseRevision: branchWorkspace.multiRootNewBase,
+                        checkout: branchWorkspace.multiRootNewCheckout,
+                        reset: branchWorkspace.multiRootNewResetExisting,
+                        selectedRootPaths: branchWorkspace.multiRootNewSelectedRootPaths
                     )
                     dismissMultiRootNewBranchDialog()
                 },
                 onCancel: dismissMultiRootNewBranchDialog
             )
         }
-        .sheet(isPresented: $showMultiRootRenameBranchDialog) {
+        .sheet(isPresented: $branchWorkspace.showMultiRootRenameDialog) {
             RebasedMultiRootRenameBranchDialog(
-                oldName: multiRootRenameOldName,
-                newName: $multiRootRenameNewName,
-                unsetUpstream: $multiRootRenameUnsetUpstream,
-                selectedRootPaths: $multiRootRenameSelectedRootPaths,
+                oldName: branchWorkspace.multiRootRenameOldName,
+                newName: $branchWorkspace.multiRootRenameNewName,
+                unsetUpstream: $branchWorkspace.multiRootRenameUnsetUpstream,
+                selectedRootPaths: $branchWorkspace.multiRootRenameSelectedRootPaths,
                 snapshots: multiRootBranchSnapshots,
                 validateName: validateMultiRootRenameName,
                 onRename: {
                     renameMultiRootBranch(
-                        oldName: multiRootRenameOldName,
-                        newName: multiRootRenameNewName,
-                        unsetUpstream: multiRootRenameUnsetUpstream,
-                        selectedRootPaths: multiRootRenameSelectedRootPaths
+                        oldName: branchWorkspace.multiRootRenameOldName,
+                        newName: branchWorkspace.multiRootRenameNewName,
+                        unsetUpstream: branchWorkspace.multiRootRenameUnsetUpstream,
+                        selectedRootPaths: branchWorkspace.multiRootRenameSelectedRootPaths
                     )
                 },
                 onCancel: dismissMultiRootRenameBranchDialog
             )
         }
-        .sheet(isPresented: $showSingleRootRenameBranchDialog) {
+        .sheet(isPresented: $branchWorkspace.showRenameDialog) {
             RebasedSingleRootRenameBranchDialog(
-                oldName: singleRootRenameOldName,
-                newName: $singleRootRenameNewName,
-                unsetUpstream: $singleRootRenameUnsetUpstream,
-                hasUpstream: singleRootRenameHasUpstream,
+                oldName: branchWorkspace.renameOldName,
+                newName: $branchWorkspace.renameNewName,
+                unsetUpstream: $branchWorkspace.renameUnsetUpstream,
+                hasUpstream: branchWorkspace.renameHasUpstream,
                 validateName: { value in
                     validateSingleRootRenameName(
-                        rootPath: singleRootRenameRootPath,
-                        oldName: singleRootRenameOldName,
+                        rootPath: branchWorkspace.renameRootPath,
+                        oldName: branchWorkspace.renameOldName,
                         value: value
                     )
                 },
                 onRename: {
                     renameBranchInRoot(
-                        rootPath: singleRootRenameRootPath,
-                        oldName: singleRootRenameOldName,
-                        newName: singleRootRenameNewName,
-                        unsetUpstream: singleRootRenameUnsetUpstream
+                        rootPath: branchWorkspace.renameRootPath,
+                        oldName: branchWorkspace.renameOldName,
+                        newName: branchWorkspace.renameNewName,
+                        unsetUpstream: branchWorkspace.renameUnsetUpstream
                     )
                 },
                 onCancel: dismissSingleRootRenameBranchDialog
             )
         }
-        .sheet(isPresented: $showMultiRootDeleteBranchDialog) {
+        .sheet(isPresented: $branchWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteBranchDialog(
-                branchName: multiRootDeleteBranchName,
-                selectedRootPaths: $multiRootDeleteSelectedRootPaths,
+                branchName: branchWorkspace.multiRootDeleteName,
+                selectedRootPaths: $branchWorkspace.multiRootDeleteSelectedRootPaths,
                 snapshots: multiRootBranchSnapshots,
                 onDelete: {
                     deleteMultiRootBranch(
-                        name: multiRootDeleteBranchName,
-                        selectedRootPaths: multiRootDeleteSelectedRootPaths
+                        name: branchWorkspace.multiRootDeleteName,
+                        selectedRootPaths: branchWorkspace.multiRootDeleteSelectedRootPaths
                     )
                 },
                 onCancel: dismissMultiRootDeleteBranchDialog
@@ -2922,17 +2847,17 @@ struct ContentView: View {
                 onCancel: dismissMultiRootDeleteTagDialog
             )
         }
-        .sheet(isPresented: $showMultiRootRemoteDeleteDialog) {
+        .sheet(isPresented: $branchWorkspace.showMultiRootRemoteDeleteDialog) {
             RebasedMultiRootRemoteDeleteBranchDialog(
-                remoteBranch: multiRootRemoteDeleteBranchName,
-                selectedRootPaths: $multiRootRemoteDeleteSelectedRootPaths,
-                deleteTracking: $multiRootRemoteDeleteTracking,
+                remoteBranch: branchWorkspace.multiRootRemoteDeleteName,
+                selectedRootPaths: $branchWorkspace.multiRootRemoteDeleteSelectedRootPaths,
+                deleteTracking: $branchWorkspace.multiRootRemoteDeleteTracking,
                 snapshots: multiRootBranchSnapshots,
                 onDelete: {
                     deleteMultiRootRemoteBranch(
-                        remoteBranch: multiRootRemoteDeleteBranchName,
-                        deleteTracking: multiRootRemoteDeleteTracking,
-                        selectedRootPaths: multiRootRemoteDeleteSelectedRootPaths
+                        remoteBranch: branchWorkspace.multiRootRemoteDeleteName,
+                        deleteTracking: branchWorkspace.multiRootRemoteDeleteTracking,
+                        selectedRootPaths: branchWorkspace.multiRootRemoteDeleteSelectedRootPaths
                     )
                 },
                 onCancel: dismissMultiRootRemoteDeleteDialog
@@ -2950,7 +2875,7 @@ struct ContentView: View {
                 noCommit: $mergeNoCommit,
                 noVerify: $mergeNoVerify,
                 allowUnrelatedHistories: $mergeAllowUnrelatedHistories,
-                branches: branches,
+                branches: branchWorkspace.branches,
                 mergedBranches: mergeMergedBranches,
                 onMerge: {
                     showMergeActionDialog = false
@@ -4400,7 +4325,7 @@ struct ContentView: View {
     }
 
     var currentBranchName: String {
-        branches.first(where: { $0.isCurrent })?.name ?? "（无分支）"
+        branchWorkspace.branches.first(where: { $0.isCurrent })?.name ?? "（无分支）"
     }
 
     private var hasAnyMultiRootCommitChanges: Bool {
@@ -4408,7 +4333,7 @@ struct ContentView: View {
     }
 
     private func openCommitWorkspaceFromBranchPopup() {
-        showBranchesPopover = false
+        branchWorkspace.showPopover = false
         toolWindowMode = .commit
         toolWindowExpanded = true
         projectPanelExpanded = false
@@ -4429,7 +4354,7 @@ struct ContentView: View {
         guard let snapshot = multiRootBranchSnapshots.first(where: {
             $0.rootPath == rebaseRootPath
         }) else {
-            return branches
+            return branchWorkspace.branches
         }
         return snapshot.branches
     }
@@ -4444,7 +4369,7 @@ struct ContentView: View {
                 // leave a stale empty multi-root snapshot looking clean.
                 loadMultiRootChanges()
             }
-            showBranchesPopover = true
+            branchWorkspace.showPopover = true
         } label: {
             HStack(spacing: 7) {
                 Label(currentBranchName, systemImage: "arrow.triangle.branch")
@@ -4482,7 +4407,7 @@ struct ContentView: View {
         .buttonStyle(.borderless)
         .disabled(repo == nil)
         .help("Branches: checkout / pull / push / fetch / merge / rebase / stash")
-        .popover(isPresented: $showBranchesPopover, arrowEdge: .bottom) {
+        .popover(isPresented: $branchWorkspace.showPopover, arrowEdge: .bottom) {
             if multiRoots.count > 1 && !multiRootBranchSnapshots.isEmpty {
                 MultiRootBranchesPopover(
                     projectPath: projectPath,
@@ -4513,20 +4438,20 @@ struct ContentView: View {
                         )
                     },
                     onCommitChanges: {
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                         openMultiRootCommitDialog()
                     },
                     hasCommitChanges: hasAnyMultiRootCommitChanges,
                     onNewBranch: {
                         presentMultiRootNewBranchDialog()
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onFindMerged: {
                         beginFindMergedBranches()
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onRemoteTags: {
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                         tagWorkspace.showMultiRootRemoteTagsDialog = true
                     },
                     onCheckout: { rootPath, reference, isRemote in
@@ -4535,7 +4460,7 @@ struct ContentView: View {
                             reference: reference,
                             isRemote: isRemote
                         )
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCheckoutAsNewBranch: { rootPath, reference, isRemote in
                         presentMultiRootNewBranchFromReference(
@@ -4551,7 +4476,7 @@ struct ContentView: View {
                             detach: false,
                             rebase: rebase
                         )
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCheckoutWithRebase: { rootPath, reference, isRemote in
                         if isRemote {
@@ -4567,22 +4492,22 @@ struct ContentView: View {
                                 branch: reference
                             )
                         }
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCheckoutRecent: { rootPath, name in
                         checkoutRecentBranchInRoot(rootPath: rootPath, name: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCheckoutTag: { rootPath, name in
                         checkoutTagInRoot(rootPath: rootPath, name: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteTag: { rootPath, name in
                         deleteTagInRoot(rootPath: rootPath, name: name)
                     },
                     onDeleteTagAcrossRoots: { name in
                         presentMultiRootDeleteTagDialog(name: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onRenameTag: { rootPath, name in
                         renameTagInRoot(rootPath: rootPath, name: name)
@@ -4619,19 +4544,19 @@ struct ContentView: View {
                     },
                     onUpdateBranch: { rootPath, branch in
                         updateBranchInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onForcePushedUpdate: { rootPath, branch in
                         updateForcePushedBranchInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onForcePushedUpdateAcrossRoots: { branch in
                         updateForcePushedBranchAcrossRoots(branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onPullBranch: { rootPath, branch, rebase in
                         pullBranchInRoot(rootPath: rootPath, branch: branch, rebase: rebase)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onPullRemoteBranch: { rootPath, branch, rebase in
                         pullRemoteBranchInRoot(
@@ -4639,28 +4564,28 @@ struct ContentView: View {
                             remoteBranch: branch,
                             rebase: rebase
                         )
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteRemote: { rootPath, branch in
                         deleteRemoteBranchInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteRemoteAcrossRoots: { branch in
                         presentMultiRootRemoteDeleteDialog(branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onMerge: { rootPath, branch in
                         mergeBranchInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onMergeAcrossRoots: presentMultiRootMergeFromPopup,
                     onRebase: { rootPath, branch in
                         rebaseCurrentInRoot(rootPath: rootPath, onto: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCompare: { rootPath, branch in
                         compareBranchInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCompareSelected: { selection in
                         guard selection.count == 2,
@@ -4671,7 +4596,7 @@ struct ContentView: View {
                             first: first.name,
                             second: selection[1].name
                         )
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCompareSelectedFiles: { selection in
                         guard selection.count == 2,
@@ -4682,23 +4607,23 @@ struct ContentView: View {
                             first: first.name,
                             second: selection[1].name
                         )
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onUpdateSelected: { selection in
                         updateSelectedBranchesInRoots(selection)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteSelected: { selection in
                         deleteSelectedBranchesInRoots(selection)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onPushDialog: { rootPath, branch in
                         beginMultiRootPushDialog(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onEditRemote: { rootPath, name in
                         beginMultiRootRemoteConfig(rootPath: rootPath, selectedRemote: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onRemoveRemote: { rootPath, name in
                         removeRemoteInRoot(rootPath: rootPath, name: name)
@@ -4711,37 +4636,37 @@ struct ContentView: View {
                     },
                     onSetUpstream: { rootPath, branch in
                         setBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onUnsetUpstream: { rootPath, branch in
                         unsetBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onRenameBranch: { rootPath, branch in
                         renameBranchInRoot(rootPath: rootPath, oldName: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onRenameBranchAcrossRoots: { name in
                         presentMultiRootRenameBranchDialog(name: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteBranchAcrossRoots: { name in
                         presentMultiRootDeleteBranchDialog(name: name)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onDeleteBranch: { rootPath, branch in
                         deleteBranchInRoot(rootPath: rootPath, name: branch)
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                     },
                     onCheckoutReference: { rootPath in
                         checkoutReferenceFromInput(rootPath: rootPath)
                     },
                     onOpenWorktree: { path in
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                         openWindow(value: path)
                     },
                     onCreateWorktreeFromReference: { rootPath, reference, isTag in
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                         presentNewWorktreeFromReference(
                             reference,
                             isTag: isTag,
@@ -4749,20 +4674,20 @@ struct ContentView: View {
                         )
                     },
                     onProjectGitSettings: {
-                        showBranchesPopover = false
+                        branchWorkspace.showPopover = false
                         showProjectGitSettings = true
                     },
-                    onCancel: { showBranchesPopover = false }
+                    onCancel: { branchWorkspace.showPopover = false }
                 )
             } else {
                 RebasedBranchesPopover(
                 projectPath: projectPath,
-                branches: branches,
-                remoteBranches: remoteBranches,
-                recentBranches: recentBranches,
+                branches: branchWorkspace.branches,
+                remoteBranches: branchWorkspace.remoteBranches,
+                recentBranches: branchWorkspace.recentBranches,
                 tags: tagWorkspace.tags,
-                comparisons: branchComparisons,
-                syncStatuses: syncStatuses,
+                comparisons: branchWorkspace.comparisons,
+                syncStatuses: branchWorkspace.syncStatuses,
                 incomingBranches: autoFetchIncomingBranches,
                 stashes: stashUI.stashes,
                 worktrees: worktrees,
@@ -4804,7 +4729,7 @@ struct ContentView: View {
                     pushAllTagsToRemote(remote: remote)
                 },
                 onRemoteTags: {
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                     tagWorkspace.showRemoteTagsDialog = true
                 },
                 onCheckoutAndUpdate: { branch, rebase in checkoutAndUpdate(branch, rebase: rebase) },
@@ -4825,15 +4750,15 @@ struct ContentView: View {
                 onCommitChanges: openCommitWorkspaceFromBranchPopup,
                 onFindMerged: {
                     beginFindMergedBranches()
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                 },
                 onCheckoutReference: checkoutReferenceFromInput,
                 onOpenWorktree: { path in
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                     openWindow(value: path)
                 },
                 onCreateWorktreeFromReference: { reference, isTag in
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                     presentNewWorktreeFromReference(reference, isTag: isTag)
                 },
                 onCompare: compareBranchFromPopup,
@@ -4854,29 +4779,29 @@ struct ContentView: View {
                 onRefresh: { loadRepoData() },
                 onConfigureRemotes: beginConfigureRemotes,
                 onProjectGitSettings: {
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                     showProjectGitSettings = true
                 },
                 onFetchAll: { doFetchAll() },
                 onFetchPrune: doFetchPrune,
                 onFetchUnshallow: doFetchUnshallow,
                 onSetUpstream: { branch in
-                    upstreamLocalBranch = branch
-                    showUpstreamDialog = true
+                    branchWorkspace.upstreamLocalBranch = branch
+                    branchWorkspace.showUpstreamDialog = true
                 },
                 onUnsetUpstream: unsetBranchUpstream,
                 operationState: operationState,
                 onOperationContinue: {
                     doOperationContinue()
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                 },
                 onOperationSkip: {
                     doOperationSkip()
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                 },
                 onOperationAbort: {
                     doOperationAbort()
-                    showBranchesPopover = false
+                    branchWorkspace.showPopover = false
                 }
                 )
             }
@@ -4906,8 +4831,8 @@ struct ContentView: View {
     }
 
     private func saveUpstreamFromDialog(_ upstream: String) {
-        let branch = upstreamLocalBranch
-        showUpstreamDialog = false
+        let branch = branchWorkspace.upstreamLocalBranch
+        branchWorkspace.showUpstreamDialog = false
         setBranchUpstream(branch, upstream: upstream)
     }
 
@@ -5236,7 +5161,7 @@ struct ContentView: View {
         toolWindowExpanded = true
         projectPanelExpanded = false
         compareLogBranch(rootPath: nil, branch: branch)
-        showBranchesPopover = false
+        branchWorkspace.showPopover = false
     }
 
     func renameBranchFromPopup(_ oldName: String) {
@@ -5250,8 +5175,8 @@ struct ContentView: View {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let newName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !newName.isEmpty, newName != oldName else { return }
-        renameOld = oldName
-        renameNew = newName
+        branchWorkspace.renameOld = oldName
+        branchWorkspace.renameNew = newName
         branchRename()
     }
 

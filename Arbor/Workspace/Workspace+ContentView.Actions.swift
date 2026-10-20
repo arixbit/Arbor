@@ -605,7 +605,7 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         )
     case .branches:
         loadRepoData()
-        showBranchesPopover = true
+        branchWorkspace.showPopover = true
     case .merge:
         guard isArborVCSActionEnabled(.merge, in: vcsActionContext) else { return }
         openMergeDialog(nil)
@@ -640,7 +640,7 @@ func handleArborVCSActionNotification(_ notification: Notification) {
     case .stageAll:
         stageEverything()
     case .copyCurrentBranchName:
-        guard branches.contains(where: { $0.isCurrent }) else { return }
+        guard branchWorkspace.branches.contains(where: { $0.isCurrent }) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(currentBranchName, forType: .string)
         feedbackCenter.success("Copied branch name", detail: currentBranchName)

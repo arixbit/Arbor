@@ -67,7 +67,7 @@ func beginPushDialog(branch: String? = nil) {
     // configuration instead of silently discarding the click.
     guard self.repo != nil else { return }
     let sourceBranch = branch ?? currentBranchName
-    let configuredTarget = syncStatuses
+    let configuredTarget = branchWorkspace.syncStatuses
         .first(where: { $0.branch == sourceBranch && $0.trackingExists })
         .flatMap {
             remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
@@ -220,8 +220,8 @@ func commitAndPush(
                 self.headId = hid
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
-                self.branches = branchList
-                self.syncStatuses = syncStatuses
+                self.branchWorkspace.branches = branchList
+                self.branchWorkspace.syncStatuses = syncStatuses
                 self.recentMessages = recent
                 if self.toolWindowMode == .log {
                     self.loadLog()
@@ -1682,7 +1682,7 @@ func forcePushedBackupActions(
             } else {
                 self.loadMultiRoots()
             }
-            self.showBranchesPopover = true
+            self.branchWorkspace.showPopover = true
         }
     ]
     actions.append(contentsOf: branchNames.map { branchName in
@@ -1700,7 +1700,7 @@ func forcePushedBackupActionsByRoot(
     var actions = [
         FeedbackAction(title: "Open Branches") {
             self.loadMultiRoots()
-            self.showBranchesPopover = true
+            self.branchWorkspace.showPopover = true
         }
     ]
     for (rootPath, branchNames) in branchesByRoot.sorted(by: { $0.key < $1.key }) {
@@ -1758,7 +1758,7 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
             let selectedBranch = branches.contains(where: { $0.name == branch })
                 ? branch
                 : branches.first(where: { $0.isCurrent })?.name
-            let configuredTarget = syncStatuses
+            let configuredTarget = branchWorkspace.syncStatuses
                 .first(where: { $0.branch == selectedBranch && $0.trackingExists })
                 .flatMap {
                     remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
@@ -2701,7 +2701,7 @@ func doPush(
         )
         return
     }
-    let branch = requestedBranch ?? branches.first { $0.isCurrent }?.name ?? "main"
+    let branch = requestedBranch ?? branchWorkspace.branches.first { $0.isCurrent }?.name ?? "main"
     let force = (requestedForce ?? pushForce) || PushDialogRefspec.requestsForce(refspec)
     let useForceWithLease = GitPushSettings.useForceWithLease(force: force, requested: requestedForceWithLease)
     let protectedTarget = PushDialogRefspec.targetBranch(refspec) ?? branch

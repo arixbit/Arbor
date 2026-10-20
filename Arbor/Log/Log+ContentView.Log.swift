@@ -2664,7 +2664,7 @@ var logStartRevisionMenu: some View {
             }
             Divider()
             Section("Local Branches") {
-                ForEach(branches, id: \.name) { branch in
+                ForEach(branchWorkspace.branches, id: \.name) { branch in
                     Toggle(
                         isOn: logStartRevisionBinding(for: branch.name)
                     ) {
@@ -2672,9 +2672,9 @@ var logStartRevisionMenu: some View {
                     }
                 }
             }
-            if !remoteBranches.isEmpty {
+            if !branchWorkspace.remoteBranches.isEmpty {
                 Section("Remote Branches") {
-                    ForEach(remoteBranches, id: \.name) { branch in
+                    ForEach(branchWorkspace.remoteBranches, id: \.name) { branch in
                         Toggle(
                             isOn: logStartRevisionBinding(for: branch.name)
                         ) {
@@ -2947,19 +2947,19 @@ VStack(spacing: 0) {
         BranchCommitComparisonView(
             firstBranch: compareRev1,
             secondBranch: compareRev2,
-            firstCommits: branchCompareFirstEntries,
-            secondCommits: branchCompareSecondEntries,
-            firstFilter: $branchCompareFirstFilter,
-            secondFilter: $branchCompareSecondFilter,
-            isLoading: isLoadingBranchComparison,
-            error: branchCompareError,
-            selectedID: $branchCompareSelectionID,
-            selectedSide: $branchCompareSelectionSide,
+            firstCommits: branchComparison.firstEntries,
+            secondCommits: branchComparison.secondEntries,
+            firstFilter: $branchComparison.firstFilter,
+            secondFilter: $branchComparison.secondFilter,
+            isLoading: branchComparison.isLoading,
+            error: branchComparison.error,
+            selectedID: $branchComparison.selectionID,
+            selectedSide: $branchComparison.selectionSide,
             onFilterChanged: refreshBranchComparison,
             pagination: branchComparisonPagination,
             onSelect: { side, id in
-                branchCompareSelectionSide = side
-                branchCompareSelectionID = id
+                branchComparison.selectionSide = side
+                branchComparison.selectionID = id
             },
             onAction: { action, commit in
                 switch action {

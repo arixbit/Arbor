@@ -34,7 +34,7 @@ func runMerge(preserveLocalChanges: Bool) {
     let noCommit = mergeNoCommit
     let noVerify = mergeNoVerify
     let allowUnrelatedHistories = mergeAllowUnrelatedHistories
-    let canDeleteMergedBranch = branches.contains {
+    let canDeleteMergedBranch = branchWorkspace.branches.contains {
         $0.name == branch && !$0.isCurrent
     } && !GitProtectedBranchRules.matches(
         branch,
@@ -377,7 +377,7 @@ func presentMultiRootMergeDialog(name: String) {
 
 func presentMultiRootMergeFromPopup(name: String) {
     presentMultiRootMergeDialog(name: name)
-    showBranchesPopover = false
+    branchWorkspace.showPopover = false
 }
 
 func dismissMultiRootMergeDialog() {
@@ -1485,19 +1485,19 @@ static func findMergedRootsContainingTarget(
 /// root，再由独立 sheet 按目标分支和名称前缀计算结果。
 func beginFindMergedBranches() {
     guard let projectPath else { return }
-    findMergedTask?.cancel()
-    findMergedTask = nil
+    branchCleanup.task?.cancel()
+    branchCleanup.task = nil
     let generation = nextFindMergedGeneration()
-    let activeBranch = branches.first(where: { $0.isCurrent })?.name ?? ""
-    findMergedTargetBranch = activeBranch
-    findMergedPrefix = ""
-    findMergedBranchesRoots = []
-    findMergedHasCalculated = false
-    findMergedSummary = nil
-    findMergedReportID = nil
-    findMergedReportText = ""
-    findMergedRunning = true
-    showFindMergedBranchesDialog = true
+    let activeBranch = branchWorkspace.branches.first(where: { $0.isCurrent })?.name ?? ""
+    branchCleanup.targetBranch = activeBranch
+    branchCleanup.prefix = ""
+    branchCleanup.roots = []
+    branchCleanup.hasCalculated = false
+    branchCleanup.summary = nil
+    branchCleanup.reportID = nil
+    branchCleanup.reportText = ""
+    branchCleanup.isRunning = true
+    branchCleanup.showFindMergedDialog = true
     beginFeedbackOperation("Load merged branch roots")
     let scanRoot = projectPath
     let task = Task.detached(priority: .userInitiated) {
@@ -1516,18 +1516,18 @@ func beginFindMergedBranches() {
                 fallbackTarget = allBranches.first(where: { $0.isCurrent })?.name ?? ""
             }
             await MainActor.run {
-                guard self.findMergedGeneration == generation else { return }
-                self.findMergedTask = nil
-                self.findMergedBranchesRoots = roots
-                self.findMergedTargetBranch = fallbackTarget
-                self.findMergedRunning = false
+                guard self.branchCleanup.generation == generation else { return }
+                self.branchCleanup.task = nil
+                self.branchCleanup.roots = roots
+                self.branchCleanup.targetBranch = fallbackTarget
+                self.branchCleanup.isRunning = false
                 self.feedbackCenter.success("Merged branch roots loaded", detail: "\(roots.count) repositories")
             }
         } catch {
             await MainActor.run {
-                guard self.findMergedGeneration == generation else { return }
-                self.findMergedTask = nil
-                self.findMergedRunning = false
+                guard self.branchCleanup.generation == generation else { return }
+                self.branchCleanup.task = nil
+                self.branchCleanup.isRunning = false
                 self.feedbackCenter.error(
                     "Load merged branch roots failed",
                     detail: errorMessage(error),
@@ -1536,51 +1536,51 @@ func beginFindMergedBranches() {
             }
         }
     }
-    findMergedTask = task
+    branchCleanup.task = task
 }
 
 func nextFindMergedGeneration() -> Int {
-    findMergedGeneration += 1
-    return findMergedGeneration
+    branchCleanup.generation += 1
+    return branchCleanup.generation
 }
 
 func dismissFindMergedBranches() {
-    findMergedTask?.cancel()
-    findMergedTask = nil
+    branchCleanup.task?.cancel()
+    branchCleanup.task = nil
     _ = nextFindMergedGeneration()
-    showFindMergedBranchesDialog = false
-    findMergedRunning = false
-    findMergedHasCalculated = false
-    findMergedSummary = nil
-    findMergedBranchesRoots = []
+    branchCleanup.showFindMergedDialog = false
+    branchCleanup.isRunning = false
+    branchCleanup.hasCalculated = false
+    branchCleanup.summary = nil
+    branchCleanup.roots = []
 }
 
 func cancelFindMergedBranches() {
-    guard findMergedRunning else { return }
+    guard branchCleanup.isRunning else { return }
     // Root discovery is cancellable and dismisses the sheet; an active scan
     // keeps its partial roots and reports cancellation at the next boundary.
-    if findMergedBranchesRoots.isEmpty && findMergedSummary == nil {
+    if branchCleanup.roots.isEmpty && branchCleanup.summary == nil {
         dismissFindMergedBranches()
     } else {
-        findMergedTask?.cancel()
+        branchCleanup.task?.cancel()
     }
 }
 
 func calculateFindMergedBranches() {
-    let target = findMergedTargetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let prefix = findMergedPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+    let target = branchCleanup.targetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefix = branchCleanup.prefix.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !target.isEmpty else {
         feedbackCenter.warning("Target branch is required")
         return
     }
-    let discoveredRoots = findMergedBranchesRoots
+    let discoveredRoots = branchCleanup.roots
     let roots = Self.findMergedRootsContainingTarget(target, in: discoveredRoots)
     let generation = nextFindMergedGeneration()
     let startedAt = DispatchTime.now().uptimeNanoseconds
-    findMergedRunning = true
-    findMergedHasCalculated = false
-    findMergedSummary = nil
-    findMergedTask?.cancel()
+    branchCleanup.isRunning = true
+    branchCleanup.hasCalculated = false
+    branchCleanup.summary = nil
+    branchCleanup.task?.cancel()
     beginFeedbackOperation("Find merged branches")
     let task = Task.detached(priority: .userInitiated) {
         let scanResults = await scanBranchMergeRoots(roots, target: target, prefix: prefix)
@@ -1614,12 +1614,12 @@ func calculateFindMergedBranches() {
             isCancelled: wasCancelled
         )
         await MainActor.run {
-            guard self.findMergedGeneration == generation else { return }
-            self.findMergedTask = nil
-            self.findMergedBranchesRoots = rootsToApply
-            self.findMergedRunning = false
-            self.findMergedHasCalculated = true
-            self.findMergedSummary = summary
+            guard self.branchCleanup.generation == generation else { return }
+            self.branchCleanup.task = nil
+            self.branchCleanup.roots = rootsToApply
+            self.branchCleanup.isRunning = false
+            self.branchCleanup.hasCalculated = true
+            self.branchCleanup.summary = summary
             let reportID = UUID().uuidString
             let report = findMergedBranchesReportText(
                 summary: summary,
@@ -1638,7 +1638,7 @@ func calculateFindMergedBranches() {
                     createdAt: Date()
                 )
             )
-            self.findMergedReportID = reportID
+            self.branchCleanup.reportID = reportID
             let reportAction = self.findMergedReportAction(reportID: reportID)
             let notificationID = self.findMergedNotificationID(
                 targetBranch: summary.targetBranch,
@@ -1672,7 +1672,7 @@ func calculateFindMergedBranches() {
             }
         }
     }
-    findMergedTask = task
+    branchCleanup.task = task
 }
 
 func findMergedReportAction(reportID: String) -> FeedbackAction {
@@ -1703,24 +1703,24 @@ func findMergedNotificationID(targetBranch: String, prefix: String) -> String {
 }
 
 func presentFindMergedReport() {
-    if showFindMergedBranchesDialog {
+    if branchCleanup.showFindMergedDialog {
         // The report editor is attached to the project view rather than the
         // scan sheet. Dismiss the scan sheet first so SwiftUI does not reject
         // a second presentation while the first sheet is still mounted.
-        showFindMergedBranchesDialog = false
+        branchCleanup.showFindMergedDialog = false
         Task { @MainActor in
             await Task.yield()
-            self.showFindMergedReport = true
+            self.branchCleanup.showReport = true
         }
     } else {
-        showFindMergedReport = true
+        branchCleanup.showReport = true
     }
 }
 
 func openFindMergedReport() {
-    let target = findMergedTargetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let prefix = findMergedPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let summary = findMergedSummary,
+    let target = branchCleanup.targetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefix = branchCleanup.prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let summary = branchCleanup.summary,
           summary.targetBranch == target,
           summary.prefix == prefix else {
         feedbackCenter.warning("Run Find to calculate merged branches")
@@ -1728,10 +1728,10 @@ func openFindMergedReport() {
     }
     let report = findMergedBranchesReportText(
         summary: summary,
-        roots: findMergedBranchesRoots,
+        roots: branchCleanup.roots,
         projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
     )
-    let reportID = findMergedReportID ?? UUID().uuidString
+    let reportID = branchCleanup.reportID ?? UUID().uuidString
     if let projectPath {
         FindMergedReportStore.save(
             PersistedFindMergedReport(
@@ -1744,8 +1744,8 @@ func openFindMergedReport() {
             )
         )
     }
-    findMergedReportID = reportID
-    findMergedReportText = report
+    branchCleanup.reportID = reportID
+    branchCleanup.reportText = report
     presentFindMergedReport()
 }
 
@@ -1764,17 +1764,17 @@ func openFindMergedReport(reportID: String) {
     {
         return
     }
-    findMergedReportID = saved.id
-    findMergedTargetBranch = saved.targetBranch
-    findMergedPrefix = saved.prefix
-    findMergedReportText = saved.report
+    branchCleanup.reportID = saved.id
+    branchCleanup.targetBranch = saved.targetBranch
+    branchCleanup.prefix = saved.prefix
+    branchCleanup.reportText = saved.report
     presentFindMergedReport()
 }
 
 func copyFindMergedBranches() {
-    let target = findMergedTargetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let prefix = findMergedPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let summary = findMergedSummary,
+    let target = branchCleanup.targetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefix = branchCleanup.prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let summary = branchCleanup.summary,
           summary.targetBranch == target,
           summary.prefix == prefix else {
         feedbackCenter.warning("Run Find to calculate merged branches")
@@ -1782,7 +1782,7 @@ func copyFindMergedBranches() {
     }
     let report = findMergedBranchesReportText(
         summary: summary,
-        roots: findMergedBranchesRoots,
+        roots: branchCleanup.roots,
         projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
     )
     NSPasteboard.general.clearContents()

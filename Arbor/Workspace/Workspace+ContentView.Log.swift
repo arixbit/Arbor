@@ -339,10 +339,10 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
         compareRepositoryPath: compareRepositoryPath,
         compareWithWorkingTree: compareWithWorkingTree,
         compareFirstFilter: logList.viewMode == .compareBranches
-            ? branchCompareFirstFilter
+            ? branchComparison.firstFilter
             : nil,
         compareSecondFilter: logList.viewMode == .compareBranches
-            ? branchCompareSecondFilter
+            ? branchComparison.secondFilter
             : nil,
         selection: logSelectionState.selection,
         selectedIDs: logSelectionState.selectedIDs,
