@@ -40,6 +40,8 @@ struct RebasedCommitWorkspace: View {
     let operationFeedback: String?
     /// IDX-001 二进制文件路径集合（staging model 提供，diff 降级展示）。
     let binaryPaths: Set<String>
+    var lfsTrackedPaths: Set<String> = []
+    var lfsPointerPaths: Set<String> = []
     /// HEAD/index/worktree presence facts from the staging model.
     var stagingPresence: [String: StagingVersionPresence] = [:]
     /// Invalidates the preview when an external status/index refresh changes
@@ -811,6 +813,8 @@ struct RebasedCommitWorkspace: View {
                             selectedPath: previewPath,
                             onPartial: onPartial,
                             binaryPaths: binaryPaths,
+                            lfsTrackedPaths: lfsTrackedPaths,
+                            lfsPointerPaths: lfsPointerPaths,
                             stagingPresence: stagingPresence,
                             contextSelectedPaths: $contextSelectedPaths,
                             contextEligiblePaths: contextEligiblePaths,
@@ -1017,6 +1021,8 @@ struct RebasedCommitWorkspace: View {
             selectedPath: previewPath,
             onPartial: onPartial,
             binaryPaths: binaryPaths,
+            lfsTrackedPaths: lfsTrackedPaths,
+            lfsPointerPaths: lfsPointerPaths,
             stagingPresence: stagingPresence,
             contextSelectedPaths: $contextSelectedPaths,
             contextEligiblePaths: contextEligiblePaths,
@@ -1062,6 +1068,8 @@ struct RebasedCommitWorkspace: View {
             selectedPath: previewPath,
             onPartial: onPartial,
             binaryPaths: binaryPaths,
+            lfsTrackedPaths: lfsTrackedPaths,
+            lfsPointerPaths: lfsPointerPaths,
             stagingPresence: stagingPresence,
             contextSelectedPaths: $contextSelectedPaths,
             contextEligiblePaths: contextEligiblePaths,

@@ -43,7 +43,7 @@ pub struct LfsCapability {
 /// 一条被 LFS 跟踪的匹配模式，来自 `git lfs track` 的 listing。
 #[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
 pub struct LfsTrackedPattern {
-    /// 形如 `*.bin` 或 `assets/**`。
+    /// 形如 `*.bin`，或 `assets` 目录下任意深度（`assets/` 后接路径）。
     pub pattern: String,
     /// 定义该规则的属性文件（`.gitattributes`、`dir/.gitattributes` 等）。
     pub source: String,
@@ -394,6 +394,7 @@ fn git_dir_of(repository: &Repository) -> PathBuf {
     PathBuf::from(repository.git_dir())
 }
 
+#[uniffi::export]
 impl Repository {
     /// `git lfs version` 探测。
     pub fn lfs_capability(&self) -> LfsCapability {

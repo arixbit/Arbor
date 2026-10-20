@@ -3028,6 +3028,7 @@ func loadRepoData(includeComparisons: Bool = true) {
                 self.remoteBranches = remoteBranches
                 self.recentBranches = recentBranches; self.syncStatuses = syncStatuses
                 self.shelves = sh; self.deletedShelves = dsh; self.tags = ts
+                self.refreshLfsPathMarkers()
                 self.submodules = submodules
                 self.identityName = identity.name ?? ""
                 self.identityEmail = identity.email ?? ""

@@ -1671,6 +1671,7 @@ enum ArborVCSAction: String, CaseIterable, Hashable {
     case showOperations
     case showGitRoots
     case showGitConsole
+    case gitLfs
     case refresh
     case quickActions
     case fileCheckin
@@ -1693,7 +1694,7 @@ func isArborVCSActionEnabled(
         return context.hasRepository
     case .update:
         return context.hasRepository && !context.hasBackgroundVCSOperation
-    case .showLog, .showOperations, .showGitRoots, .showGitConsole, .showStagingArea, .showShelf, .showStash, .refresh,
+    case .showLog, .showOperations, .showGitRoots, .showGitConsole, .gitLfs, .showStagingArea, .showShelf, .showStash, .refresh,
          .branches, .stash, .unstash, .shelve, .applyPatch,
          .newTag, .configureRemotes, .worktrees:
         return context.hasRepository
@@ -3385,6 +3386,8 @@ struct ProjectCommands: Commands {
                 Divider()
                 Button("Configure Remotes…") { postVCS(.configureRemotes) }
                     .disabled(!actionEnabled(.configureRemotes))
+                Button("Git LFS…") { postVCS(.gitLfs) }
+                    .disabled(!actionEnabled(.gitLfs))
                 Button("Clone Git Repository…") {
                     NotificationCenter.default.post(name: .arborCloneProjectDialog, object: nil)
                 }

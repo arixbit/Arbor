@@ -2320,6 +2320,20 @@ struct ContentView: View {
     @State var revisionBrowserCommit: CommitInfo?
     @State var revisionBrowserPath: String?
     @State var showRevisionBrowser = false
+    // Git LFS 面板状态（能力探测 / 跟踪规则 / 文件列表 / hooks）
+    @State var showLfsPanel = false
+    @State var lfsCapability: LfsCapability?
+    @State var lfsPatterns: [LfsTrackedPattern] = []
+    @State var lfsFiles: [LfsFileEntry] = []
+    @State var lfsHooks: LfsHookState?
+    @State var lfsBusy = false
+    @State var lfsFeedback: String?
+    @State var lfsTrackInput = ""
+    @State var lfsRemoteName = ""
+    @State var lfsShowAllRevisions = false
+    @State var lfsSelectedPaths: Set<String> = []
+    @State var lfsTrackedPaths: Set<String> = []
+    @State var lfsPointerPaths: Set<String> = []
     @State var logDetailLoadTask: Task<Void, Never>?
     @State var reflogDetailLoadTask: Task<Void, Never>?
     @State var compareLoadTask: Task<Void, Never>?
@@ -3415,6 +3429,31 @@ struct ContentView: View {
         // 后半段修饰符链（拆分以降低单表达式类型检查复杂度）
         .overlay(alignment: .trailing) {
             conflictResolverOverlays
+        }
+        .sheet(isPresented: $showLfsPanel) {
+            LfsPanelView(
+                capability: lfsCapability,
+                patterns: lfsPatterns,
+                files: lfsFiles,
+                hooks: lfsHooks,
+                busy: lfsBusy,
+                feedback: lfsFeedback,
+                selectedPaths: $lfsSelectedPaths,
+                trackInput: $lfsTrackInput,
+                showAllRevisions: $lfsShowAllRevisions,
+                remoteName: $lfsRemoteName,
+                onRefresh: { reloadLfsState() },
+                onTrack: { lfsTrackCurrentInput() },
+                onUntrack: { lfsUntrack($0) },
+                onInstall: { lfsInstallHooks() },
+                onUninstall: { lfsUninstallHooks() },
+                onFetch: { lfsFetchObjects() },
+                onPull: { lfsPullObjects() },
+                onPush: { lfsPushObjects() },
+                onPrune: { lfsPruneObjects() },
+                onCheckout: { lfsCheckoutPointers() },
+                onDismiss: { showLfsPanel = false }
+            )
         }
         .sheet(isPresented: $showRevisionBrowser) {
             if let repo = logRepository, let commit = revisionBrowserCommit {
@@ -5423,6 +5462,8 @@ struct ContentView: View {
                 operationState: operationState,
                 operationFeedback: operationFeedback,
                 binaryPaths: stagingBinaryPaths,
+                lfsTrackedPaths: lfsTrackedPaths,
+                lfsPointerPaths: lfsPointerPaths,
                 stagingPresence: stagingPresenceByPath,
                 refreshToken: fileContentRefreshToken,
                 recentMessages: recentMessages,

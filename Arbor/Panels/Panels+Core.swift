@@ -600,6 +600,8 @@ struct RebasedChangeGroup: View {
     let selectedPath: String?
     let onPartial: (String) -> Void
     let binaryPaths: Set<String>
+    var lfsTrackedPaths: Set<String> = []
+    var lfsPointerPaths: Set<String> = []
     var stagingPresence: [String: StagingVersionPresence] = [:]
     @Binding var contextSelectedPaths: Set<String>
     let contextEligiblePaths: Set<String>
@@ -848,6 +850,18 @@ struct RebasedChangeGroup: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help("Renamed from \(oldPath)")
+            }
+            if lfsTrackedPaths.contains(entry.path) {
+                let isPointer = lfsPointerPaths.contains(entry.path)
+                Text(isPointer ? "LFS ↓" : "LFS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(isPointer ? Color.orange : Color.purple)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+                    .help(isPointer
+                          ? "Git LFS 文件：工作区仍是 pointer，内容尚未下载"
+                          : "Git LFS 文件：内容已在工作区")
             }
             if binaryPaths.contains(entry.path) {
                 Text("BIN")

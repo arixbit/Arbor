@@ -707,6 +707,8 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         toolWindowMode = .operations
         operationsViewMode = .console
         toolWindowExpanded = true
+    case .gitLfs:
+        presentLfsPanel()
     case .refresh:
         refreshAll()
     }
