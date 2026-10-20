@@ -50,6 +50,7 @@ targets:
       - path: BitbucketClient.swift
       - path: GitHubOAuthFlow.swift
       - path: DiagnosticsLogger.swift
+      - path: Settings
       - path: AppLanguage.swift
       - path: AboutView.swift
       - path: AppIconController.swift
@@ -57,7 +58,9 @@ targets:
       - path: ResizableWorkspacePanels.swift
       - path: UnifiedDiffView.swift
       - path: FeedbackCenter.swift
+      - path: Feedback
       - path: RepositoryIndexRevisionMonitor.swift
+      - path: Monitoring
       - path: HostingViews.swift
       - path: HostingIntegration.swift
       - path: Localizable.xcstrings
