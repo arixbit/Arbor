@@ -114,15 +114,17 @@ extension ContentView {
 
     func lfsFetchObjects() {
         let remote = lfsRemote
+        let paths = Array(lfsSelectedPaths)
         runLfsAction("Fetch LFS objects") { repo, handle in
-            try repo.lfsFetch(remote: remote, allRevisions: false, cancel: handle)
+            try repo.lfsFetch(remote: remote, allRevisions: false, paths: paths, cancel: handle)
         }
     }
 
     func lfsPullObjects() {
         let remote = lfsRemote
+        let paths = Array(lfsSelectedPaths)
         runLfsAction("Pull LFS objects") { repo, handle in
-            try repo.lfsPull(remote: remote, cancel: handle)
+            try repo.lfsPull(remote: remote, paths: paths, cancel: handle)
         }
     }
 

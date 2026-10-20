@@ -469,16 +469,21 @@ impl Repository {
     }
 
     /// 下载当前 revision 需要的 LFS 对象（不更新工作区）。
+    /// `paths` 非空时只下载这些路径（`--include`）。
     pub fn lfs_fetch(
         &self,
         remote: Option<String>,
         all_revisions: bool,
+        paths: Vec<String>,
         cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
     ) -> Result<LfsCommandResult, EngineError> {
         let workdir = workdir_of(self)?;
         let mut args = vec!["fetch".to_string()];
         if all_revisions {
             args.push("--all".to_string());
+        }
+        for path in paths.iter().filter(|path| !path.trim().is_empty()) {
+            args.push(format!("--include={path}"));
         }
         if let Some(remote) = remote.filter(|value| !value.trim().is_empty()) {
             args.push(remote);
@@ -487,13 +492,18 @@ impl Repository {
     }
 
     /// 下载并检出 LFS 对象（`git lfs pull`）。
+    /// `paths` 非空时只处理这些路径（`--include`），用于「下载这个文件」。
     pub fn lfs_pull(
         &self,
         remote: Option<String>,
+        paths: Vec<String>,
         cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
     ) -> Result<LfsCommandResult, EngineError> {
         let workdir = workdir_of(self)?;
         let mut args = vec!["pull".to_string()];
+        for path in paths.iter().filter(|path| !path.trim().is_empty()) {
+            args.push(format!("--include={path}"));
+        }
         if let Some(remote) = remote.filter(|value| !value.trim().is_empty()) {
             args.push(remote);
         }

@@ -137,6 +137,10 @@ struct FileContentView: View {
     @State private var loadGeneration = 0
     @State private var blameGeneration = 0
     @State private var appliedBlameRequestID = 0
+    /// 工作区文件是未下载的 Git LFS pointer 时为 true，用于横幅与一键下载。
+    @State private var lfsPointer = false
+    @State private var lfsDownloading = false
+    @State private var lfsError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -241,6 +245,13 @@ struct FileContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Design.Colors.canvas)
+        .overlay(alignment: .top) {
+            if version == .local, lfsPointer {
+                lfsPointerBanner
+                    .padding(.horizontal, Design.Spacing.md)
+                    .padding(.top, Design.Spacing.sm)
+            }
+        }
         .onAppear {
             load()
             applyBlameRequestIfNeeded()
@@ -249,6 +260,51 @@ struct FileContentView: View {
         .onChange(of: version) { _, _ in load() }
         .onChange(of: refreshToken) { _, _ in load() }
         .onChange(of: blameRequestID) { _, _ in applyBlameRequestIfNeeded() }
+    }
+
+    /// LFS pointer 横幅：指针文件当作文本看没有意义，直接给下载入口。
+    private var lfsPointerBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "icloud.and.arrow.down")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Git LFS pointer（内容未下载）")
+                    .font(.callout.weight(.semibold))
+                Text(lfsError ?? "工作区里只有 pointer 文本；下载后即可按真实内容查看与 diff。")
+                    .font(.caption)
+                    .foregroundStyle(lfsError == nil ? Color.secondary : Color.red)
+            }
+            Spacer()
+            if lfsDownloading {
+                ProgressView().controlSize(.small)
+            }
+            Button("Download") { downloadLfsContent() }
+                .disabled(lfsDownloading || path == nil)
+        }
+        .padding(10)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.orange.opacity(0.4)))
+    }
+
+    private func downloadLfsContent() {
+        guard let repo, let path else { return }
+        lfsDownloading = true
+        lfsError = nil
+        let handle = GitCancelHandle()
+        Task.detached(priority: .userInitiated) {
+            do {
+                _ = try repo.lfsPull(remote: nil, paths: [path], cancel: handle)
+                await MainActor.run {
+                    lfsDownloading = false
+                    load()
+                }
+            } catch {
+                await MainActor.run {
+                    lfsDownloading = false
+                    lfsError = "\(error)"
+                }
+            }
+        }
     }
 
     private func applyBlameRequestIfNeeded() {
@@ -295,6 +351,9 @@ struct FileContentView: View {
                 let diff = (!result.binary && !result.truncated)
                     ? try? repo.diffFile(path: path, mode: diffMode, ignoreWhitespace: false)
                     : nil
+                let pointer = requestedVersion == .local
+                    ? ((try? repo.lfsPathStates(paths: [path]))?.first?.pointer ?? false)
+                    : false
                 let lineCount = max(1, result.text.components(separatedBy: "\n").count - (result.text.hasSuffix("\n") ? 1 : 0))
                 await MainActor.run {
                     guard isCurrentFileContentRequest(
@@ -309,6 +368,8 @@ struct FileContentView: View {
                     lineChanges = diff.map {
                         codeLineChanges(for: $0, lineCount: lineCount)
                     } ?? [:]
+                    lfsPointer = pointer
+                    lfsError = nil
                     loading = false
                 }
             } catch {

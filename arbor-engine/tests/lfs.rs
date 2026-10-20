@@ -189,7 +189,7 @@ fn push_pull_round_trip_through_local_remote() {
 
     let cancel = GitCancelHandle::new();
     let pulled = cloned
-        .lfs_pull(Some("origin".into()), Arc::clone(&cancel))
+        .lfs_pull(Some("origin".into()), Vec::new(), Arc::clone(&cancel))
         .unwrap();
     // 克隆出来的仓库没有 filter 配置，pull 必须先补一次 install --local，
     // 否则 git-lfs 会静默跳过检出。
@@ -215,8 +215,57 @@ fn fetch_is_cancellable_and_reports_result() {
     let cancel = GitCancelHandle::new();
     let result = repo
         .open()
-        .lfs_fetch(None, false, Arc::clone(&cancel))
+        .lfs_fetch(None, false, Vec::new(), Arc::clone(&cancel))
         .unwrap_or_else(|error| panic!("fetch failed: {error}"));
     // 没有 remote 时 git-lfs 仍然返回成功（本地对象已存在），结果可以为空。
     let _ = result.output;
+}
+
+#[test]
+fn pull_single_path_materialises_only_that_file() {
+    let Some(repo) = lfs_repo() else { return };
+
+    let origin_dir = tempfile::tempdir().unwrap();
+    let origin = origin_dir.path().join("origin.git");
+    common::git(
+        origin_dir.path(),
+        &["init", "--bare", "-q", origin.to_str().unwrap()],
+    );
+    let origin_url = origin.to_string_lossy().into_owned();
+    repo.git(&["remote", "add", "origin", &origin_url]);
+
+    std::fs::write(repo.path.join("one.bin"), vec![1u8; 2048]).unwrap();
+    std::fs::write(repo.path.join("two.bin"), vec![2u8; 2048]).unwrap();
+    repo.git(&["add", "one.bin", "two.bin"]);
+    repo.git(&["commit", "-qm", "two lfs files"]);
+    repo.git(&["push", "-q", "-u", "origin", "main"]);
+    let cancel = GitCancelHandle::new();
+    repo.open()
+        .lfs_push(Some("origin".into()), true, Arc::clone(&cancel))
+        .unwrap();
+
+    let clone_dir = tempfile::tempdir().unwrap();
+    let clone_path = clone_dir.path().join("clone");
+    common::git(
+        clone_dir.path(),
+        &["clone", "-q", &origin_url, clone_path.to_str().unwrap()],
+    );
+    let cloned = arbor_engine::open_repository(clone_path.to_string_lossy().into_owned()).unwrap();
+
+    let cancel = GitCancelHandle::new();
+    cloned
+        .lfs_pull(
+            Some("origin".into()),
+            vec!["one.bin".to_string()],
+            Arc::clone(&cancel),
+        )
+        .unwrap();
+
+    let states = cloned
+        .lfs_path_states(vec!["one.bin".to_string(), "two.bin".to_string()])
+        .unwrap();
+    let one = states.iter().find(|item| item.path == "one.bin").unwrap();
+    let two = states.iter().find(|item| item.path == "two.bin").unwrap();
+    assert!(!one.pointer, "selected path must be materialised");
+    assert!(two.pointer, "unselected path must stay a pointer");
 }
