@@ -565,9 +565,9 @@ func openProjectPath(_ projectPath: String) {
     reflogEntries = []
     reflogSelection = nil
     reflogSelectedIDs = []
-    stashPreviewStashID = nil
-    stashPreviewText = nil
-    showStashPreview = false
+    stashUI.previewStashID = nil
+    stashUI.previewText = nil
+    stashUI.showPreview = false
     shelfPreviewName = nil
     shelfPreviewText = nil
     showShelfPreview = false
@@ -942,9 +942,9 @@ func resetProjectState() {
     commitPreviewPath = nil
     commitPreviewVisible = false
     logSelectedIDs = []
-    stashPreviewStashID = nil
-    stashPreviewText = nil
-    showStashPreview = false
+    stashUI.previewStashID = nil
+    stashUI.previewText = nil
+    stashUI.showPreview = false
     shelfPreviewName = nil
     shelfPreviewText = nil
     showShelfPreview = false

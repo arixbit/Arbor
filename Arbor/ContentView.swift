@@ -4,6 +4,9 @@ import AppKit
 
 struct ContentView: View {
     @Environment(\.openWindow) var openWindow
+
+    /// Stash / Unstash 工作页状态（对话框、预览、请求身份）。
+    @StateObject var stashUI = StashWorkspaceState()
     let externalLogWindow: Bool
     let initialExternalLogRootPaths: Set<String>
     let externalLogProviderSession: ExternalLogProviderSession?
@@ -871,10 +874,7 @@ struct ContentView: View {
     @State var branches: [BranchInfo] = []
     @State var branchComparisons: [String: BranchCompare] = [:]
     @State var stashMessage: String = ""
-    @State var stashKeepIndex = false
     @State var stashRootPath: String?
-    @State var stashCurrentBranch = ""
-    @State var stashRootLoading = false
     @State var shelveName: String = ""
     @State var shelves: [ShelveInfo] = []
     @State var deletedShelves: [ShelveInfo] = []
@@ -892,8 +892,6 @@ struct ContentView: View {
     @State var stashes: [StashInfo] = []
     @State var unstashRootPath: String?
     @State var unstashStashes: [StashInfo] = []
-    @State var unstashCurrentBranch = ""
-    @State var unstashRootLoading = false
     // 远程
     @State var remotes: [RemoteInfo] = []
     @State var isShallowRepository = false
@@ -982,10 +980,8 @@ struct ContentView: View {
     @State var stashDiffText: String?
     @State var stashDiffStashID: String?
     @State var stashDiffRootPath: String?
-    @State var showStashDiff = false
     @State var stashPreviewStashID: String?
     @State var stashPreviewText: String?
-    @State var showStashPreview = false
     @State var shelfPreviewName: String?
     @State var shelfPreviewIsDeleted = false
     @State var shelfPreviewText: String?
@@ -1103,14 +1099,9 @@ struct ContentView: View {
     @State var pullDialogSnapshots: [GitRootBranchSnapshot] = []
     @State var pullDialogRebase = false
     @State var pullDialogGeneration = 0
-    @State var showStashDialog = false
-    @State var showUnstashDialog = false
-    @State var showUnstashAsDialog = false
     @State var unstashAsStashID: String?
-    @State var showStashFilesDialog = false
     @State var uncommitRequest: RebasedUncommitRequest?
     @State var stashFilesInitialPaths: Set<String> = []
-    @State var stashFilesMessage = ""
     @State var showNewTagDialog = false
     @State var showRemoteTagsDialog = false
     @State var showMultiRootRemoteTagsDialog = false
@@ -2866,11 +2857,11 @@ struct ContentView: View {
                 onCancel: { showGitSSHSettings = false }
             )
         }
-        .sheet(isPresented: $showStashDiff) {
+        .sheet(isPresented: $stashUI.showDiff) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Stash Diff").font(.title3.weight(.semibold))
                 ScrollView {
-                    Text(stashDiffText ?? "")
+                    Text(stashUI.diffText ?? "")
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -2879,10 +2870,10 @@ struct ContentView: View {
                 HStack {
                     Spacer()
                     Button("Done") {
-                        showStashDiff = false
-                        stashDiffText = nil
-                        stashDiffStashID = nil
-                        stashDiffRootPath = nil
+                        stashUI.showDiff = false
+                        stashUI.diffText = nil
+                        stashUI.diffStashID = nil
+                        stashUI.diffRootPath = nil
                     }
                         .keyboardShortcut(.defaultAction)
                 }
@@ -3231,29 +3222,29 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $showStashDialog) {
+        .sheet(isPresented: $stashUI.showCreateDialog) {
             RebasedStashDialog(
                 roots: stashRootOptions,
-                selectedRootPath: $stashRootPath,
-                currentBranch: $stashCurrentBranch,
-                isLoadingRoot: $stashRootLoading,
-                message: $stashMessage,
-                keepIndex: $stashKeepIndex,
+                selectedRootPath: $stashUI.rootPath,
+                currentBranch: $stashUI.currentBranch,
+                isLoadingRoot: $stashUI.rootLoading,
+                message: $stashUI.message,
+                keepIndex: $stashUI.keepIndex,
                 onSelectRoot: selectStashRoot,
                 onSave: {
-                    showStashDialog = false
-                    stashSave(rootPath: stashRootPath)
+                    stashUI.showCreateDialog = false
+                    stashSave(rootPath: stashUI.rootPath)
                 },
-                onCancel: { showStashDialog = false }
+                onCancel: { stashUI.showCreateDialog = false }
             )
         }
-        .sheet(isPresented: $showUnstashDialog) {
+        .sheet(isPresented: $stashUI.showUnstashDialog) {
             RebasedUnstashDialog(
                 roots: multiRoots,
-                selectedRootPath: unstashRootPath,
-                isLoadingRoot: unstashRootLoading,
-                stashes: unstashStashes,
-                currentBranch: unstashCurrentBranch,
+                selectedRootPath: stashUI.unstashRootPath,
+                isLoadingRoot: stashUI.unstashRootLoading,
+                stashes: stashUI.unstashStashes,
+                currentBranch: stashUI.unstashCurrentBranch,
                 onSelectRoot: selectUnstashRoot,
                 validateBranchName: { rootPath, value in
                     guard let rootRepo = try? openRepository(path: rootPath) else { return nil }
@@ -3265,7 +3256,7 @@ struct ContentView: View {
                     }
                 },
                 onApply: { rootPath, stashID, restoreIndex in
-                    showUnstashDialog = false
+                    stashUI.showUnstashDialog = false
                     if useRootScopedUnstashActions {
                         applyStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
                     } else {
@@ -3273,7 +3264,7 @@ struct ContentView: View {
                     }
                 },
                 onPop: { rootPath, stashID, restoreIndex in
-                    showUnstashDialog = false
+                    stashUI.showUnstashDialog = false
                     if useRootScopedUnstashActions {
                         popStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
                     } else {
@@ -3281,7 +3272,7 @@ struct ContentView: View {
                     }
                 },
                 onStashBranch: { rootPath, stashID, branch in
-                    showUnstashDialog = false
+                    stashUI.showUnstashDialog = false
                     if useRootScopedUnstashActions {
                         stashBranchInRoot(rootPath: rootPath, stashID: stashID, branch: branch)
                     } else {
@@ -3309,11 +3300,11 @@ struct ContentView: View {
                         stashClearAll()
                     }
                 },
-                onCancel: { showUnstashDialog = false }
+                onCancel: { stashUI.showUnstashDialog = false }
             )
         }
-        .sheet(isPresented: $showUnstashAsDialog) {
-            if let stash = stashes.first(where: { $0.id == unstashAsStashID }) {
+        .sheet(isPresented: $stashUI.showUnstashAsDialog) {
+            if let stash = stashes.first(where: { $0.id == stashUI.unstashAsStashID }) {
                 RebasedUnstashAsDialog(
                     stash: stash,
                     currentBranch: currentBranchName,
@@ -3327,47 +3318,47 @@ struct ContentView: View {
                         }
                     },
                     onApply: { restoreIndex in
-                        showUnstashAsDialog = false
-                        unstashAsStashID = nil
+                        stashUI.showUnstashAsDialog = false
+                        stashUI.unstashAsStashID = nil
                         stashApply(stashID: stash.id, restoreIndex: restoreIndex)
                     },
                     onPop: { restoreIndex in
-                        showUnstashAsDialog = false
-                        unstashAsStashID = nil
+                        stashUI.showUnstashAsDialog = false
+                        stashUI.unstashAsStashID = nil
                         stashPop(stashID: stash.id, restoreIndex: restoreIndex)
                     },
                     onStashBranch: { branch in
-                        showUnstashAsDialog = false
-                        unstashAsStashID = nil
+                        stashUI.showUnstashAsDialog = false
+                        stashUI.unstashAsStashID = nil
                         stashBranch(stashID: stash.id, branch: branch)
                     },
                     onCancel: {
-                        showUnstashAsDialog = false
-                        unstashAsStashID = nil
+                        stashUI.showUnstashAsDialog = false
+                        stashUI.unstashAsStashID = nil
                     }
                 )
             } else {
                 Color.clear
                     .onAppear {
-                        showUnstashAsDialog = false
-                        unstashAsStashID = nil
+                        stashUI.showUnstashAsDialog = false
+                        stashUI.unstashAsStashID = nil
                     }
             }
         }
-        .sheet(isPresented: $showStashFilesDialog) {
+        .sheet(isPresented: $stashUI.showFilesDialog) {
             RebasedStashFilesDialog(
-                message: $stashFilesMessage,
+                message: $stashUI.filesMessage,
                 entries: entries.filter {
                     $0.unstaged != .ignored &&
                     $0.unstaged != .conflicted &&
                     $0.staged != .conflicted
                 },
-                initialPaths: stashFilesInitialPaths,
+                initialPaths: stashUI.filesInitialPaths,
                 onStash: { paths in
-                    showStashFilesDialog = false
+                    stashUI.showFilesDialog = false
                     stashSelectedFiles(paths)
                 },
-                onCancel: { showStashFilesDialog = false }
+                onCancel: { stashUI.showFilesDialog = false }
             )
         }
         .sheet(isPresented: $showCloneDialog) {
@@ -3816,9 +3807,9 @@ struct ContentView: View {
                 onStashBranch: stashBranch(stashID:),
                 onUnstashAs: presentUnstashAsDialog,
                 onStashDiffPreview: showStashPreviewFor(stashID:),
-                stashDiffText: stashPreviewText,
-                stashPreviewStashID: $stashPreviewStashID,
-                isStashPreviewVisible: $showStashPreview,
+                stashDiffText: stashUI.previewText,
+                stashPreviewStashID: $stashUI.previewStashID,
+                isStashPreviewVisible: $stashUI.showPreview,
                 onStashClear: stashClearAll,
                 onShelveDiffPreview: showShelvePreviewFor,
                 shelfDiffText: shelfPreviewText,

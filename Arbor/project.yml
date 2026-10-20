@@ -31,6 +31,7 @@ targets:
       - path: Lfs
       - path: Hooks
       - path: MainWindow
+      - path: Stash
       - path: LogGraphView.swift
       - path: PushDialogView.swift
       - path: PullDialogView.swift

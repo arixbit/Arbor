@@ -12,9 +12,9 @@ func showShelvePreviewFor(_ name: String) {
     let isDeleted = !activeShelves.contains(where: { $0.name == name })
         && activeDeletedShelves.contains(where: { $0.name == name })
     guard activeShelves.contains(where: { $0.name == name }) || isDeleted else { return }
-    stashPreviewStashID = nil
-    stashPreviewText = nil
-    showStashPreview = false
+    stashUI.previewStashID = nil
+    stashUI.previewText = nil
+    stashUI.showPreview = false
     shelfPreviewName = name
     shelfPreviewRootPath = rootPath
     shelfPreviewIsDeleted = isDeleted

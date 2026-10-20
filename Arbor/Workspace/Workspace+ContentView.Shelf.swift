@@ -2039,9 +2039,7 @@ func showSavedChanges(_ request: ArborVCSActionRequest) {
                 let diff = try savedChangesRepo.shelveDiff(name: savedChangesID)
                 await MainActor.run {
                     self.shelves = shelves
-                    self.stashPreviewStashID = nil
-                    self.stashPreviewText = nil
-                    self.showStashPreview = false
+                    self.stashUI.clearPreview()
                     self.shelfPreviewName = savedChangesID
                     self.shelfPreviewIsDeleted = false
                     self.shelfPreviewText = diff
@@ -2064,9 +2062,9 @@ func showSavedChanges(_ request: ArborVCSActionRequest) {
                     self.shelfPreviewName = nil
                     self.shelfPreviewText = nil
                     self.showShelfPreview = false
-                    self.stashPreviewStashID = stashes[index].id
-                    self.stashPreviewText = diff
-                    self.showStashPreview = true
+                    self.stashUI.previewStashID = stashes[index].id
+                    self.stashUI.previewText = diff
+                    self.stashUI.showPreview = true
                 }
             }
         } catch {

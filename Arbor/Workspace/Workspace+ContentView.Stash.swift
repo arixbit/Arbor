@@ -146,11 +146,11 @@ func recoverMultiRootUpdateStashesAfterFailure(_ results: [RootOperationResult])
 }
 
 func clearStashDiffIfMatching(rootPath: String, stashID: String) {
-    guard stashDiffRootPath == rootPath, stashDiffStashID == stashID else { return }
-    showStashDiff = false
-    stashDiffText = nil
-    stashDiffStashID = nil
-    stashDiffRootPath = nil
+    guard stashUI.diffRootPath == rootPath, stashUI.diffStashID == stashID else { return }
+    stashUI.showDiff = false
+    stashUI.diffText = nil
+    stashUI.diffStashID = nil
+    stashUI.diffRootPath = nil
 }
 
 func applyStashInRoot(rootPath: String, stashID: String, restoreIndex: Bool) {
@@ -449,10 +449,10 @@ func stashBranchInRoot(rootPath: String, stashID: String, branch: String) {
 }
 
 func showStashDiffInRoot(rootPath: String, stashID: String) {
-    stashDiffStashID = stashID
-    stashDiffRootPath = rootPath
-    stashDiffText = nil
-    showStashDiff = false
+    stashUI.diffStashID = stashID
+    stashUI.diffRootPath = rootPath
+    stashUI.diffText = nil
+    stashUI.showDiff = false
     beginFeedbackOperation("Load stash diff")
     Task.detached(priority: .userInitiated) {
         do {
@@ -460,16 +460,16 @@ func showStashDiffInRoot(rootPath: String, stashID: String) {
             let currentIndex = try currentStashIndex(repo: rootRepo, stashID: stashID)
             let diff = try rootRepo.stashDiff(index: currentIndex)
             await MainActor.run {
-                guard self.stashDiffStashID == stashID,
-                      self.stashDiffRootPath == rootPath else { return }
-                self.stashDiffText = diff
-                self.showStashDiff = true
+                guard self.stashUI.diffStashID == stashID,
+                      self.stashUI.diffRootPath == rootPath else { return }
+                self.stashUI.diffText = diff
+                self.stashUI.showDiff = true
                 self.feedbackCenter.success("Stash diff loaded", detail: "\(rootPath) · \(String(stashID.prefix(7)))")
             }
         } catch {
             await MainActor.run {
-                guard self.stashDiffStashID == stashID,
-                      self.stashDiffRootPath == rootPath else { return }
+                guard self.stashUI.diffStashID == stashID,
+                      self.stashUI.diffRootPath == rootPath else { return }
                 self.feedbackCenter.error("Load stash diff failed", detail: "\(rootPath): \(errorMessage(error))")
             }
         }
@@ -500,12 +500,7 @@ func clearStashesInRootConfirmed(rootPath: String) {
             await MainActor.run {
                 self.loadMultiRoots()
                 self.refreshUnstashRootIfVisible(rootPath)
-                if self.stashDiffRootPath == rootPath {
-                    self.showStashDiff = false
-                    self.stashDiffText = nil
-                    self.stashDiffStashID = nil
-                    self.stashDiffRootPath = nil
-                }
+                self.stashUI.clearDiff(rootPath: rootPath)
                 self.feedbackCenter.success("Stashes cleared", detail: rootPath)
             }
         } catch {
@@ -538,13 +533,13 @@ func stashClearAll() {
             let ss = try repo.stashList()
             await MainActor.run {
                 self.stashes = ss
-                self.showStashDiff = false
-                self.stashDiffText = nil
-                self.stashDiffStashID = nil
-                self.stashDiffRootPath = nil
-                self.stashPreviewStashID = nil
-                self.stashPreviewText = nil
-                self.showStashPreview = false
+                self.stashUI.showDiff = false
+                self.stashUI.diffText = nil
+                self.stashUI.diffStashID = nil
+                self.stashUI.diffRootPath = nil
+                self.stashUI.previewStashID = nil
+                self.stashUI.previewText = nil
+                self.stashUI.showPreview = false
                 self.feedbackCenter.success("Stashes cleared")
             }
         } catch {
@@ -557,12 +552,8 @@ func stashClearAll() {
 
 func presentStashDialog() {
     guard let rootPath = repo?.workdir() ?? multiRoots.first?.path else { return }
-    stashRootPath = rootPath
-    stashCurrentBranch = currentBranchName
-    stashRootLoading = false
-    stashMessage = ""
-    stashKeepIndex = false
-    showStashDialog = true
+    // 对话框的初始状态收敛在 StashWorkspaceState，不再逐字段重置。
+    stashUI.beginCreate(rootPath: rootPath, currentBranch: currentBranchName)
     selectStashRoot(rootPath)
     loadMultiRoots()
 }
@@ -571,23 +562,23 @@ func presentStashDialog() {
 /// dialog. The stash operation itself opens the same selected root again so a
 /// secondary root can never fall back to the primary repository.
 func selectStashRoot(_ rootPath: String) {
-    stashRootPath = rootPath
-    stashCurrentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
-    stashRootLoading = true
+    stashUI.rootPath = rootPath
+    stashUI.currentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
+    stashUI.rootLoading = true
     Task.detached(priority: .userInitiated) {
         do {
             let rootRepo = try openRepository(path: rootPath)
             let branch = (try? rootRepo.branchList())?.first(where: { $0.isCurrent })?.name ?? ""
             await MainActor.run {
-                guard self.showStashDialog, self.stashRootPath == rootPath else { return }
-                self.stashCurrentBranch = branch
-                self.stashRootLoading = false
+                guard self.stashUI.showCreateDialog, self.stashUI.rootPath == rootPath else { return }
+                self.stashUI.currentBranch = branch
+                self.stashUI.rootLoading = false
             }
         } catch {
             await MainActor.run {
-                guard self.showStashDialog, self.stashRootPath == rootPath else { return }
-                self.stashCurrentBranch = ""
-                self.stashRootLoading = false
+                guard self.stashUI.showCreateDialog, self.stashUI.rootPath == rootPath else { return }
+                self.stashUI.currentBranch = ""
+                self.stashUI.rootLoading = false
                 self.feedbackCenter.error(
                     "Load Git root failed",
                     detail: errorMessage(error),
@@ -602,8 +593,8 @@ func stashSave(rootPath requestedRootPath: String? = nil) {
     let targetRootPath = requestedRootPath ?? repo?.workdir()
     guard let targetRootPath, !targetRootPath.isEmpty else { return }
     beginFeedbackOperation("Stash changes")
-    let msg = stashMessage.trimmingCharacters(in: .whitespaces)
-    let keepIndex = stashKeepIndex
+    let msg = stashUI.message.trimmingCharacters(in: .whitespaces)
+    let keepIndex = stashUI.keepIndex
     let currentRootPath = repo?.workdir().map(canonicalExternalLogPath)
     let targetRootKey = canonicalExternalLogPath(targetRootPath)
     Task.detached(priority: .userInitiated) {
@@ -621,14 +612,14 @@ func stashSave(rootPath requestedRootPath: String? = nil) {
                 if currentRootPath == targetRootKey {
                     self.stashes = ss
                     self.entries = st
-                    self.stashPreviewStashID = nil
-                    self.stashPreviewText = nil
-                    self.showStashPreview = false
+                    self.stashUI.previewStashID = nil
+                    self.stashUI.previewText = nil
+                    self.stashUI.showPreview = false
                     self.stagingModel = staging
                     self.lastIndexRevision = staging?.indexRevision
                 }
-                self.stashMessage = ""
-                self.stashKeepIndex = false
+                self.stashUI.message = ""
+                self.stashUI.keepIndex = false
                 self.feedbackCenter.success("Changes stashed")
                 if currentRootPath == targetRootKey {
                     self.loadRepoData(includeComparisons: false)
@@ -650,9 +641,9 @@ func stashSave(rootPath requestedRootPath: String? = nil) {
 /// 打开 IntelliJ Git 风格的 Stash Files 对话框。右键触发的路径默认选中，
 /// 用户可以在提交前继续扩大或缩小选区。
 func showStashFiles(paths: [String]) {
-    stashFilesInitialPaths = Set(paths)
-    stashFilesMessage = ""
-    showStashFilesDialog = true
+    stashUI.filesInitialPaths = Set(paths)
+    stashUI.filesMessage = ""
+    stashUI.showFilesDialog = true
 }
 
 /// Open the single-stash variant of IntelliJ's Git.Stash.UnstashAs action.
@@ -660,8 +651,8 @@ func showStashFiles(paths: [String]) {
 /// can reorder the stash list while the dialog is open.
 func presentUnstashAsDialog(stashID: String) {
     guard stashes.contains(where: { $0.id == stashID }) else { return }
-    unstashAsStashID = stashID
-    showUnstashAsDialog = true
+    stashUI.unstashAsStashID = stashID
+    stashUI.showUnstashAsDialog = true
 }
 
 /// Open the repository-level Unstash dialog with the currently active root.
@@ -670,11 +661,7 @@ func presentUnstashAsDialog(stashID: String) {
 /// so the dialog is immediately useful while discovery is in flight.
 func presentUnstashDialog() {
     guard let rootPath = repo?.workdir() else { return }
-    unstashRootPath = rootPath
-    unstashStashes = stashes
-    unstashCurrentBranch = currentBranchName
-    unstashRootLoading = false
-    showUnstashDialog = true
+    stashUI.beginUnstash(rootPath: rootPath, stashes: stashes, currentBranch: currentBranchName)
     loadMultiRoots()
 }
 
@@ -682,26 +669,26 @@ func presentUnstashDialog() {
 /// chooser. The generation guard is the selected path itself: a slower root
 /// cannot overwrite a newer selection after the user switches repositories.
 func selectUnstashRoot(_ rootPath: String) {
-    unstashRootPath = rootPath
-    unstashStashes = []
-    unstashCurrentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
-    unstashRootLoading = true
+    stashUI.unstashRootPath = rootPath
+    stashUI.unstashStashes = []
+    stashUI.unstashCurrentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
+    stashUI.unstashRootLoading = true
     Task.detached(priority: .userInitiated) {
         do {
             let rootRepo = try openRepository(path: rootPath)
             let loadedStashes = try rootRepo.stashList()
             let loadedBranch = (try? rootRepo.branchList())?.first(where: { $0.isCurrent })?.name ?? ""
             await MainActor.run {
-                guard self.showUnstashDialog, self.unstashRootPath == rootPath else { return }
-                self.unstashStashes = loadedStashes
-                self.unstashCurrentBranch = loadedBranch
-                self.unstashRootLoading = false
+                guard self.stashUI.showUnstashDialog, self.stashUI.unstashRootPath == rootPath else { return }
+                self.stashUI.unstashStashes = loadedStashes
+                self.stashUI.unstashCurrentBranch = loadedBranch
+                self.stashUI.unstashRootLoading = false
             }
         } catch {
             await MainActor.run {
-                guard self.showUnstashDialog, self.unstashRootPath == rootPath else { return }
-                self.unstashStashes = []
-                self.unstashRootLoading = false
+                guard self.stashUI.showUnstashDialog, self.stashUI.unstashRootPath == rootPath else { return }
+                self.stashUI.unstashStashes = []
+                self.stashUI.unstashRootLoading = false
                 self.feedbackCenter.error(
                     "Load stashes failed",
                     detail: "(rootPath): (errorMessage(error))",
@@ -713,14 +700,14 @@ func selectUnstashRoot(_ rootPath: String) {
 }
 
 func refreshUnstashRootIfVisible(_ rootPath: String) {
-    guard showUnstashDialog, unstashRootPath == rootPath else { return }
+    guard stashUI.showUnstashDialog, stashUI.unstashRootPath == rootPath else { return }
     selectUnstashRoot(rootPath)
 }
 
 func stashSelectedFiles(_ paths: [String]) {
     guard let repo, !paths.isEmpty else { return }
     beginFeedbackOperation("Stash selected files")
-    let message = stashFilesMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    let message = stashUI.filesMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     Task.detached(priority: .userInitiated) {
         do {
             _ = try repo.stashSavePaths(
@@ -736,8 +723,8 @@ func stashSelectedFiles(_ paths: [String]) {
                 self.entries = st
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
-                self.stashFilesMessage = ""
-                self.stashFilesInitialPaths = []
+                self.stashUI.filesMessage = ""
+                self.stashUI.filesInitialPaths = []
                 self.feedbackCenter.success("Selected files stashed")
                 self.loadRepoData(includeComparisons: false)
             }
@@ -799,9 +786,9 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
                 // Pop removes the selected stash. Close the split preview
                 // rather than leaving it bound to the next row at the same
                 // numeric index.
-                self.stashPreviewStashID = nil
-                self.stashPreviewText = nil
-                self.showStashPreview = false
+                self.stashUI.previewStashID = nil
+                self.stashUI.previewText = nil
+                self.stashUI.showPreview = false
                 self.stagingModel = staging
                 self.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Stash popped")
@@ -907,9 +894,9 @@ func stashDrop(stashID: String) {
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
                 // Dropping any row can shift every following stash index;
                 // close the preview instead of showing another stash's patch.
-                self.stashPreviewStashID = nil
-                self.stashPreviewText = nil
-                self.showStashPreview = false
+                self.stashUI.previewStashID = nil
+                self.stashUI.previewText = nil
+                self.stashUI.showPreview = false
                 self.feedbackCenter.success("Stash dropped")
                 self.loadRepoData(includeComparisons: false)
             }
@@ -960,9 +947,9 @@ func stashBranch(stashID: String, branch: String) {
             await MainActor.run {
                 self.stashes = ss
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
-                self.stashPreviewStashID = nil
-                self.stashPreviewText = nil
-                self.showStashPreview = false
+                self.stashUI.previewStashID = nil
+                self.stashUI.previewText = nil
+                self.stashUI.showPreview = false
                 self.feedbackCenter.success(
                     "Branch created from stash",
                     detail: branch,
@@ -996,24 +983,24 @@ func stashBranch(stashID: String, branch: String) {
 func showStashDiffFor(stashID: String) {
     guard let repo else { return }
     let rootPath = repo.workdir() ?? projectPath ?? ""
-    stashDiffStashID = stashID
-    stashDiffRootPath = rootPath
-    stashDiffText = nil
-    showStashDiff = false
+    stashUI.diffStashID = stashID
+    stashUI.diffRootPath = rootPath
+    stashUI.diffText = nil
+    stashUI.showDiff = false
     Task.detached(priority: .userInitiated) {
         do {
             let currentIndex = try currentStashIndex(repo: repo, stashID: stashID)
             let diff = try repo.stashDiff(index: currentIndex)
             await MainActor.run {
-                guard self.stashDiffStashID == stashID,
-                      self.stashDiffRootPath == rootPath else { return }
-                self.stashDiffText = diff
-                self.showStashDiff = true
+                guard self.stashUI.diffStashID == stashID,
+                      self.stashUI.diffRootPath == rootPath else { return }
+                self.stashUI.diffText = diff
+                self.stashUI.showDiff = true
             }
         } catch {
             await MainActor.run {
-                guard self.stashDiffStashID == stashID,
-                      self.stashDiffRootPath == rootPath else { return }
+                guard self.stashUI.diffStashID == stashID,
+                      self.stashUI.diffRootPath == rootPath else { return }
                 self.feedbackCenter.error("Load stash diff failed", detail: errorMessage(error))
             }
         }
@@ -1027,22 +1014,22 @@ func showStashPreviewFor(stashID: String) {
     shelfPreviewName = nil
     shelfPreviewText = nil
     showShelfPreview = false
-    stashPreviewStashID = stashID
-    stashPreviewText = nil
-    showStashPreview = true
+    stashUI.previewStashID = stashID
+    stashUI.previewText = nil
+    stashUI.showPreview = true
     Task.detached(priority: .userInitiated) {
         do {
             let diff = try repo.stashDiff(
                 index: try currentStashIndex(repo: repo, stashID: stashID)
             )
             await MainActor.run {
-                guard self.showStashPreview, self.stashPreviewStashID == stashID else { return }
-                self.stashPreviewText = diff
+                guard self.stashUI.showPreview, self.stashUI.previewStashID == stashID else { return }
+                self.stashUI.previewText = diff
             }
         } catch {
             await MainActor.run {
-                guard self.showStashPreview, self.stashPreviewStashID == stashID else { return }
-                self.stashPreviewText = "Load stash diff failed: \(errorMessage(error))"
+                guard self.stashUI.showPreview, self.stashUI.previewStashID == stashID else { return }
+                self.stashUI.previewText = "Load stash diff failed: \(errorMessage(error))"
             }
         }
     }
@@ -1159,11 +1146,11 @@ func popPendingPullStash() {
         do {
             if let shelfName {
                 try repo.shelvePopWithCancel(name: shelfName, cancel: restoreCancel)
-            } else if stashID != nil || stashMessage != nil {
+            } else if stashID != nil || stashUI.message != nil {
                 let reference = try Self.pullStashReference(
                     repo: repo,
                     stashID: stashID,
-                    message: stashMessage
+                    message: stashUI.message
                 )
                 stashRestoreID = reference.stash.id
                 try repo.stashPopWithIndexAndCancel(
