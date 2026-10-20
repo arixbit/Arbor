@@ -9,7 +9,7 @@ func stageAll() {
     // Git.Stage.Add.All. The latter belongs to the overflow action group and
     // also stages untracked files. Keep the toolbar's default behavior aligned
     // with rebased: stage tracked worktree changes only.
-    guard entries.contains(where: {
+    guard repositoryStatus.entries.contains(where: {
         $0.unstaged != .unchanged
             && $0.unstaged != .untracked
             && $0.unstaged != .ignored
@@ -23,15 +23,15 @@ func stageAll() {
             let status = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.entries = status
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
-                self.fileContentRefreshToken &+= 1
+                self.repositoryStatus.entries = status
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
+                self.fileWorkspace.refreshToken &+= 1
                 self.feedbackCenter.success("Changes staged")
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Stage changes failed", detail: errorMessage(error), nextStep: "Check the file permissions and retry.")
             }
         }
@@ -43,7 +43,7 @@ func stageAll() {
 /// Git.Stage.Add.Tracked affordance.
 func stageEverything() {
     guard let repo else { return }
-    guard entries.contains(where: {
+    guard repositoryStatus.entries.contains(where: {
         $0.unstaged != .unchanged && $0.unstaged != .ignored
     }) else { return }
     beginFeedbackOperation("Stage all changes")
@@ -53,15 +53,15 @@ func stageEverything() {
             let status = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.entries = status
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
-                self.fileContentRefreshToken &+= 1
+                self.repositoryStatus.entries = status
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
+                self.fileWorkspace.refreshToken &+= 1
                 self.feedbackCenter.success("All changes staged")
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Stage all changes failed", detail: errorMessage(error), nextStep: "Check the file permissions and retry.")
             }
         }
@@ -148,7 +148,7 @@ func createTag() {
                     "Tag created",
                     detail: targetRootPath.map { "\(name) @ \($0)" } ?? name
                 )
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
             }
         } catch {
             await MainActor.run {
@@ -189,7 +189,7 @@ func deleteTag(_ name: String) {
                 self.tagWorkspace.tags = tags
                 self.tagWorkspace.feedback = "已删除 \(name)"
                 self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
             }
         } catch {
             await MainActor.run { self.tagWorkspace.feedback = errorMessage(error) }
@@ -206,12 +206,12 @@ func stagePath(_ p: String) {
             let st = try repo.statusPaths(paths: [p]); let hid = repo.headCommitId()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.applyIncrementalStatus(st, paths: [p]); self.headId = hid
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.applyIncrementalStatus(st, paths: [p]); self.repositoryStatus.headId = hid
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Changes staged")
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -223,7 +223,7 @@ func stageProjectTreePath(_ path: String) {
           let primaryRepo = repo,
           let primaryRootPath = primaryRepo.workdir(),
           !primaryRootPath.isEmpty else { return }
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     beginFeedbackOperation("Add file")
     Task.detached(priority: .userInitiated) {
         do {
@@ -292,13 +292,13 @@ func stageWithoutContent(_ p: String) {
             let staging = try? repo.stagingModel()
             await MainActor.run {
                 self.applyIncrementalStatus(st, paths: [p])
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Intent-to-add staged", detail: p)
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error(
                     "Intent-to-add failed",
                     detail: errorMessage(error),
@@ -323,15 +323,15 @@ func stageWithoutContentAll() {
             let status = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.entries = status
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
-                self.fileContentRefreshToken &+= 1
+                self.repositoryStatus.entries = status
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
+                self.fileWorkspace.refreshToken &+= 1
                 self.feedbackCenter.success("Intent-to-add staged", detail: "\(paths.count) untracked files")
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error(
                     "Intent-to-add failed",
                     detail: errorMessage(error),
@@ -351,12 +351,12 @@ func unstagePath(_ p: String) {
             let st = try repo.statusPaths(paths: [p]); let hid = repo.headCommitId()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.applyIncrementalStatus(st, paths: [p]); self.headId = hid
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.applyIncrementalStatus(st, paths: [p]); self.repositoryStatus.headId = hid
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Changes unstaged")
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -380,8 +380,8 @@ func revertUnstagedPath(_ p: String) {
             let staging = try? repo.stagingModel()
             await MainActor.run {
                 self.applyIncrementalStatus(status, paths: [p])
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Unstaged changes reverted", detail: p)
             }
         } catch {
@@ -677,7 +677,7 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
             if $0.rootPath == $1.rootPath { return $0.name < $1.name }
             return $0.rootPath < $1.rootPath
         }
-    guard !selected.isEmpty, !multiRootRunning else { return }
+    guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
     alert.messageText = "Delete selected tags?"
@@ -691,9 +691,9 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
     guard alert.runModal() == .alertFirstButtonReturn else { return }
 
     let displayNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { ($0.rootPath, $0.displayName) }
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { ($0.rootPath, $0.displayName) }
     )
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Delete selected tags")
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -746,8 +746,8 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
         let completedContexts = contexts
         let completedFailures = failures
         await MainActor.run {
-            self.multiRootRunning = false
-            self.multiRootResults = completedResults
+            self.multiRootWorkspace.running = false
+            self.multiRootWorkspace.results = completedResults
             self.loadMultiRoots()
             if !completedContexts.isEmpty {
                 self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
@@ -761,7 +761,7 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
                     detail: "\(completedContexts.count) tags"
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Selected tag deletion partially completed",
@@ -814,7 +814,7 @@ func deleteTagInRoot(rootPath: String, name: String) {
 }
 
 func presentMultiRootDeleteTagDialog(name: String) {
-    let eligible = multiRootBranchSnapshots.filter { snapshot in
+    let eligible = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.tags.contains { $0.name == name }
     }
     guard !eligible.isEmpty else {
@@ -838,17 +838,17 @@ func dismissMultiRootDeleteTagDialog() {
 /// Delete one local tag from selected Git roots while retaining the exact
 /// peeled target for Restore All and the follow-up remote-delete action.
 func deleteMultiRootTag(name: String, selectedRootPaths: Set<String>) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     let tagName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !tagName.isEmpty else { return }
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         selectedRootPaths.contains(snapshot.rootPath)
             && snapshot.tags.contains { $0.name == tagName }
     }
     guard !roots.isEmpty else { return }
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Multi-root tag deletion")
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -899,9 +899,9 @@ func deleteMultiRootTag(name: String, selectedRootPaths: Set<String>) {
         let contextsToOffer = contexts
         let failuresToReport = failures
         await MainActor.run {
-            self.multiRootRunning = false
+            self.multiRootWorkspace.running = false
             self.tagWorkspace.showMultiRootDeleteDialog = false
-            self.multiRootResults = resultsToApply
+            self.multiRootWorkspace.results = resultsToApply
             self.loadMultiRoots()
             if !contextsToOffer.isEmpty {
                 self.tagWorkspace.multiRootDeleteRecovery = MultiRootTagDeleteRecoveryContext(
@@ -915,7 +915,7 @@ func deleteMultiRootTag(name: String, selectedRootPaths: Set<String>) {
                     detail: "\(contextsToOffer.count) repositories · \(tagName)"
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Multi-root tag deletion partially completed",

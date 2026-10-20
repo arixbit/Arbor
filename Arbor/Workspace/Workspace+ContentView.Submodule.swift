@@ -61,7 +61,7 @@ func submoduleUpdateRollbackAction(
     guard !targets.isEmpty else { return nil }
     let request = ArborVCSActionRequest(
         kind: .rollbackSubmoduleUpdate,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootUpdateRollbackTargets: targets
@@ -237,7 +237,7 @@ nonisolated static func submoduleDeinitUndoTargetAfterDeinit(
 }
 
 func submoduleUpdateRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -260,7 +260,7 @@ func beginSubmoduleRemoteConfig(_ path: String) {
 }
 
 func submoduleRootPath(_ path: String) -> String? {
-    guard let projectPath, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard let projectPath = projectWorkspace.path, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         return nil
     }
     return URL(fileURLWithPath: projectPath)
@@ -384,7 +384,7 @@ func submoduleNotificationID(
     _ retry: PersistedSubmoduleRetry,
     rootPath: String
 ) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let options = [
         retry.initFlag.map { "init=\($0)" },
         retry.recursive.map { "recursive=\($0)" },
@@ -408,7 +408,7 @@ func submoduleRetryRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .retrySubmoduleOperation,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         submoduleRetry: retry
@@ -455,7 +455,7 @@ func submoduleUndoNotificationID(
     _ context: PersistedSubmoduleUndo,
     rootPath: String
 ) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     return [
         "git.submodule.undo",
         context.operation.rawValue,
@@ -472,7 +472,7 @@ func submoduleUndoRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .undoSubmoduleOperation,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         submoduleUndo: context
@@ -634,8 +634,8 @@ func undoSubmoduleOperation(
                 }
             }
             await MainActor.run {
-                self.submodules = restoredModules
-                self.submoduleFeedback = isAdd
+                self.submoduleWorkspace.submodules = restoredModules
+                self.submoduleWorkspace.feedback = isAdd
                     ? "Submodule add undone"
                     : (isRemove ? "Submodule removal undone" : "Submodule deinitialized state restored")
                 self.feedbackCenter.success(
@@ -650,7 +650,7 @@ func undoSubmoduleOperation(
             }
         } catch {
             await MainActor.run {
-                self.submoduleFeedback = errorMessage(error)
+                self.submoduleWorkspace.feedback = errorMessage(error)
                 let retryAction = self.submoduleUndoFeedbackAction(context, rootPath: rootPath)
                 if let engineError = error as? EngineError, case .Cancelled = engineError {
                     self.feedbackCenter.warning(
@@ -686,7 +686,7 @@ func runSubmoduleOperation(_ retry: PersistedSubmoduleRetry) {
     let notificationID = submoduleNotificationID(retry, rootPath: rootPath)
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation(
         title,
         cancelHandle: retry.operation == .setBranch ? nil : cancel,
@@ -811,11 +811,11 @@ func runSubmoduleOperation(_ retry: PersistedSubmoduleRetry) {
                 ? (try? ContentView.submoduleGitmodulesSnapshot(rootPath: rootPath))
                 : nil
             await MainActor.run {
-                self.submoduleFeedback = submoduleOperationSuccessTitle(retry)
-                if let modules { self.submodules = modules }
+                self.submoduleWorkspace.feedback = submoduleOperationSuccessTitle(retry)
+                if let modules { self.submoduleWorkspace.submodules = modules }
                 if retry.operation == .add {
-                    self.submoduleUrl = ""
-                    self.submodulePath = ""
+                    self.submoduleWorkspace.url = ""
+                    self.submoduleWorkspace.path = ""
                 }
                 var actions: [FeedbackAction] = []
                 if retry.operation == .update {
@@ -882,7 +882,7 @@ func runSubmoduleOperation(_ retry: PersistedSubmoduleRetry) {
             }
         } catch {
             await MainActor.run {
-                self.submoduleFeedback = errorMessage(error)
+                self.submoduleWorkspace.feedback = errorMessage(error)
                 let retryAction = self.submoduleRetryFeedbackAction(retry, rootPath: rootPath)
                 let restoreAction = retry.operation == .update
                     ? self.submoduleUpdateRestoreAction(repo: repo, rootPath: rootPath)
@@ -914,13 +914,13 @@ func runSubmoduleOperation(_ retry: PersistedSubmoduleRetry) {
 }
 
 func submoduleAdd() {
-    guard !submoduleUrl.trimmingCharacters(in: .whitespaces).isEmpty,
-          !submodulePath.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    guard !submoduleWorkspace.url.trimmingCharacters(in: .whitespaces).isEmpty,
+          !submoduleWorkspace.path.trimmingCharacters(in: .whitespaces).isEmpty else { return }
     runSubmoduleOperation(
         PersistedSubmoduleRetry(
             operation: .add,
-            url: submoduleUrl.trimmingCharacters(in: .whitespacesAndNewlines),
-            path: submodulePath.trimmingCharacters(in: .whitespacesAndNewlines)
+            url: submoduleWorkspace.url.trimmingCharacters(in: .whitespacesAndNewlines),
+            path: submoduleWorkspace.path.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     )
 }
@@ -956,7 +956,7 @@ func loadSubmodules() {
     guard let repo else { return }
     Task.detached(priority: .userInitiated) {
         let modules = (try? repo.submoduleList()) ?? []
-        await MainActor.run { self.submodules = modules }
+        await MainActor.run { self.submoduleWorkspace.submodules = modules }
     }
 }
 
@@ -966,21 +966,21 @@ func openSubmoduleLog(_ path: String) {
     let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !path.isEmpty else { return }
 
-    submoduleLogPath = path
-    submoduleLogEntries = []
-    submoduleLogError = nil
-    showSubmoduleLog = true
+    submoduleWorkspace.logPath = path
+    submoduleWorkspace.logEntries = []
+    submoduleWorkspace.logError = nil
+    submoduleWorkspace.showLog = true
     Task.detached(priority: .userInitiated) {
         do {
             let commits = try repo.submoduleLog(path: path, limit: 200)
             await MainActor.run {
-                guard self.showSubmoduleLog, self.submoduleLogPath == path else { return }
-                self.submoduleLogEntries = commits
+                guard self.submoduleWorkspace.showLog, self.submoduleWorkspace.logPath == path else { return }
+                self.submoduleWorkspace.logEntries = commits
             }
         } catch {
             await MainActor.run {
-                guard self.showSubmoduleLog, self.submoduleLogPath == path else { return }
-                self.submoduleLogError = errorMessage(error)
+                guard self.submoduleWorkspace.showLog, self.submoduleWorkspace.logPath == path else { return }
+                self.submoduleWorkspace.logError = errorMessage(error)
             }
         }
     }

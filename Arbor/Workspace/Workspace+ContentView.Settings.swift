@@ -9,7 +9,7 @@ extension ContentView {
 func identitySettingsFeedbackAction() -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .openIdentitySettings,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: ""
     )
@@ -32,17 +32,17 @@ func loadGitSSHSettings() {
             let credentialHelpers = (try? repo.credentialHelpers()) ?? []
             let sshAgentDiagnostics = try? repo.sshAgentDiagnostics()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.gitSSHCommand = settings.command
-                self.gitSSHKnownHostsFile = settings.knownHostsFile
-                self.gitSSHIdentityFile = settings.identityFile
-                self.gitSSHHostKeyPolicy = settings.hostKeyPolicy
-                self.gitSSHAuthMethod = settings.authMethod
-                self.gitCredentialHelperConfig = credentialHelperConfig.joined(separator: "\n")
-                self.gitCredentialHelpers = credentialHelpers
-                self.gitSSHAgentDiagnostics = sshAgentDiagnostics
-                self.lastSuccessfulSSHAuthentications = lastSuccessfulAuthentications
-                self.showGitSSHSettings = true
+                guard self.projectWorkspace.repository === repo else { return }
+                self.gitSettings.gitSSHCommand = settings.command
+                self.gitSettings.gitSSHKnownHostsFile = settings.knownHostsFile
+                self.gitSettings.gitSSHIdentityFile = settings.identityFile
+                self.gitSettings.gitSSHHostKeyPolicy = settings.hostKeyPolicy
+                self.gitSettings.gitSSHAuthMethod = settings.authMethod
+                self.gitSettings.gitCredentialHelperConfig = credentialHelperConfig.joined(separator: "\n")
+                self.gitSettings.gitCredentialHelpers = credentialHelpers
+                self.gitSettings.gitSSHAgentDiagnostics = sshAgentDiagnostics
+                self.gitSettings.lastSuccessfulSSHAuthentications = lastSuccessfulAuthentications
+                self.gitSettings.showGitSSHSettings = true
             }
         } catch {
             await MainActor.run {
@@ -61,20 +61,20 @@ func loadGitSSHAgentDiagnostics() {
     Task.detached(priority: .userInitiated) {
         let diagnostics = try? repo.sshAgentDiagnostics()
         await MainActor.run {
-            guard self.projectRepo === repo else { return }
-            self.gitSSHAgentDiagnostics = diagnostics
+            guard self.projectWorkspace.repository === repo else { return }
+            self.gitSettings.gitSSHAgentDiagnostics = diagnostics
         }
     }
 }
 
 func saveGitSSHSettings() {
     guard let repo else { return }
-    let command = gitSSHCommand.trimmingCharacters(in: .whitespacesAndNewlines)
-    let knownHostsFile = gitSSHKnownHostsFile.trimmingCharacters(in: .whitespacesAndNewlines)
-    let identityFile = gitSSHIdentityFile.trimmingCharacters(in: .whitespacesAndNewlines)
-    let hostKeyPolicy = gitSSHHostKeyPolicy
-    let authMethod = gitSSHAuthMethod
-    let helperValues = gitCredentialHelperConfig
+    let command = gitSettings.gitSSHCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+    let knownHostsFile = gitSettings.gitSSHKnownHostsFile.trimmingCharacters(in: .whitespacesAndNewlines)
+    let identityFile = gitSettings.gitSSHIdentityFile.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hostKeyPolicy = gitSettings.gitSSHHostKeyPolicy
+    let authMethod = gitSettings.gitSSHAuthMethod
+    let helperValues = gitSettings.gitCredentialHelperConfig
         .split(whereSeparator: \.isNewline)
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
@@ -92,8 +92,8 @@ func saveGitSSHSettings() {
             let credentialHelpers = (try? repo.credentialHelpers()) ?? []
             let sshAgentDiagnostics = try? repo.sshAgentDiagnostics()
             await MainActor.run {
-                self.gitCredentialHelpers = credentialHelpers
-                self.gitSSHAgentDiagnostics = sshAgentDiagnostics
+                self.gitSettings.gitCredentialHelpers = credentialHelpers
+                self.gitSettings.gitSSHAgentDiagnostics = sshAgentDiagnostics
                 self.feedbackCenter.success(
                     "SSH and credential settings saved",
                     detail: command.isEmpty
@@ -116,32 +116,32 @@ func saveGitSSHSettings() {
 /// Keep the project-level commit draft isolated from the persistent identity
 /// settings sheet, while reflecting values saved there when it closes.
 func syncMultiRootCommitIdentityDraftFromSettings() {
-    multiRootCommitAuthorName = identityAuthorName
-    multiRootCommitAuthorEmail = identityAuthorEmail
-    multiRootCommitCommitterName = identityCommitterName
-    multiRootCommitCommitterEmail = identityCommitterEmail
-    multiRootCommitSignOff = identitySignOff
-    multiRootCommitCoAuthors = identityCoAuthors
+    commitWorkspace.multiRootAuthorName = gitSettings.identityAuthorName
+    commitWorkspace.multiRootAuthorEmail = gitSettings.identityAuthorEmail
+    commitWorkspace.multiRootCommitterName = gitSettings.identityCommitterName
+    commitWorkspace.multiRootCommitterEmail = gitSettings.identityCommitterEmail
+    commitWorkspace.multiRootSignOff = gitSettings.identitySignOff
+    commitWorkspace.multiRootCoAuthors = gitSettings.identityCoAuthors
 }
 
 func setGitIdentity() {
     guard let repo else { return }
-    let name = identityName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let email = identityEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let name = gitSettings.identityName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let email = gitSettings.identityEmail.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, !email.isEmpty else {
-        loadError = "Git identity requires both name and email."
+        repositoryStatus.loadError = "Git identity requires both name and email."
         return
     }
-    let signingKey = identitySigningKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    let signingFormat = identitySigningFormat == "ssh" ? "ssh" : "gpg"
-    let signCommits = identitySignCommits
-    let setNameEmailGlobally = identitySetNameEmailGlobally
-    let authorName = identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let authorEmail = identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerName = identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerEmail = identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let signOff = identitySignOff
-    let coAuthors = identityCoAuthors
+    let signingKey = gitSettings.identitySigningKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    let signingFormat = gitSettings.identitySigningFormat == "ssh" ? "ssh" : "gpg"
+    let signCommits = gitSettings.identitySignCommits
+    let setNameEmailGlobally = gitSettings.identitySetNameEmailGlobally
+    let authorName = gitSettings.identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let authorEmail = gitSettings.identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerName = gitSettings.identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerEmail = gitSettings.identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let signOff = gitSettings.identitySignOff
+    let coAuthors = gitSettings.identityCoAuthors
     beginFeedbackOperation("Save Git identity")
     Task.detached(priority: .userInitiated) {
         do {
@@ -165,14 +165,14 @@ func setGitIdentity() {
             await MainActor.run {
                 GitIdentityScopeSettings.saveSetNameEmailGlobally(
                     setNameEmailGlobally,
-                    for: self.projectPath
+                    for: self.projectWorkspace.path
                 )
-                self.identityAuthorName = authorName
-                self.identityAuthorEmail = authorEmail
-                self.identityCommitterName = committerName
-                self.identityCommitterEmail = committerEmail
-                self.identitySignOff = signOff
-                self.identityCoAuthors = coAuthors
+                self.gitSettings.identityAuthorName = authorName
+                self.gitSettings.identityAuthorEmail = authorEmail
+                self.gitSettings.identityCommitterName = committerName
+                self.gitSettings.identityCommitterEmail = committerEmail
+                self.gitSettings.identitySignOff = signOff
+                self.gitSettings.identityCoAuthors = coAuthors
                 GitSignOffCommitSettings.saveGlobal(signOff)
                 UserDefaults.standard.set(authorName, forKey: "arbor.identity.authorName")
                 UserDefaults.standard.set(authorEmail, forKey: "arbor.identity.authorEmail")
@@ -181,8 +181,8 @@ func setGitIdentity() {
                 UserDefaults.standard.set(signOff, forKey: "arbor.identity.signOff")
                 UserDefaults.standard.set(coAuthors, forKey: "arbor.identity.coAuthors")
                 self.feedbackCenter.success("Git identity saved")
-                if self.pendingIdentityCommitRetry {
-                    self.pendingIdentityCommitRetry = false
+                if self.gitSettings.pendingIdentityCommitRetry {
+                    self.gitSettings.pendingIdentityCommitRetry = false
                     DispatchQueue.main.async {
                         self.doCommit()
                     }

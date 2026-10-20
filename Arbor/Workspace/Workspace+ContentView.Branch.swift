@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 extension ContentView {
 func loadProjectProtectedBranchSettings(for projectPath: String?) {
-    projectProtectedBranchPatterns = GitProtectedBranchRules.projectRawValue(for: projectPath)
-    projectProtectedBranchSynchronize = GitProtectedBranchRules.projectSynchronizeValue(for: projectPath)
+    gitSettings.projectProtectedBranchPatterns = GitProtectedBranchRules.projectRawValue(for: projectPath)
+    gitSettings.projectProtectedBranchSynchronize = GitProtectedBranchRules.projectSynchronizeValue(for: projectPath)
 }
 
 var logBranchFilterTitle: String {
@@ -165,9 +165,9 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
     }
 
     var rootPaths: [String]
-    if multiRootBranchSnapshots.count > 1 {
-        rootPaths = multiRootBranchSnapshots.map(\.rootPath)
-    } else if let projectPath {
+    if multiRootWorkspace.branchSnapshots.count > 1 {
+        rootPaths = multiRootWorkspace.branchSnapshots.map(\.rootPath)
+    } else if let projectPath = projectWorkspace.path {
         rootPaths = [projectPath]
     } else {
         rootPaths = []
@@ -179,7 +179,7 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
         return
     }
 
-    let projectToken = projectPath
+    let projectToken = projectWorkspace.path
     logBranchesPanel.isLoadingMy = true
     logBranchesPanel.showMyTask = Task.detached(priority: .utility) { [rootPaths] in
         var branchIDs = Set<String>()
@@ -205,7 +205,7 @@ func setLogBranchesShowOnlyMy(_ enabled: Bool) {
         guard !Task.isCancelled else { return }
         let resolvedBranchIDs = branchIDs
         await MainActor.run {
-            guard self.projectPath == projectToken,
+            guard self.projectWorkspace.path == projectToken,
                   self.logBranchesPanel.showOnlyMy else { return }
             self.logBranchesPanel.myBranchIDs = resolvedBranchIDs
             self.logBranchesPanel.isLoadingMy = false
@@ -220,7 +220,7 @@ func refreshLogMyBranches() {
 }
 
 func presentMultiRootNewBranchDialog() {
-    guard !multiRootBranchSnapshots.isEmpty else {
+    guard !multiRootWorkspace.branchSnapshots.isEmpty else {
         loadMultiRoots()
         feedbackCenter.warning("New branch unavailable", detail: "No Git roots were discovered.")
         return
@@ -230,11 +230,11 @@ func presentMultiRootNewBranchDialog() {
     branchWorkspace.multiRootNewCheckout = true
     branchWorkspace.multiRootNewResetExisting = false
     branchWorkspace.multiRootExistingNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { snapshot in
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { snapshot in
             (snapshot.rootPath, Set(snapshot.branches.map(\.name)))
         }
     )
-    branchWorkspace.multiRootNewSelectedRootPaths = Set(multiRootBranchSnapshots.map(\.rootPath))
+    branchWorkspace.multiRootNewSelectedRootPaths = Set(multiRootWorkspace.branchSnapshots.map(\.rootPath))
     branchWorkspace.showMultiRootNewDialog = true
 }
 
@@ -247,7 +247,7 @@ func presentMultiRootNewBranchFromReference(
     reference: String,
     isRemote: Bool
 ) {
-    guard multiRootBranchSnapshots.contains(where: { $0.rootPath == rootPath }) else {
+    guard multiRootWorkspace.branchSnapshots.contains(where: { $0.rootPath == rootPath }) else {
         feedbackCenter.warning(
             "Checkout as New Branch unavailable",
             detail: "The selected Git root is no longer available: \(rootPath)"
@@ -281,7 +281,7 @@ func presentMultiRootNewBranchFromReference(
     branchWorkspace.multiRootNewCheckout = true
     branchWorkspace.multiRootNewResetExisting = false
     branchWorkspace.multiRootExistingNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { snapshot in
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { snapshot in
             (snapshot.rootPath, Set(snapshot.branches.map(\.name)))
         }
     )
@@ -300,7 +300,7 @@ func dismissMultiRootNewBranchDialog() {
 }
 
 func presentMultiRootRenameBranchDialog(name: String) {
-    let eligible = multiRootBranchSnapshots.filter { snapshot in
+    let eligible = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.branches.contains(where: { $0.name == name })
     }
     guard !eligible.isEmpty else {
@@ -331,18 +331,18 @@ func renameMultiRootBranch(
     unsetUpstream: Bool,
     selectedRootPaths: Set<String>
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     let oldName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
     let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !oldName.isEmpty, !newName.isEmpty, oldName != newName else { return }
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         selectedRootPaths.contains(snapshot.rootPath)
             && snapshot.branches.contains(where: { $0.name == oldName })
     }
     guard !roots.isEmpty else { return }
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Multi-root branch rename")
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -426,9 +426,9 @@ func renameMultiRootBranch(
         let successfulTargetsToOffer = successfulTargets
         let failuresToReport = failures
         await MainActor.run {
-            self.multiRootRunning = false
+            self.multiRootWorkspace.running = false
             self.branchWorkspace.showMultiRootRenameDialog = false
-            self.multiRootResults = resultsToApply
+            self.multiRootWorkspace.results = resultsToApply
             self.loadMultiRoots()
             if failuresToReport.isEmpty {
                 self.feedbackCenter.success(
@@ -436,7 +436,7 @@ func renameMultiRootBranch(
                     detail: "\(successfulTargetsToOffer.count) repositories · \(oldName) → \(newName)"
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.presentMultiRootBranchRenameRollback(
                     oldName: oldName,
@@ -472,7 +472,7 @@ func presentMultiRootBranchRenameRollback(
     )
     let keepRequest = ArborVCSActionRequest(
         kind: .keepMultiRootBranchRenamePartial,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootBranchRenameOldName: oldName,
@@ -508,7 +508,7 @@ func multiRootBranchRenameRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .rollbackMultiRootBranchRename,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootBranchRenameOldName: oldName,
@@ -518,7 +518,7 @@ func multiRootBranchRenameRollbackRequest(
 }
 
 func multiRootBranchRenameRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -637,7 +637,7 @@ func rollbackMultiRootBranchRename(
 }
 
 func presentMultiRootDeleteBranchDialog(name: String) {
-    let eligible = multiRootBranchSnapshots.filter { snapshot in
+    let eligible = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.branches.contains { $0.name == name && !$0.isCurrent }
     }
     guard !eligible.isEmpty else {
@@ -666,9 +666,9 @@ func deleteMultiRootBranch(
     selectedRootPaths: Set<String>,
     allowForceDelete: Bool = true
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     let branchName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !branchName.isEmpty else { return }
     for notificationID in [
@@ -677,12 +677,12 @@ func deleteMultiRootBranch(
     ].compactMap({ $0 }) {
         feedbackCenter.expire(notificationID: notificationID)
     }
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         selectedRootPaths.contains(snapshot.rootPath)
             && snapshot.branches.contains { $0.name == branchName && !$0.isCurrent }
     }
     guard !roots.isEmpty else { return }
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Multi-root branch deletion")
     let protectedPatterns = effectiveProtectedBranchPatterns
     Task.detached(priority: .userInitiated) {
@@ -757,9 +757,9 @@ func deleteMultiRootBranch(
         let failuresToReport = failures
         let forceDeletedRootsToReport = forceDeletedRoots
         await MainActor.run {
-            self.multiRootRunning = false
+            self.multiRootWorkspace.running = false
             self.branchWorkspace.showMultiRootDeleteDialog = false
-            self.multiRootResults = resultsToApply
+            self.multiRootWorkspace.results = resultsToApply
             self.loadMultiRoots()
             if failuresToReport.isEmpty {
                 self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
@@ -779,7 +779,7 @@ func deleteMultiRootBranch(
                     notificationGroup: .standard
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Multi-root branch deletion partially completed",
@@ -837,16 +837,16 @@ func createMultiRootBranch(
     reset: Bool,
     selectedRootPaths: Set<String>
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    guard let projectPath else { return }
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    guard let projectPath = projectWorkspace.path else { return }
     let branchName = GitBranchNameCleanup.cleanUp(name)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !branchName.isEmpty else { return }
     let startPoint = baseRevision.trimmingCharacters(in: .whitespacesAndNewlines)
     let selected = selectedRootPaths.isEmpty ? nil : Array(selectedRootPaths)
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Multi-root branch creation")
     Task.detached(priority: .userInitiated) {
         do {
@@ -859,7 +859,7 @@ func createMultiRootBranch(
                 reset: reset
             )
             await MainActor.run {
-                self.multiRootResults = results.map {
+                self.multiRootWorkspace.results = results.map {
                     RootOperationResult(
                         rootPath: $0.rootPath,
                         displayName: $0.displayName,
@@ -868,7 +868,7 @@ func createMultiRootBranch(
                         message: $0.message
                     )
                 }
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.loadMultiRoots()
                 let created = results.filter { $0.success && !$0.skipped && $0.branchCreated }.count
                 let overwritten = results.filter {
@@ -881,15 +881,15 @@ func createMultiRootBranch(
                         detail: "\(created) created · \(overwritten) overwritten · \(branchName)"
                     )
                 } else {
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     self.presentMultiRootBranchRollback(name: branchName, results: results)
                 }
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     "Multi-root branch creation failed",
                     detail: errorMessage(error),
@@ -942,7 +942,7 @@ func presentMultiRootBranchRollback(
     )
     let keepRequest = ArborVCSActionRequest(
         kind: .keepMultiRootBranchCreatePartial,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootBranchName: name
@@ -976,7 +976,7 @@ func multiRootBranchCreateRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .rollbackMultiRootBranchCreate,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootBranchName: branchName,
@@ -985,7 +985,7 @@ func multiRootBranchCreateRollbackRequest(
 }
 
 func multiRootBranchCreateRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -1041,7 +1041,7 @@ func finishMultiRootBranchCreateRollback(
     targets: [MultiRootBranchCreateTarget],
     results: [RootOperationResult]
 ) {
-    multiRootResults = results
+    multiRootWorkspace.results = results
     loadMultiRoots()
     let failedRootPaths = Set(results.filter { !$0.success }.map(\.rootPath))
     let remainingTargets = targets.filter { failedRootPaths.contains($0.rootPath) }
@@ -1128,7 +1128,7 @@ func branchDeleteRecoveryTargets(
 func normalizedBranchDeleteRecoveryTargets(
     _ targets: [PersistedBranchDeleteRecoveryTarget]
 ) -> [PersistedBranchDeleteRecoveryTarget]? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let projectRoot = URL(fileURLWithPath: projectPath).standardizedFileURL.path
     let normalizedTargets = targets.map { target in
         PersistedBranchDeleteRecoveryTarget(
@@ -1165,7 +1165,7 @@ func branchDeleteRecoveryActions(
 }
 
 func branchDeleteNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -1265,9 +1265,9 @@ func branchCreate(
                         ? "\(name) (checked out) · \(targetRootPath)"
                         : "\(name) · \(targetRootPath)"
                 )
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -1309,14 +1309,14 @@ func branchDelete(_ name: String) {
                     self.feedbackCenter.success("Branch deleted", detail: name)
                 }
                 self.loadRepoData()
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
             }
         } catch {
             await MainActor.run {
                 if isUnmergedBranchDeletionError(error) {
                     self.prepareForceDeleteBranch(repo: repo, name: name, rootPath: nil)
                 } else {
-                    self.loadError = errorMessage(error)
+                    self.repositoryStatus.loadError = errorMessage(error)
                 }
             }
         }
@@ -1420,7 +1420,7 @@ func forceDeleteBranch(
                         notificationGroup: .standard
                     )
                     self.loadRepoData()
-                    if self.toolWindowMode == .log { self.loadLog() }
+                    if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
                 }
                 self.branchWorkspace.deleteRecovery = context
             }
@@ -1464,7 +1464,7 @@ nonisolated func loadBranchCleanupRoots(scanRoot: String) throws -> [BranchClean
 }
 
 func beginBranchCleanup() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     let generation = nextBranchCleanupGeneration()
     beginFeedbackOperation("Load branch cleanup")
     let scanRoot = projectPath
@@ -1489,7 +1489,7 @@ func beginBranchCleanup() {
 }
 
 func refreshBranchCleanup() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     let generation = nextBranchCleanupGeneration()
     beginFeedbackOperation("Refresh branch cleanup")
     let scanRoot = projectPath
@@ -1510,7 +1510,7 @@ func refreshBranchCleanup() {
 }
 
 func reloadBranchCleanupContext(for generation: Int) {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     let scanRoot = projectPath
     Task.detached(priority: .userInitiated) {
         do {
@@ -1618,9 +1618,9 @@ func branchRename() {
                 self.branchWorkspace.branches = bs; self.branchWorkspace.renameOld = ""; self.branchWorkspace.renameNew = ""
                 self.feedbackCenter.success("Branch renamed", detail: "\(old) → \(new)")
                 self.loadRepoData()
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -1631,7 +1631,7 @@ func switchBranch(_ name: String) {
         do {
             try repo.switchBranch(name: name)
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Branch checked out", detail: name)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -1725,7 +1725,7 @@ func smartCheckoutBranch(
     onSuccess: @escaping () -> Void = {}
 ) {
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Smart Checkout", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -1735,7 +1735,7 @@ func smartCheckoutBranch(
                 cancel: cancel
             )
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Smart Checkout completed", detail: name)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -1781,7 +1781,7 @@ func smartCheckoutBranch(
                 }
             } else {
                 await MainActor.run {
-                    self.loadError = errorMessage(error)
+                    self.repositoryStatus.loadError = errorMessage(error)
                     self.feedbackCenter.error(
                         "Smart Checkout failed",
                         detail: errorMessage(error),
@@ -1803,7 +1803,7 @@ func forceCheckoutBranch(
         do {
             try repo.forceSwitchBranch(name: name)
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Force Checkout completed", detail: name)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -1811,7 +1811,7 @@ func forceCheckoutBranch(
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Force Checkout failed", detail: errorMessage(error))
             }
         }
@@ -1823,8 +1823,8 @@ func updateSelectedBranch(_ name: String) {
     let cancel = GitCancelHandle()
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
-    let rebase = GitUpdateMethodSettings.method(for: projectPath) == .rebase
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let rebase = GitUpdateMethodSettings.method(for: projectWorkspace.path) == .rebase
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Update branch", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -1840,7 +1840,7 @@ func updateSelectedBranch(_ name: String) {
                 savePolicy: savePolicy
             )
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 if result.success && !result.skipped {
                     self.feedbackCenter.success("Branch updated", detail: name)
                     self.refreshAll(showFeedback: false)
@@ -1862,7 +1862,7 @@ func updateSelectedBranch(_ name: String) {
         } catch {
             await MainActor.run {
                 let detail = friendlyRemoteError(error)
-                self.loadError = detail
+                self.repositoryStatus.loadError = detail
                 if case .Cancelled = error as? EngineError {
                     self.feedbackCenter.warning(
                         "Branch update cancelled",
@@ -1886,8 +1886,8 @@ func updateBranchInRoot(rootPath: String, branch: String) {
     let cancel = GitCancelHandle()
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
-    let rebase = GitUpdateMethodSettings.method(for: projectPath) == .rebase
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let rebase = GitUpdateMethodSettings.method(for: projectWorkspace.path) == .rebase
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Update branch", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -1956,17 +1956,17 @@ func updateSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
             }
             return $0.rootPath < $1.rootPath
         }
-    guard !selected.isEmpty, !multiRootRunning else { return }
+    guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let displayNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { ($0.rootPath, $0.displayName) }
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { ($0.rootPath, $0.displayName) }
     )
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let cancel = GitCancelHandle()
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
-    let rebase = GitUpdateMethodSettings.method(for: projectPath) == .rebase
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let rebase = GitUpdateMethodSettings.method(for: projectWorkspace.path) == .rebase
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Update selected branches", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -2022,8 +2022,8 @@ func updateSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
         let completedFailures = completedResults.filter { !$0.success && !$0.skipped }
         let completedSkipped = completedResults.filter(\.skipped)
         await MainActor.run {
-            self.multiRootRunning = false
-            self.multiRootResults = completedResults
+            self.multiRootWorkspace.running = false
+            self.multiRootWorkspace.results = completedResults
             self.loadMultiRoots()
             if completedFailures.isEmpty && completedSkipped.isEmpty {
                 self.feedbackCenter.success(
@@ -2259,7 +2259,7 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
             if $0.rootPath == $1.rootPath { return $0.name < $1.name }
             return $0.rootPath < $1.rootPath
         }
-    guard !selected.isEmpty, !multiRootRunning else { return }
+    guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
     alert.messageText = "Delete selected branches?"
@@ -2273,11 +2273,11 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
     guard alert.runModal() == .alertFirstButtonReturn else { return }
 
     let displayNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { ($0.rootPath, $0.displayName) }
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { ($0.rootPath, $0.displayName) }
     )
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Delete selected branches", cancelHandle: cancel)
     let protectedPatterns = effectiveProtectedBranchPatterns
     Task.detached(priority: .userInitiated) {
@@ -2386,8 +2386,8 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
         let completedFailures = failures + (cancelled ? ["Operation cancelled."] : [])
         let completedForceDeleted = forceDeleted
         await MainActor.run {
-            self.multiRootRunning = false
-            self.multiRootResults = completedResults
+            self.multiRootWorkspace.running = false
+            self.multiRootWorkspace.results = completedResults
             self.loadMultiRoots()
             guard !completedRecoveryContexts.isEmpty else {
                 if completedFailures.isEmpty {
@@ -2396,7 +2396,7 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
                         detail: "\(completedResults.filter(\.success).count) branches"
                     )
                 } else {
-                    self.toolWindowMode = .operations
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     self.feedbackCenter.warning(
                         "Selected branch deletion partially completed",
@@ -2426,7 +2426,7 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
                     notificationGroup: .standard
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Selected branch deletion partially completed",

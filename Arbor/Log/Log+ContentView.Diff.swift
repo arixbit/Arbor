@@ -446,8 +446,8 @@ struct LogStandaloneDiffView: View {
 
 func copySelectedComparePaths() {
     let paths = orderedCompareSelection(
-        changes: treeChanges,
-        selectedPaths: compareSelectedPaths
+        changes: comparisonWorkspace.treeChanges,
+        selectedPaths: comparisonWorkspace.selectedPaths
     ).map(\.path)
     guard !paths.isEmpty else { return }
     NSPasteboard.general.clearContents()
@@ -465,7 +465,7 @@ var cherryPickCompareBranchChoices: [String] {
                 + logRuntime.aggregateRevisionRanges.map(\.rootPath)
                 + Array(logRuntime.aggregateRootPaths)
         )
-        let eligibleSnapshots = multiRootBranchSnapshots.filter {
+        let eligibleSnapshots = multiRootWorkspace.branchSnapshots.filter {
             aggregateRootPaths.contains($0.rootPath)
         }
         names = eligibleSnapshots.flatMap { snapshot in

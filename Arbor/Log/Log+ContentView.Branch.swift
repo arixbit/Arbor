@@ -11,8 +11,8 @@ var cherryPickTargetBranchLabel: String {
     return Arbor.cherryPickTargetBranch(
         mode: logList.viewMode,
         sourceBranch: logCherryPickCompareBranch,
-        firstBranch: compareRev1,
-        secondBranch: compareRev2,
+        firstBranch: comparisonWorkspace.revision1,
+        secondBranch: comparisonWorkspace.revision2,
         currentBranch: branchWorkspace.branches.first(where: \.isCurrent)?.name
     )
 }
@@ -20,10 +20,10 @@ var cherryPickTargetBranchLabel: String {
 
 @ViewBuilder
 var logBranchesPanelView: some View {
-    if multiRootBranchSnapshots.count > 1 {
+    if multiRootWorkspace.branchSnapshots.count > 1 {
         MultiRootLogBranchesPanel(
-            projectPath: projectPath,
-            snapshots: multiRootBranchSnapshots,
+            projectPath: projectWorkspace.path,
+            snapshots: multiRootWorkspace.branchSnapshots,
             groupByDirectory: $logBranchesPanel.groupByDirectory,
             groupByRepository: $logBranchesPanel.groupByRepository,
             selectionActionRaw: $logBranchesPanel.selectionActionRaw,
@@ -153,12 +153,12 @@ var logBranchesPanelView: some View {
         )
     } else {
         LogBranchesPanel(
-            projectPath: projectPath,
+            projectPath: projectWorkspace.path,
             branches: branchWorkspace.branches,
             remoteBranches: branchWorkspace.remoteBranches,
-            remotes: remotes,
+            remotes: remoteWorkspace.remotes,
             tags: tagWorkspace.tags,
-            hasHeadCommit: headId != nil,
+            hasHeadCommit: repositoryStatus.headId != nil,
             syncStatuses: branchWorkspace.syncStatuses,
             protectedBranchPatterns: effectiveProtectedBranchPatterns,
             groupByDirectory: $logBranchesPanel.groupByDirectory,
@@ -192,7 +192,7 @@ var logBranchesPanelView: some View {
             onCheckoutAsNewBranch: { reference, isRemote in
                 presentNewBranchFromReference(reference, isRemote: isRemote)
             },
-            worktrees: worktrees,
+            worktrees: worktreeWorkspace.worktrees,
             onOpenWorktree: { path in
                 openWindow(value: path)
             },
@@ -230,7 +230,7 @@ var logBranchesPanelView: some View {
             },
             onCompareSelected: { selection in
                 guard let pair = branchDashboardComparisonPair(selection: selection),
-                      let rootPath = projectPath,
+                      let rootPath = projectWorkspace.path,
                       pair.rootPath == rootPath else { return }
                 compareBranchesCommitWiseInRoot(
                     rootPath: rootPath,
@@ -240,7 +240,7 @@ var logBranchesPanelView: some View {
             },
             onCompareSelectedFiles: { selection in
                 guard let pair = branchDashboardComparisonPair(selection: selection),
-                      let rootPath = projectPath,
+                      let rootPath = projectWorkspace.path,
                       pair.rootPath == rootPath else { return }
                 compareBranchesInRoot(
                     rootPath: rootPath,

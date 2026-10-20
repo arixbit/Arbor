@@ -7,7 +7,7 @@ func showHostingAuthPromptIfNeeded(for results: [RootOperationResult]) {
     guard results.contains(where: { !$0.success && arborAuthenticationFailureMessage($0.message) }) else {
         return
     }
-    showHostingAuthPrompt = true
+    hostingWorkspace.showHostingAuthPrompt = true
 }
 
 /// 在所选 hosted remote 打开 PR / merge request 创建页。

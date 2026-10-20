@@ -62,9 +62,9 @@ func shelveDraggedPaths(_ paths: [String]) {
     guard let repo, !paths.isEmpty else { return }
     let selected = Set(paths)
     let suffix = String(UUID().uuidString.prefix(8))
-    let sourceLists = changeLists.isEmpty
+    let sourceLists = repositoryStatus.changeLists.isEmpty
         ? [("Default", paths)]
-        : changeLists.compactMap { list -> (String, [String])? in
+        : repositoryStatus.changeLists.compactMap { list -> (String, [String])? in
             let members = list.paths.filter { selected.contains($0) }
             return members.isEmpty ? nil : (list.name, members)
         }
@@ -84,8 +84,8 @@ func shelveDraggedPaths(_ paths: [String]) {
             let nextDeletedShelves = (try? repo.shelveDeletedList()) ?? []
             let createdDetail = createdNames.joined(separator: ", ")
             await MainActor.run {
-                self.entries = status
-                self.changeLists = nextChangeLists
+                self.repositoryStatus.entries = status
+                self.repositoryStatus.changeLists = nextChangeLists
                 self.shelfWorkspace.shelves = nextShelves
                 self.shelfWorkspace.deletedShelves = nextDeletedShelves
                 self.refreshAfterShelfMutation(repo: repo, paths: paths)
@@ -267,7 +267,7 @@ func loadShelves() {
                     self.shelfWorkspace.showPreview = false
                 }
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -279,7 +279,7 @@ func doShelve(
 ) {
     guard let repo, !shelfWorkspace.name.isEmpty else { return }
     let name = shelfWorkspace.name
-    let paths = selectedPaths ?? entries.compactMap { entry in
+    let paths = selectedPaths ?? repositoryStatus.entries.compactMap { entry in
         if entry.unstaged == .ignored && !includeIgnored { return nil }
         if entry.unstaged == .untracked && !includeUntracked { return nil }
         return entry.path
@@ -299,11 +299,11 @@ func doShelve(
             let ss = try repo.shelveList()
             let dsh = (try? repo.shelveDeletedList()) ?? []
             await MainActor.run {
-                self.entries = st; self.changeLists = cls; self.shelfWorkspace.shelves = ss; self.shelfWorkspace.deletedShelves = dsh; self.shelfWorkspace.name = ""
+                self.repositoryStatus.entries = st; self.repositoryStatus.changeLists = cls; self.shelfWorkspace.shelves = ss; self.shelfWorkspace.deletedShelves = dsh; self.shelfWorkspace.name = ""
                 self.refreshAfterShelfMutation(repo: repo, paths: paths)
                 self.feedbackCenter.success("Changes shelved")
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -432,8 +432,8 @@ func doShelvePop(
                     selectedRootPath: resolvedRootPath,
                     primaryRootPath: self.primaryShelfRootPath
                 ) {
-                    self.entries = st
-                    self.changeLists = cls
+                    self.repositoryStatus.entries = st
+                    self.repositoryStatus.changeLists = cls
                 }
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
@@ -708,8 +708,8 @@ func doShelvePopShelves(
                 primaryRootPath: self.primaryShelfRootPath
             )
             if isPrimaryRoot {
-                self.entries = finalStatus
-                self.changeLists = nextChangeLists
+                self.repositoryStatus.entries = finalStatus
+                self.repositoryStatus.changeLists = nextChangeLists
             }
             self.publishShelfSnapshot(
                 rootPath: resolvedRootPath,

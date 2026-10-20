@@ -73,7 +73,7 @@ func beginAutoSquashCommitFromLog(_ commit: CommitInfo, kind: AutoSquashCommitKi
         return
     }
     if let activeRoot = logList.activeRootPath,
-       activeRoot != projectPath {
+       activeRoot != projectWorkspace.path {
         feedbackCenter.warning(
             "Auto-squash is available in the primary Log root",
             detail: "The nested root Log is read and mutation capable, but its Commit workspace is not yet root-scoped.",
@@ -104,18 +104,18 @@ func beginAutoSquashCommitFromLog(_ commit: CommitInfo, kind: AutoSquashCommitKi
         .split(whereSeparator: { $0.isNewline })
         .first
         .map(String.init) ?? commit.summary
-    commitMessage = "\(kind.prefix)! \(subject)"
-    pendingAutoSquashRebase = PendingAutoSquashRebase(
+    commitWorkspace.message = "\(kind.prefix)! \(subject)"
+    rebaseWorkspace.pendingAutoSquash = PendingAutoSquashRebase(
         targetID: commit.id,
         onto: onto,
         kind: kind,
         root: isRootTarget
     )
-    amendMode = false
-    toolWindowMode = .commit
+    commitWorkspace.amendMode = false
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     projectPanelExpanded = false
-    commitFeedback = nil
+    commitWorkspace.feedback = nil
 }
 
 /// Derive the oldest commit in the original rewritten range. IntelliJ uses
@@ -194,12 +194,12 @@ func startAutoSquashRebase(
 ) {
     guard let repo else { return }
     let repositoryPath = repo.workdir() ?? ""
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = nil
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = nil
     clearRebaseUndoSeed(repositoryPath: repositoryPath)
     let cancel = GitCancelHandle()
     beginFeedbackOperation("Rebase", cancelHandle: cancel)
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             // IntelliJ's Commit and Rebase executor starts a native
@@ -268,27 +268,27 @@ func startAutoSquashRebase(
                 finalHead: finalHead
             )
             await MainActor.run {
-                self.entries = st
-                self.rebaseRange = []
-                self.rebaseActions = []
-                self.rebaseTodoItems = []
-                self.rebaseTodoRoot = false
-                self.showRebaseTodoEditor = false
-                self.rebasePaused = outcome.paused
-                self.rebasePauseReason = outcome.pauseReason
-                self.rebaseConflicts = outcome.conflicts
+                self.repositoryStatus.entries = st
+                self.rebaseWorkspace.range = []
+                self.rebaseWorkspace.actions = []
+                self.rebaseWorkspace.todoItems = []
+                self.rebaseWorkspace.todoRoot = false
+                self.rebaseWorkspace.showTodoEditor = false
+                self.rebaseWorkspace.paused = outcome.paused
+                self.rebaseWorkspace.pauseReason = outcome.pauseReason
+                self.rebaseWorkspace.conflicts = outcome.conflicts
                 if outcome.paused, outcome.pauseReason == .conflict {
                     let names = outcome.conflicts.prefix(3).joined(separator: "、")
                     let suffix = names.isEmpty ? "" : "：\(names)"
-                    self.rebaseFeedback = "Autosquash 冲突 \(outcome.conflicts.count) 个文件\(suffix)，请解决后「继续」"
-                    self.showMergeRevisionsDialog = true
+                    self.rebaseWorkspace.feedback = "Autosquash 冲突 \(outcome.conflicts.count) 个文件\(suffix)，请解决后「继续」"
+                    self.operationRecovery.showConflictResolver = true
                 } else if outcome.paused {
-                    self.rebaseFeedback = "Autosquash 已暂停在 edit 提交，可修改文件后「继续」"
+                    self.rebaseWorkspace.feedback = "Autosquash 已暂停在 edit 提交，可修改文件后「继续」"
                 } else {
-                    self.rebaseFeedback = "Autosquash 变基完成"
+                    self.rebaseWorkspace.feedback = "Autosquash 变基完成"
                 }
-                self.rebaseUndoSeed = outcome.paused ? seed : nil
-                self.rebaseUndoTarget = outcome.paused ? nil : undoTarget
+                self.rebaseWorkspace.undoSeed = outcome.paused ? seed : nil
+                self.rebaseWorkspace.undoTarget = outcome.paused ? nil : undoTarget
                 if outcome.paused {
                     if let seed {
                         saveRebaseUndoSeed(seed)
@@ -311,10 +311,10 @@ func startAutoSquashRebase(
         } catch {
             if case .Cancelled = error as? EngineError {
                 await MainActor.run {
-                    self.rebaseFeedback = "Autosquash 变基已取消；保存的本地现场未被丢弃"
+                    self.rebaseWorkspace.feedback = "Autosquash 变基已取消；保存的本地现场未被丢弃"
                     self.feedbackCenter.warning(
                         "Autosquash rebase cancelled",
-                        detail: self.rebaseFeedback ?? "保存的本地现场未被丢弃",
+                        detail: self.rebaseWorkspace.feedback ?? "保存的本地现场未被丢弃",
                         nextStep: "Check Saved Changes or Stash, restore any pending local scene, then retry.",
                         additionalActions: self.pendingSavedChangesFeedbackAction(
                             repo: repo,
@@ -326,12 +326,12 @@ func startAutoSquashRebase(
             }
             await MainActor.run {
                 if (try? repo.operationState())?.kind != .rebase {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                 }
                 let detail = errorMessage(error)
-                self.rebaseFeedback = "Autosquash 变基失败：\(detail)"
+                self.rebaseWorkspace.feedback = "Autosquash 变基失败：\(detail)"
                 self.feedbackCenter.error(
                     "Autosquash rebase failed",
                     detail: detail,
@@ -382,11 +382,11 @@ func interactiveRebaseFromLog(_ commit: CommitInfo) {
                 )
             }
             await MainActor.run {
-                self.rebaseTodoOnto = onto
-                self.rebaseTodoItems = todo.items
-                self.rebaseTodoPreserveMerges = preserveMerges
-                self.rebaseTodoRoot = root
-                self.showRebaseTodoEditor = true
+                self.rebaseWorkspace.todoOnto = onto
+                self.rebaseWorkspace.todoItems = todo.items
+                self.rebaseWorkspace.todoPreserveMerges = preserveMerges
+                self.rebaseWorkspace.todoRoot = root
+                self.rebaseWorkspace.showTodoEditor = true
             }
         } catch {
             await MainActor.run {
@@ -399,7 +399,7 @@ func interactiveRebaseFromLog(_ commit: CommitInfo) {
 func rebaseUndoRequest(for target: RebaseUndoTarget) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .undoRebase,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: target.repositoryPath,
         shelfName: "",
         rebaseUndoInitialHead: target.initialHead,
@@ -436,7 +436,7 @@ func submitLogSquash() {
     let indexes = logRewrite.squashIndexes.sorted()
     guard let first = indexes.first,
           indexes.count >= 2,
-          indexes.allSatisfy({ $0 >= 0 && $0 < rebaseTodoItems.count }) else {
+          indexes.allSatisfy({ $0 >= 0 && $0 < rebaseWorkspace.todoItems.count }) else {
         feedbackCenter.error(
             "Squash unavailable",
             detail: "The selected commits are no longer available in the prepared history range.",
@@ -445,11 +445,11 @@ func submitLogSquash() {
         logRewrite.showSquashDialog = false
         return
     }
-    rebaseTodoItems[first].action = .reword
-    rebaseTodoItems[first].message = message
+    rebaseWorkspace.todoItems[first].action = .reword
+    rebaseWorkspace.todoItems[first].message = message
     for index in indexes.dropFirst() {
-        rebaseTodoItems[index].action = .fixup
-        rebaseTodoItems[index].message = nil
+        rebaseWorkspace.todoItems[index].action = .fixup
+        rebaseWorkspace.todoItems[index].message = nil
     }
     logRewrite.showSquashDialog = false
     logRewrite.squashIndexes = []
@@ -462,12 +462,12 @@ func submitLogSquash() {
 /// update-ref, and any future command that is not a structured row action.
 func prepareRawRebaseTodoEditor() {
     guard !isLogAggregate, let repo = logRepository else { return }
-    let onto = rebaseTodoOnto
-    let preserve = rebaseTodoPreserveMerges
-    let root = rebaseTodoRoot
-    showRebaseTodoEditor = false
+    let onto = rebaseWorkspace.todoOnto
+    let preserve = rebaseWorkspace.todoPreserveMerges
+    let root = rebaseWorkspace.todoRoot
+    rebaseWorkspace.showTodoEditor = false
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Prepare Native Rebase Todo", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -482,8 +482,8 @@ func prepareRawRebaseTodoEditor() {
                 cancel: cancel
             )
             await MainActor.run {
-                self.rebaseRawTodoText = raw
-                self.showRawRebaseTodoEditor = true
+                self.rebaseWorkspace.rawTodoText = raw
+                self.rebaseWorkspace.showRawTodoEditor = true
                 self.feedbackCenter.success(
                     "Native rebase todo ready",
                     detail: "Git control rows remain editable as text."
@@ -492,10 +492,10 @@ func prepareRawRebaseTodoEditor() {
         } catch {
             await MainActor.run {
                 if case .Cancelled = error as? EngineError {
-                    self.operationFeedback = "Native rebase todo preparation cancelled; local changes were restored"
+                    self.operationRecovery.feedback = "Native rebase todo preparation cancelled; local changes were restored"
                     self.feedbackCenter.warning(
                         "Native rebase todo preparation cancelled",
-                        detail: self.operationFeedback ?? "Local changes were restored",
+                        detail: self.operationRecovery.feedback ?? "Local changes were restored",
                         nextStep: "Edit the native todo again when the repository is ready."
                     )
                     return
@@ -521,17 +521,17 @@ func startTodoRebase() {
         return
     }
     guard let repo = logRepository else { return }
-    let onto = rebaseTodoOnto
-    let todo = RebaseTodo(onto: onto, items: rebaseTodoItems)
-    let preserve = rebaseTodoPreserveMerges
-    let root = rebaseTodoRoot
+    let onto = rebaseWorkspace.todoOnto
+    let todo = RebaseTodo(onto: onto, items: rebaseWorkspace.todoItems)
+    let preserve = rebaseWorkspace.todoPreserveMerges
+    let root = rebaseWorkspace.todoRoot
     let repositoryPath = repo.workdir() ?? ""
     let useInMemory = shouldUseInMemoryCommitEditing(
         settingEnabled: GitInMemoryCommitEditingSettings.isEnabled(),
-        items: rebaseTodoItems,
+        items: rebaseWorkspace.todoItems,
         preserveMerges: preserve
     )
-    let nativeActions = rebaseTodoItems.map { item -> RebaseAction in
+    let nativeActions = rebaseWorkspace.todoItems.map { item -> RebaseAction in
         switch item.action {
         case .pick:
             return .pick
@@ -551,11 +551,11 @@ func startTodoRebase() {
             return .edit
         }
     }
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = nil
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = nil
     clearRebaseUndoSeed(repositoryPath: repositoryPath)
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Start Interactive Rebase", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -647,21 +647,21 @@ func startTodoRebase() {
                 finalHead: finalHead
             )
             await MainActor.run {
-                self.showRebaseTodoEditor = false
-                self.rebaseTodoRoot = false
+                self.rebaseWorkspace.showTodoEditor = false
+                self.rebaseWorkspace.todoRoot = false
                 if outcome.paused {
-                    self.rebaseUndoSeed = seed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let seed {
                         saveRebaseUndoSeed(seed)
                     }
-                    self.operationFeedback = outcome.pauseReason == .conflict
+                    self.operationRecovery.feedback = outcome.pauseReason == .conflict
                         ? "Rebase 冲突暂停：\(outcome.conflicts.count) 个文件"
                         : "Rebase 在 edit 暂停"
-                    self.showMergeRevisionsDialog = true
+                    self.operationRecovery.showConflictResolver = true
                 } else {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = undoTarget
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = undoTarget
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                     if let undoTarget {
                         self.feedbackCenter.success(
@@ -680,10 +680,10 @@ func startTodoRebase() {
         } catch {
             if case .Cancelled = error as? EngineError {
                 await MainActor.run {
-                    self.operationFeedback = "Rebase 已取消；保存的本地现场未被丢弃"
+                    self.operationRecovery.feedback = "Rebase 已取消；保存的本地现场未被丢弃"
                     self.feedbackCenter.warning(
                         "Rebase cancelled",
-                        detail: self.operationFeedback ?? "保存的本地现场未被丢弃",
+                        detail: self.operationRecovery.feedback ?? "保存的本地现场未被丢弃",
                         nextStep: "Check Saved Changes or Stash, restore any pending local scene, then retry.",
                         additionalActions: self.pendingSavedChangesFeedbackAction(
                             repo: repo,
@@ -695,8 +695,8 @@ func startTodoRebase() {
             }
             await MainActor.run {
                 if (try? repo.operationState())?.kind != .rebase {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                 }
                 self.feedbackCenter.error(
@@ -726,16 +726,16 @@ func startRawTodoRebase() {
         return
     }
     guard let repo = logRepository else { return }
-    let onto = rebaseTodoOnto
-    let rawTodo = rebaseRawTodoText
-    let preserve = rebaseTodoPreserveMerges
-    let root = rebaseTodoRoot
+    let onto = rebaseWorkspace.todoOnto
+    let rawTodo = rebaseWorkspace.rawTodoText
+    let preserve = rebaseWorkspace.todoPreserveMerges
+    let root = rebaseWorkspace.todoRoot
     let repositoryPath = repo.workdir() ?? ""
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = nil
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = nil
     clearRebaseUndoSeed(repositoryPath: repositoryPath)
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Start Native Interactive Rebase", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         let messageMonitor = Task.detached(priority: .userInitiated) {
@@ -745,18 +745,18 @@ func startRawTodoRebase() {
                 sawActiveRebase = sawActiveRebase || active
                 if let pending = try? repo.rebasePendingMessage() {
                     await MainActor.run {
-                        guard !self.showRawRebaseMessageEditor else { return }
-                        self.rawRebaseMessageRepository = repo
-                        self.rawRebaseMessageText = pending
-                        self.showRawRebaseMessageEditor = true
+                        guard !self.rebaseWorkspace.showRawMessageEditor else { return }
+                        self.rebaseWorkspace.rawMessageRepository = repo
+                        self.rebaseWorkspace.rawMessageText = pending
+                        self.rebaseWorkspace.showRawMessageEditor = true
                     }
                 }
                 if sawActiveRebase && !active {
                     await MainActor.run {
-                        guard (self.rawRebaseMessageRepository?.workdir() ?? "") == repositoryPath else { return }
-                        self.showRawRebaseMessageEditor = false
-                        self.rawRebaseMessageRepository = nil
-                        self.rawRebaseMessageText = ""
+                        guard (self.rebaseWorkspace.rawMessageRepository?.workdir() ?? "") == repositoryPath else { return }
+                        self.rebaseWorkspace.showRawMessageEditor = false
+                        self.rebaseWorkspace.rawMessageRepository = nil
+                        self.rebaseWorkspace.rawMessageText = ""
                     }
                     break
                 }
@@ -806,22 +806,22 @@ func startRawTodoRebase() {
                 finalHead: finalHead
             )
             await MainActor.run {
-                self.showRawRebaseTodoEditor = false
-                self.rebaseRawTodoText = ""
-                self.rebaseTodoRoot = false
+                self.rebaseWorkspace.showRawTodoEditor = false
+                self.rebaseWorkspace.rawTodoText = ""
+                self.rebaseWorkspace.todoRoot = false
                 if outcome.paused {
-                    self.rebaseUndoSeed = seed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let seed {
                         saveRebaseUndoSeed(seed)
                     }
-                    self.operationFeedback = outcome.pauseReason == .conflict
+                    self.operationRecovery.feedback = outcome.pauseReason == .conflict
                         ? "Native rebase conflict paused: \(outcome.conflicts.count) files"
                         : "Native rebase paused; resolve the operation before continuing"
-                    self.showMergeRevisionsDialog = true
+                    self.operationRecovery.showConflictResolver = true
                 } else {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = undoTarget
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = undoTarget
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                     if let undoTarget {
                         self.feedbackCenter.success(
@@ -844,10 +844,10 @@ func startRawTodoRebase() {
             messageMonitor.cancel()
             await MainActor.run {
                 if case .Cancelled = error as? EngineError {
-                    self.operationFeedback = "Native rebase cancelled; saved local changes were not discarded"
+                    self.operationRecovery.feedback = "Native rebase cancelled; saved local changes were not discarded"
                     self.feedbackCenter.warning(
                         "Native rebase cancelled",
-                        detail: self.operationFeedback ?? "Saved local changes were not discarded",
+                        detail: self.operationRecovery.feedback ?? "Saved local changes were not discarded",
                         nextStep: "Continue or abort the native rebase, then restore Saved Changes or Stash if it remains pending.",
                         additionalActions: self.pendingSavedChangesFeedbackAction(
                             repo: repo,
@@ -857,8 +857,8 @@ func startRawTodoRebase() {
                     return
                 }
                 if (try? repo.operationState())?.kind != .rebase {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                 }
                 self.feedbackCenter.error(
@@ -877,8 +877,8 @@ func startRawTodoRebase() {
 
 /// Complete the commit-message request made by Git's native GIT_EDITOR.
 func submitRawRebaseMessage() {
-    guard let repo = rawRebaseMessageRepository else { return }
-    let message = rawRebaseMessageText
+    guard let repo = rebaseWorkspace.rawMessageRepository else { return }
+    let message = rebaseWorkspace.rawMessageText
     guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         feedbackCenter.warning(
             "Commit message required",
@@ -889,9 +889,9 @@ func submitRawRebaseMessage() {
     }
     do {
         try repo.rebaseSetPendingMessage(message: message)
-        showRawRebaseMessageEditor = false
-        rawRebaseMessageRepository = nil
-        rawRebaseMessageText = ""
+        rebaseWorkspace.showRawMessageEditor = false
+        rebaseWorkspace.rawMessageRepository = nil
+        rebaseWorkspace.rawMessageText = ""
     } catch {
         feedbackCenter.error(
             "Save rebase message failed",
@@ -904,12 +904,12 @@ func submitRawRebaseMessage() {
 /// Cancel the native message editor by returning the same non-zero result
 /// Git would receive from an IntelliJ unstructured-editor cancellation.
 func cancelRawRebaseMessage() {
-    guard let repo = rawRebaseMessageRepository else { return }
+    guard let repo = rebaseWorkspace.rawMessageRepository else { return }
     do {
         try repo.rebaseCancelPendingMessage()
-        showRawRebaseMessageEditor = false
-        rawRebaseMessageRepository = nil
-        rawRebaseMessageText = ""
+        rebaseWorkspace.showRawMessageEditor = false
+        rebaseWorkspace.rawMessageRepository = nil
+        rebaseWorkspace.rawMessageText = ""
     } catch {
         feedbackCenter.error(
             "Cancel rebase message failed",
@@ -923,16 +923,16 @@ func cancelRawRebaseMessage() {
 /// 而不是切换后 pull 它自己的 upstream。引擎使用 --autostash，冲突时留下
 /// system rebase 状态，由统一 Continue/Skip/Abort 工作台接管。
 func checkoutAndRebaseOntoCurrent(repo: Repository, name: String) {
-    rebaseUndoTarget = nil
-    rebaseUndoSeed = nil
+    rebaseWorkspace.undoTarget = nil
+    rebaseWorkspace.undoSeed = nil
     let currentBranch = (try? repo.branchList())?.first(where: { $0.isCurrent })?.name
     let seed = makeRebaseUndoSeed(repo: repo, branch: name, onto: currentBranch)
     if let seed {
         saveRebaseUndoSeed(seed)
-        rebaseUndoSeed = seed
+        rebaseWorkspace.undoSeed = seed
     }
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Checkout with Rebase", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -942,7 +942,7 @@ func checkoutAndRebaseOntoCurrent(repo: Repository, name: String) {
                 cancel: cancel
             )
             await MainActor.run {
-                self.rebaseUndoSeed = nil
+                self.rebaseWorkspace.undoSeed = nil
                 if let seed {
                     clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                 }
@@ -973,14 +973,14 @@ func checkoutAndRebaseOntoCurrent(repo: Repository, name: String) {
             await MainActor.run {
                 if state?.kind == .rebase {
                     if let seed {
-                        self.rebaseUndoSeed = seed
+                        self.rebaseWorkspace.undoSeed = seed
                         saveRebaseUndoSeed(seed)
                     }
-                    self.entries = status
-                    self.operationState = state
-                    self.mergeInProgress = true
-                    self.mergeInitialPath = firstConflict
-                    self.showMergeRevisionsDialog = true
+                    self.repositoryStatus.entries = status
+                    self.operationRecovery.operation = state
+                    self.mergeWorkspace.inProgress = true
+                    self.operationRecovery.initialPath = firstConflict
+                    self.operationRecovery.showConflictResolver = true
                     self.feedbackCenter.warning(
                         "Checkout with Rebase paused",
                         detail: errorMessage(error),
@@ -997,7 +997,7 @@ func checkoutAndRebaseOntoCurrent(repo: Repository, name: String) {
                         notificationID: seed.map { rebaseRecoveryNotificationID(repositoryPath: $0.repositoryPath) }
                     )
                 } else {
-                    self.rebaseUndoSeed = nil
+                    self.rebaseWorkspace.undoSeed = nil
                     if let seed {
                         clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                     }
@@ -1023,15 +1023,15 @@ func checkoutAndRebaseOntoCurrent(repo: Repository, name: String) {
 func openPersistedRebaseRecovery(rootPath: String, branch: String? = nil) {
     let normalizedRoot = URL(fileURLWithPath: rootPath).standardizedFileURL.path
     guard let seed = loadRebaseUndoSeed(repositoryPath: normalizedRoot) else { return }
-    rebaseUndoSeed = seed
-    rebaseRootPath = normalizedRoot
-    rebaseBranch = branch ?? seed.branch
-    rebasePaused = true
+    rebaseWorkspace.undoSeed = seed
+    rebaseWorkspace.rootPath = normalizedRoot
+    rebaseWorkspace.branch = branch ?? seed.branch
+    rebaseWorkspace.paused = true
     if let persistedRepo = try? openRepository(path: normalizedRoot) {
         let persistedState = try? persistedRepo.operationState()
-        operationState = persistedState
-        rebasePauseReason = persistedState?.conflictedFiles.isEmpty == false ? .conflict : .edit
-        rebaseConflicts = persistedState?.conflictedFiles ?? []
+        operationRecovery.operation = persistedState
+        rebaseWorkspace.pauseReason = persistedState?.conflictedFiles.isEmpty == false ? .conflict : .edit
+        rebaseWorkspace.conflicts = persistedState?.conflictedFiles ?? []
     }
     openMultiRootConflictResolver(preferredRootPath: normalizedRoot)
     if repo?.workdir() == normalizedRoot {
@@ -1042,7 +1042,7 @@ func openPersistedRebaseRecovery(rootPath: String, branch: String? = nil) {
 func persistedRebaseRecoveryAction(rootPath: String, branch: String) -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .resumeRebase,
-        projectPath: projectPath ?? rootPath,
+        projectPath: projectWorkspace.path ?? rootPath,
         rootPath: rootPath,
         shelfName: "",
         rebaseBranch: branch
@@ -1095,7 +1095,7 @@ func makeMultiRootRebaseRecoveryRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .multiRootRebaseRecovery,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         multiRootRebaseRecoveryAction: action,
@@ -1139,7 +1139,7 @@ func multiRootRebaseRecoveryFeedbackAction(
 }
 
 func multiRootRebaseNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -1149,15 +1149,15 @@ func multiRootRebaseNotificationID() -> String? {
 /// IntelliJ 的多 root Branches Popup 语义：非当前本地分支 rebase 到当前分支，
 /// 而不是 checkout 后 pull 该分支自己的 upstream。远程分支需先检出为本地分支。
 func executeMultiRootCheckoutWithRebase(rootPath: String, branch: String) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     guard !branch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         feedbackCenter.warning("Checkout with Rebase cancelled", detail: "A local branch is required.")
         return
     }
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Checkout with Rebase", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         let rootRepo: Repository
@@ -1188,7 +1188,7 @@ func executeMultiRootCheckoutWithRebase(rootPath: String, branch: String) {
                 if let seed {
                     clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                     if self.repo?.workdir() == seed.repositoryPath {
-                        self.rebaseUndoSeed = nil
+                        self.rebaseWorkspace.undoSeed = nil
                     }
                 }
                 self.feedbackCenter.success("Checked out and rebased", detail: branch)
@@ -1212,8 +1212,8 @@ func executeMultiRootCheckoutWithRebase(rootPath: String, branch: String) {
             }
             let state = try? rootRepo.operationState()
             await MainActor.run {
-                self.operationsViewMode = .roots
-                self.toolWindowMode = .operations
+                self.operationRecovery.viewMode = .roots
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 if state?.kind == .rebase {
                     if let seed {
@@ -1255,7 +1255,7 @@ func executeMultiRootCheckoutWithRebase(rootPath: String, branch: String) {
 }
 
 func stageAndRetryMultiRootRebaseContinue(rootPath: String, sessionID: UUID) {
-    guard multiRootRebaseSession?.id == sessionID else { return }
+    guard rebaseWorkspace.multiRootSession?.id == sessionID else { return }
     runMultiRootResolverRecovery(
         rootPath: rootPath,
         action: .continueOperation,
@@ -1329,7 +1329,7 @@ func branchCreateAndRebase(
                 }
                 self.branchWorkspace.newName = ""
                 self.branchWorkspace.newBase = ""
-                if self.toolWindowMode == .log { self.loadLog() }
+                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
                 self.checkoutAndRebaseOntoCurrent(repo: targetRepo, name: name)
             }
         } catch {
@@ -1348,7 +1348,7 @@ func branchCreateAndRebase(
 /// explicit todo，再交给引擎执行，保持与单 root Rebase 对话框相同的历史语义。
 func rebaseCurrentInRoot(rootPath: String, onto: String) {
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Rebase branch", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -1378,7 +1378,7 @@ func rebaseCurrentInRoot(rootPath: String, onto: String) {
                 self.loadMultiRoots()
                 if outcome.paused {
                     if let seed {
-                        self.rebaseUndoSeed = seed
+                        self.rebaseWorkspace.undoSeed = seed
                         saveRebaseUndoSeed(seed)
                     }
                     self.feedbackCenter.warning(
@@ -1392,7 +1392,7 @@ func rebaseCurrentInRoot(rootPath: String, onto: String) {
                     )
                 } else {
                     if let seed {
-                        self.rebaseUndoSeed = nil
+                        self.rebaseWorkspace.undoSeed = nil
                         clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                     }
                     if let undoTarget {
@@ -1443,7 +1443,7 @@ func rebaseCurrentInRoot(rootPath: String, onto: String) {
                     )
                 } else {
                     if let seed {
-                        self.rebaseUndoSeed = nil
+                        self.rebaseWorkspace.undoSeed = nil
                         clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                     }
                     self.feedbackCenter.error(
@@ -1459,29 +1459,29 @@ func rebaseCurrentInRoot(rootPath: String, onto: String) {
 
 func rebaseActionBinding(_ index: Int) -> Binding<RebaseAction> {
     Binding(
-        get: { self.rebaseActions[index] },
-        set: { self.rebaseActions[index] = $0 }
+        get: { self.rebaseWorkspace.actions[index] },
+        set: { self.rebaseWorkspace.actions[index] = $0 }
     )
 }
 
 func loadRebaseRange() {
-    rebaseRangeGeneration += 1
-    let generation = rebaseRangeGeneration
+    rebaseWorkspace.rangeGeneration += 1
+    let generation = rebaseWorkspace.rangeGeneration
     guard let repo else {
-        rebaseRange = []
-        rebaseActions = []
+        rebaseWorkspace.range = []
+        rebaseWorkspace.actions = []
         return
     }
-    let onto = rebaseOnto.trimmingCharacters(in: .whitespacesAndNewlines)
-    let branch = rebaseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let repositoryPath = rebaseRootPath.trimmingCharacters(in: .whitespacesAndNewlines)
-    let root = rebaseRoot
+    let onto = rebaseWorkspace.onto.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = rebaseWorkspace.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let repositoryPath = rebaseWorkspace.rootPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    let root = rebaseWorkspace.root
     guard rebaseInputsCanLoadRange(onto: onto, branch: branch, root: root) else {
-        rebaseRange = []
-        rebaseActions = []
+        rebaseWorkspace.range = []
+        rebaseWorkspace.actions = []
         return
     }
-    let preserveMerges = rebasePreserveMerges
+    let preserveMerges = rebaseWorkspace.preserveMerges
     let currentRepositoryPath = repo.workdir() ?? ""
     Task.detached(priority: .userInitiated) {
         do {
@@ -1500,79 +1500,79 @@ func loadRebaseRange() {
             await MainActor.run {
                 guard rebaseRangeRequestIsCurrent(
                     generation: generation,
-                    currentGeneration: self.rebaseRangeGeneration,
+                    currentGeneration: self.rebaseWorkspace.rangeGeneration,
                     requestedOnto: onto,
-                    currentOnto: self.rebaseOnto,
+                    currentOnto: self.rebaseWorkspace.onto,
                     requestedPreserveMerges: preserveMerges,
-                    currentPreserveMerges: self.rebasePreserveMerges,
+                    currentPreserveMerges: self.rebaseWorkspace.preserveMerges,
                     requestedRoot: root,
-                    currentRoot: self.rebaseRoot,
+                    currentRoot: self.rebaseWorkspace.root,
                     requestedBranch: branch,
-                    currentBranch: self.rebaseBranch,
+                    currentBranch: self.rebaseWorkspace.branch,
                     requestedRepositoryPath: repositoryPath,
-                    currentRepositoryPath: self.rebaseRootPath
+                    currentRepositoryPath: self.rebaseWorkspace.rootPath
                 ) else { return }
-                self.rebaseRange = range
-                self.rebaseActions = Array(repeating: .pick, count: range.count)
-                self.rebaseFeedback = "范围 \(range.count) 个提交"
+                self.rebaseWorkspace.range = range
+                self.rebaseWorkspace.actions = Array(repeating: .pick, count: range.count)
+                self.rebaseWorkspace.feedback = "范围 \(range.count) 个提交"
             }
         } catch {
             await MainActor.run {
                 guard rebaseRangeRequestIsCurrent(
                     generation: generation,
-                    currentGeneration: self.rebaseRangeGeneration,
+                    currentGeneration: self.rebaseWorkspace.rangeGeneration,
                     requestedOnto: onto,
-                    currentOnto: self.rebaseOnto,
+                    currentOnto: self.rebaseWorkspace.onto,
                     requestedPreserveMerges: preserveMerges,
-                    currentPreserveMerges: self.rebasePreserveMerges,
+                    currentPreserveMerges: self.rebaseWorkspace.preserveMerges,
                     requestedRoot: root,
-                    currentRoot: self.rebaseRoot,
+                    currentRoot: self.rebaseWorkspace.root,
                     requestedBranch: branch,
-                    currentBranch: self.rebaseBranch,
+                    currentBranch: self.rebaseWorkspace.branch,
                     requestedRepositoryPath: repositoryPath,
-                    currentRepositoryPath: self.rebaseRootPath
+                    currentRepositoryPath: self.rebaseWorkspace.rootPath
                 ) else { return }
-                self.rebaseRange = []
-                self.rebaseActions = []
-                self.rebaseFeedback = "\(error)"
+                self.rebaseWorkspace.range = []
+                self.rebaseWorkspace.actions = []
+                self.rebaseWorkspace.feedback = "\(error)"
             }
         }
     }
 }
 
 func invalidateLoadedRebaseRange() {
-    rebaseRangeGeneration += 1
-    rebaseRange = []
-    rebaseActions = []
-    rebaseFeedback = nil
+    rebaseWorkspace.rangeGeneration += 1
+    rebaseWorkspace.range = []
+    rebaseWorkspace.actions = []
+    rebaseWorkspace.feedback = nil
 }
 
 func doRebase() {
-    guard operationState?.kind == nil,
+    guard operationRecovery.operation?.kind == nil,
           isArborVCSActionEnabled(.rebase, in: vcsActionContext),
           let repo else { return }
-    let interactive = rebaseInteractive
-    guard !interactive || !rebaseActions.isEmpty else { return }
-    let onto = rebaseOnto.trimmingCharacters(in: .whitespacesAndNewlines)
-    let branch = rebaseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let repositoryPath = rebaseRootPath.trimmingCharacters(in: .whitespacesAndNewlines)
-    let root = rebaseRoot
+    let interactive = rebaseWorkspace.interactive
+    guard !interactive || !rebaseWorkspace.actions.isEmpty else { return }
+    let onto = rebaseWorkspace.onto.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = rebaseWorkspace.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let repositoryPath = rebaseWorkspace.rootPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    let root = rebaseWorkspace.root
     guard rebaseInputsCanLoadRange(onto: onto, branch: branch, root: root) else { return }
     let currentRepositoryPath = repo.workdir() ?? ""
     let persistedRepositoryPath = repositoryPath.isEmpty ? currentRepositoryPath : repositoryPath
-    rebaseRangeGeneration += 1
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = nil
+    rebaseWorkspace.rangeGeneration += 1
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = nil
     clearRebaseUndoSeed(repositoryPath: persistedRepositoryPath)
     let cancel = GitCancelHandle()
     beginFeedbackOperation("Rebase", cancelHandle: cancel)
-    let actions = rebaseActions
-    let preserveMerges = rebasePreserveMerges
-    let autoSquash = rebaseAutoSquash
-    let keepEmpty = rebaseKeepEmpty
-    let updateRefs = rebaseUpdateRefs
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
-    rebaseRetryContext = RebaseRetryContext(
+    let actions = rebaseWorkspace.actions
+    let preserveMerges = rebaseWorkspace.preserveMerges
+    let autoSquash = rebaseWorkspace.autoSquash
+    let keepEmpty = rebaseWorkspace.keepEmpty
+    let updateRefs = rebaseWorkspace.updateRefs
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
+    rebaseWorkspace.retryContext = RebaseRetryContext(
         repositoryPath: repositoryPath,
         branch: branch,
         onto: onto,
@@ -1608,7 +1608,7 @@ func doRebase() {
             }
             if let undoSeed {
                 await MainActor.run {
-                    self.rebaseUndoSeed = undoSeed
+                    self.rebaseWorkspace.undoSeed = undoSeed
                     saveRebaseUndoSeed(undoSeed)
                 }
             }
@@ -1649,42 +1649,42 @@ func doRebase() {
             )
             await MainActor.run {
                 if repositoryPath.isEmpty || repositoryPath == currentRepositoryPath {
-                    self.entries = st
+                    self.repositoryStatus.entries = st
                 }
                 if outcome.paused {
-                    self.rebaseRetryContext = nil
+                    self.rebaseWorkspace.retryContext = nil
                     let pausedSeed = undoSeed
-                    self.rebaseUndoSeed = pausedSeed
+                    self.rebaseWorkspace.undoSeed = pausedSeed
                     if let pausedSeed {
                         saveRebaseUndoSeed(pausedSeed)
                     } else {
                         clearRebaseUndoSeed(repositoryPath: persistedRepositoryPath)
                     }
-                    self.rebaseUndoTarget = nil
-                    self.rebasePaused = true
-                    self.rebasePauseReason = outcome.pauseReason
-                    self.rebaseConflicts = outcome.conflicts
+                    self.rebaseWorkspace.undoTarget = nil
+                    self.rebaseWorkspace.paused = true
+                    self.rebaseWorkspace.pauseReason = outcome.pauseReason
+                    self.rebaseWorkspace.conflicts = outcome.conflicts
                     if outcome.pauseReason == .conflict {
                         let names = outcome.conflicts.prefix(3).joined(separator: "、")
                         let suffix = names.isEmpty ? "" : "：\(names)"
-                        self.rebaseFeedback = "冲突 \(outcome.conflicts.count) 个文件\(suffix)，请在状态页解决后「继续」"
-                        self.showMergeRevisionsDialog = true
+                        self.rebaseWorkspace.feedback = "冲突 \(outcome.conflicts.count) 个文件\(suffix)，请在状态页解决后「继续」"
+                        self.operationRecovery.showConflictResolver = true
                     } else {
-                        self.rebaseFeedback = "已暂停在 edit 提交，可修改文件后「继续」"
+                        self.rebaseWorkspace.feedback = "已暂停在 edit 提交，可修改文件后「继续」"
                     }
-                    self.rebaseRange = []
-                    self.rebaseActions = []
+                    self.rebaseWorkspace.range = []
+                    self.rebaseWorkspace.actions = []
                 } else {
-                    self.rebaseRetryContext = nil
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = undoTarget
+                    self.rebaseWorkspace.retryContext = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = undoTarget
                     clearRebaseUndoSeed(repositoryPath: persistedRepositoryPath)
-                    self.rebasePaused = false
-                    self.rebasePauseReason = nil
-                    self.rebaseConflicts = []
-                    self.rebaseFeedback = "变基完成"
-                    self.rebaseRange = []
-                    self.rebaseActions = []
+                    self.rebaseWorkspace.paused = false
+                    self.rebaseWorkspace.pauseReason = nil
+                    self.rebaseWorkspace.conflicts = []
+                    self.rebaseWorkspace.feedback = "变基完成"
+                    self.rebaseWorkspace.range = []
+                    self.rebaseWorkspace.actions = []
                     if let undoTarget {
                         self.feedbackCenter.success(
                             "Rebase completed",
@@ -1707,10 +1707,10 @@ func doRebase() {
             let detail = errorMessage(error)
             if case .Cancelled = error as? EngineError {
                 await MainActor.run {
-                    self.rebaseFeedback = "变基已取消；保存的本地现场未被丢弃"
+                    self.rebaseWorkspace.feedback = "变基已取消；保存的本地现场未被丢弃"
                     self.feedbackCenter.warning(
                         "Rebase cancelled",
-                        detail: self.rebaseFeedback ?? detail,
+                        detail: self.rebaseWorkspace.feedback ?? detail,
                         nextStep: "Check Saved Changes or Stash, restore any pending local scene, then retry if needed."
                     )
                 }
@@ -1735,7 +1735,7 @@ func doRebase() {
                 operationStillActive = true
             }
             await MainActor.run {
-                self.rebaseFeedback = detail
+                self.rebaseWorkspace.feedback = detail
                 if operationStillActive {
                     self.feedbackCenter.error(
                         "Rebase failed",
@@ -1743,7 +1743,7 @@ func doRebase() {
                         nextStep: "Resolve conflicts, then Continue or Abort the rebase."
                     )
                 } else {
-                    self.rebaseUndoSeed = nil
+                    self.rebaseWorkspace.undoSeed = nil
                     clearRebaseUndoSeed(repositoryPath: persistedRepositoryPath)
                     self.feedbackCenter.error(
                         "Rebase failed",
@@ -1759,17 +1759,17 @@ func doRebase() {
 }
 
 func retryLastRebase() {
-    guard let context = rebaseRetryContext else { return }
-    rebaseRootPath = context.repositoryPath
-    rebaseBranch = context.branch
-    rebaseOnto = context.onto
-    rebaseActions = context.actions
-    rebaseInteractive = context.interactive
-    rebasePreserveMerges = context.preserveMerges
-    rebaseAutoSquash = context.autoSquash
-    rebaseKeepEmpty = context.keepEmpty
-    rebaseUpdateRefs = context.updateRefs
-    rebaseRoot = context.root
+    guard let context = rebaseWorkspace.retryContext else { return }
+    rebaseWorkspace.rootPath = context.repositoryPath
+    rebaseWorkspace.branch = context.branch
+    rebaseWorkspace.onto = context.onto
+    rebaseWorkspace.actions = context.actions
+    rebaseWorkspace.interactive = context.interactive
+    rebaseWorkspace.preserveMerges = context.preserveMerges
+    rebaseWorkspace.autoSquash = context.autoSquash
+    rebaseWorkspace.keepEmpty = context.keepEmpty
+    rebaseWorkspace.updateRefs = context.updateRefs
+    rebaseWorkspace.root = context.root
     doRebase()
 }
 
@@ -1779,7 +1779,7 @@ func retryLastRebase() {
 /// branch switch, active Git operation, or protected-remote publication
 /// invalidates the action.
 func undoLastRebase(_ requestedTarget: RebaseUndoTarget? = nil) {
-    guard let target = requestedTarget ?? rebaseUndoTarget else { return }
+    guard let target = requestedTarget ?? rebaseWorkspace.undoTarget else { return }
     let protectedPatterns = effectiveProtectedBranchPatterns
     let notificationID = rebaseUndoNotificationID(repositoryPath: target.repositoryPath)
     beginFeedbackOperation("Undo Rebase", notificationID: notificationID)
@@ -1833,8 +1833,8 @@ func undoLastRebase(_ requestedTarget: RebaseUndoTarget? = nil) {
             try selectedRepo.reset(commitId: target.initialHead, mode: .keep)
             await MainActor.run {
                 self.feedbackCenter.expire(notificationID: notificationID)
-                if self.rebaseUndoTarget?.expectedHead == target.expectedHead {
-                    self.rebaseUndoTarget = nil
+                if self.rebaseWorkspace.undoTarget?.expectedHead == target.expectedHead {
+                    self.rebaseWorkspace.undoTarget = nil
                 }
                 clearRebaseUndoSeed(repositoryPath: target.repositoryPath)
                 self.feedbackCenter.success(
@@ -1862,14 +1862,14 @@ func undoLastRebase(_ requestedTarget: RebaseUndoTarget? = nil) {
 /// can inspect every root's range and fix an invalid branch/ref before any
 /// repository is rewritten.
 func prepareMultiRootRebaseEditor() {
-    guard !multiRoots.isEmpty else { return }
-    let onto = rebaseOnto.trimmingCharacters(in: .whitespacesAndNewlines)
-    let branch = rebaseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let rootMode = rebaseRoot
+    guard !multiRootWorkspace.roots.isEmpty else { return }
+    let onto = rebaseWorkspace.onto.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = rebaseWorkspace.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let rootMode = rebaseWorkspace.root
     guard rebaseInputsCanLoadRange(onto: onto, branch: branch, root: rootMode) else { return }
 
-    let roots = multiRoots
-    let preserveMerges = rebasePreserveMerges
+    let roots = multiRootWorkspace.roots
+    let preserveMerges = rebaseWorkspace.preserveMerges
     beginFeedbackOperation("Prepare multi-root rebase")
     Task.detached(priority: .userInitiated) {
         var drafts: [MultiRootRebaseTodoDraft] = []
@@ -1909,8 +1909,8 @@ func prepareMultiRootRebaseEditor() {
         }
         let preparedDrafts = drafts
         await MainActor.run {
-            self.multiRootRebaseDrafts = preparedDrafts
-            self.showMultiRootRebaseEditor = true
+            self.rebaseWorkspace.multiRootDrafts = preparedDrafts
+            self.rebaseWorkspace.showMultiRootEditor = true
             let failures = preparedDrafts.filter { $0.loadError != nil }
             if failures.isEmpty {
                 let count = preparedDrafts.reduce(0) { $0 + $1.items.count }
@@ -1934,18 +1934,18 @@ func prepareMultiRootRebaseEditor() {
 /// already completed and skipped roots for the same partial-result model as
 /// IntelliJ's GitRebaseSpec/GitRebaseProcess.
 func doMultiRootRebase(drafts: [MultiRootRebaseTodoDraft]?) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    guard let projectPath, !multiRoots.isEmpty else { return }
-    let onto = rebaseOnto.trimmingCharacters(in: .whitespacesAndNewlines)
-    let branch = rebaseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let rootMode = rebaseRoot
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    guard let projectPath = projectWorkspace.path, !multiRootWorkspace.roots.isEmpty else { return }
+    let onto = rebaseWorkspace.onto.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = rebaseWorkspace.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let rootMode = rebaseWorkspace.root
     guard rebaseInputsCanLoadRange(onto: onto, branch: branch, root: rootMode) else { return }
 
     let draftsByPath = Dictionary(uniqueKeysWithValues: (drafts ?? []).map { ($0.rootPath, $0) })
-    if rebaseInteractive {
-        guard multiRoots.allSatisfy({
+    if rebaseWorkspace.interactive {
+        guard multiRootWorkspace.roots.allSatisfy({
             guard let draft = draftsByPath[$0.path] else { return false }
             return draft.loadError == nil && !draft.items.isEmpty
         }) else {
@@ -1961,9 +1961,9 @@ func doMultiRootRebase(drafts: [MultiRootRebaseTodoDraft]?) {
     let savePolicyRaw = GitLocalChangesSavePolicySettings.choice(for: projectPath).rawValue
     let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
 
-    let specs = multiRoots.compactMap { root -> MultiRootRebaseSpec? in
+    let specs = multiRootWorkspace.roots.compactMap { root -> MultiRootRebaseSpec? in
         let actions: [RebaseAction]
-        if rebaseInteractive {
+        if rebaseWorkspace.interactive {
             guard let draft = draftsByPath[root.path] else { return nil }
             actions = draft.items.map { item -> RebaseAction in
                 switch item.action {
@@ -1993,27 +1993,27 @@ func doMultiRootRebase(drafts: [MultiRootRebaseTodoDraft]?) {
             branch: branch,
             onto: onto,
             actions: actions,
-            orderedCommitIds: rebaseInteractive
-                && rebasePreserveMerges
+            orderedCommitIds: rebaseWorkspace.interactive
+                && rebaseWorkspace.preserveMerges
                 && draftsByPath[root.path]?.rawTodo == nil
                 ? (draftsByPath[root.path]?.items.map(\.commitId) ?? [])
                 : [],
             rawTodo: draftsByPath[root.path]?.rawTodo,
-            preserveMerges: rebasePreserveMerges,
-            autoSquash: rebaseAutoSquash,
-            keepEmpty: rebaseKeepEmpty,
-            updateRefs: rebaseUpdateRefs,
+            preserveMerges: rebaseWorkspace.preserveMerges,
+            autoSquash: rebaseWorkspace.autoSquash,
+            keepEmpty: rebaseWorkspace.keepEmpty,
+            updateRefs: rebaseWorkspace.updateRefs,
             root: rootMode,
-            interactive: rebaseInteractive,
+            interactive: rebaseWorkspace.interactive,
             savePolicy: savePolicy
         )
     }
-    guard specs.count == multiRoots.count else { return }
+    guard specs.count == multiRootWorkspace.roots.count else { return }
 
     let session = MultiRootRebaseSession(
         projectPath: projectPath,
         roots: specs.map { spec in
-            let displayName = multiRoots.first(where: { $0.path == spec.rootPath })?.displayName
+            let displayName = multiRootWorkspace.roots.first(where: { $0.path == spec.rootPath })?.displayName
                 ?? URL(fileURLWithPath: spec.rootPath).lastPathComponent
             return MultiRootRebaseSessionRoot(
                 rootPath: spec.rootPath,
@@ -2037,9 +2037,9 @@ func doMultiRootRebase(drafts: [MultiRootRebaseTodoDraft]?) {
             )
         }
     )
-    multiRootRebaseSession = session
+    rebaseWorkspace.multiRootSession = session
     saveMultiRootRebaseSession(session)
-    rebaseRangeGeneration += 1
+    rebaseWorkspace.rangeGeneration += 1
     runPendingMultiRootRebase(session)
 }
 
@@ -2178,13 +2178,13 @@ func multiRootRebaseRollbackTargets(
 }
 
 func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
-    guard !multiRootRunning else { return }
+    guard !multiRootWorkspace.running else { return }
     let pendingRoots = session.roots.filter { $0.state == .pending }
     guard !pendingRoots.isEmpty else { return }
     let specs = pendingRoots.map { $0.makeSpec() }
     let sessionID = session.id
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation(
         "Multi-root Rebase",
         cancelHandle: cancel,
@@ -2211,11 +2211,11 @@ func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
                     while !Task.isCancelled {
                         if let pending = try? activeRepo.rebasePendingMessage() {
                             await MainActor.run {
-                                guard self.multiRootRebaseSession?.id == sessionID,
-                                      !self.showRawRebaseMessageEditor else { return }
-                                self.rawRebaseMessageRepository = activeRepo
-                                self.rawRebaseMessageText = pending
-                                self.showRawRebaseMessageEditor = true
+                                guard self.rebaseWorkspace.multiRootSession?.id == sessionID,
+                                      !self.rebaseWorkspace.showRawMessageEditor else { return }
+                                self.rebaseWorkspace.rawMessageRepository = activeRepo
+                                self.rebaseWorkspace.rawMessageText = pending
+                                self.rebaseWorkspace.showRawMessageEditor = true
                             }
                         }
                         if (try? activeRepo.operationState()) == nil {
@@ -2226,8 +2226,8 @@ func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
                 }
             }
             await MainActor.run {
-                guard self.multiRootRebaseSession?.id == sessionID else { return }
-                self.multiRootRunning = false
+                guard self.rebaseWorkspace.multiRootSession?.id == sessionID else { return }
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.warning(
                     "Multi-root rebase paused",
                     detail: "A Git rebase is already in progress in \(activeRootPath).",
@@ -2262,14 +2262,14 @@ func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
         if !protectionCommitIDs.isEmpty {
             let recordedProtectionCommitIDs = protectionCommitIDs
             await MainActor.run {
-                guard var current = self.multiRootRebaseSession,
+                guard var current = self.rebaseWorkspace.multiRootSession,
                       current.id == sessionID else { return }
                 for index in current.roots.indices {
                     if let protectionCommitID = recordedProtectionCommitIDs[current.roots[index].rootPath] {
                         current.roots[index].protectionCommitID = protectionCommitID
                     }
                 }
-                self.multiRootRebaseSession = current
+                self.rebaseWorkspace.multiRootSession = current
                 saveMultiRootRebaseSession(current)
             }
         }
@@ -2282,10 +2282,10 @@ func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
                 for rootRepo in messageMonitorRepositories {
                     if let pending = try? rootRepo.rebasePendingMessage() {
                         await MainActor.run {
-                            guard !self.showRawRebaseMessageEditor else { return }
-                            self.rawRebaseMessageRepository = rootRepo
-                            self.rawRebaseMessageText = pending
-                            self.showRawRebaseMessageEditor = true
+                            guard !self.rebaseWorkspace.showRawMessageEditor else { return }
+                            self.rebaseWorkspace.rawMessageRepository = rootRepo
+                            self.rebaseWorkspace.rawMessageText = pending
+                            self.rebaseWorkspace.showRawMessageEditor = true
                         }
                     }
                 }
@@ -2296,25 +2296,25 @@ func runPendingMultiRootRebase(_ session: MultiRootRebaseSession) {
             let results = try runMultiRootRebaseWithCancel(specs: specs, cancel: cancel)
             messageMonitor.cancel()
             await MainActor.run {
-                guard let current = self.multiRootRebaseSession,
+                guard let current = self.rebaseWorkspace.multiRootSession,
                       current.id == sessionID else { return }
-                if messageMonitorPaths.contains(self.rawRebaseMessageRepository?.workdir() ?? "") {
-                    self.showRawRebaseMessageEditor = false
-                    self.rawRebaseMessageRepository = nil
-                    self.rawRebaseMessageText = ""
+                if messageMonitorPaths.contains(self.rebaseWorkspace.rawMessageRepository?.workdir() ?? "") {
+                    self.rebaseWorkspace.showRawMessageEditor = false
+                    self.rebaseWorkspace.rawMessageRepository = nil
+                    self.rebaseWorkspace.rawMessageText = ""
                 }
                 self.applyMultiRootRebaseResults(results, to: current)
             }
         } catch {
             messageMonitor.cancel()
             await MainActor.run {
-                guard let current = self.multiRootRebaseSession,
+                guard let current = self.rebaseWorkspace.multiRootSession,
                       current.id == sessionID else { return }
-                self.multiRootRunning = false
-                if messageMonitorPaths.contains(self.rawRebaseMessageRepository?.workdir() ?? "") {
-                    self.showRawRebaseMessageEditor = false
-                    self.rawRebaseMessageRepository = nil
-                    self.rawRebaseMessageText = ""
+                self.multiRootWorkspace.running = false
+                if messageMonitorPaths.contains(self.rebaseWorkspace.rawMessageRepository?.workdir() ?? "") {
+                    self.rebaseWorkspace.showRawMessageEditor = false
+                    self.rebaseWorkspace.rawMessageRepository = nil
+                    self.rebaseWorkspace.rawMessageText = ""
                 }
                 self.feedbackCenter.error(
                     "Multi-root rebase failed",
@@ -2339,14 +2339,14 @@ func applyMultiRootRebaseResults(
     to session: MultiRootRebaseSession
 ) {
     let updated = updateMultiRootRebaseSession(session, with: results)
-    multiRootRebaseSession = updated
+    rebaseWorkspace.multiRootSession = updated
     saveMultiRootRebaseSession(updated)
-    multiRootRunning = false
-    multiRootResults = multiRootRebaseRows(for: updated)
-    rebaseFeedback = updated.roots
+    multiRootWorkspace.running = false
+    multiRootWorkspace.results = multiRootRebaseRows(for: updated)
+    rebaseWorkspace.feedback = updated.roots
         .map { "\($0.displayName): \($0.message)" }
         .joined(separator: "\n")
-    multiRootRebaseDrafts = []
+    rebaseWorkspace.multiRootDrafts = []
     loadMultiRoots()
 
     if let paused = results.first(where: { $0.requiresFinish }) {
@@ -2385,7 +2385,7 @@ func applyMultiRootRebaseResults(
             ? multiRootRebaseRollbackTargets(for: updated)
             : []
         clearMultiRootRebaseSession(updated)
-        multiRootRebaseSession = nil
+        rebaseWorkspace.multiRootSession = nil
         if undoTargets.count == updated.roots.count, !undoTargets.isEmpty {
             let undoAction = multiRootRebaseRecoveryFeedbackAction(
                 .undo,
@@ -2412,18 +2412,18 @@ func applyMultiRootRebaseResults(
 }
 
 func retryMultiRootRebase() {
-    guard var session = multiRootRebaseSession else { return }
+    guard var session = rebaseWorkspace.multiRootSession else { return }
     for index in session.roots.indices where session.roots[index].state == .failed {
         session.roots[index].state = .pending
         session.roots[index].message = ""
     }
-    multiRootRebaseSession = session
+    rebaseWorkspace.multiRootSession = session
     saveMultiRootRebaseSession(session)
     runPendingMultiRootRebase(session)
 }
 
 func resumeMultiRootRebase() {
-    guard let session = multiRootRebaseSession else { return }
+    guard let session = rebaseWorkspace.multiRootSession else { return }
     let sessionID = session.id
     Task.detached(priority: .utility) { [session] in
         let activeRoot = session.roots.compactMap { root -> String? in
@@ -2432,7 +2432,7 @@ func resumeMultiRootRebase() {
             return root.rootPath
         }.first
         await MainActor.run {
-            guard self.multiRootRebaseSession?.id == sessionID else { return }
+            guard self.rebaseWorkspace.multiRootSession?.id == sessionID else { return }
             if let activeRoot {
                 self.openMultiRootConflictResolver(preferredRootPath: activeRoot)
                 return
@@ -2450,7 +2450,7 @@ func resumeMultiRootRebase() {
                 resumedSession.roots[index].state = .pending
                 resumedSession.roots[index].message = ""
             }
-            self.multiRootRebaseSession = resumedSession
+            self.rebaseWorkspace.multiRootSession = resumedSession
             saveMultiRootRebaseSession(resumedSession)
             self.runPendingMultiRootRebase(resumedSession)
         }
@@ -2463,14 +2463,14 @@ func handleMultiRootRebaseRecovery(
     operationStillActive: Bool,
     sessionID: UUID
 ) {
-    guard var session = multiRootRebaseSession, session.id == sessionID,
+    guard var session = rebaseWorkspace.multiRootSession, session.id == sessionID,
           let index = session.roots.firstIndex(where: { $0.rootPath == rootPath }) else { return }
     var root = session.roots[index]
     if operationStillActive {
         root.state = .paused
         root.message = "rebase remains paused"
         session.roots[index] = root
-        multiRootRebaseSession = session
+        rebaseWorkspace.multiRootSession = session
         saveMultiRootRebaseSession(session)
         return
     }
@@ -2480,21 +2480,21 @@ func handleMultiRootRebaseRecovery(
         root.state = .completed
         root.message = action == .skip ? "rebase step skipped and root completed" : "rebase completed"
         session.roots[index] = root
-        multiRootRebaseSession = session
+        rebaseWorkspace.multiRootSession = session
         saveMultiRootRebaseSession(session)
         if session.roots.contains(where: { $0.state == .pending }) {
             feedbackCenter.success("Rebase root completed", detail: "Starting the next repository.")
             runPendingMultiRootRebase(session)
         } else {
             clearMultiRootRebaseSession(session)
-            multiRootRebaseSession = nil
+            rebaseWorkspace.multiRootSession = nil
             feedbackCenter.success("Multi-root rebase completed", detail: session.projectPath)
         }
     case .abort:
         root.state = .aborted
         root.message = "rebase aborted"
         session.roots[index] = root
-        multiRootRebaseSession = session
+        rebaseWorkspace.multiRootSession = session
         saveMultiRootRebaseSession(session)
         let targets = multiRootRebaseRollbackTargets(for: session)
         let failures = session.roots
@@ -2502,10 +2502,10 @@ func handleMultiRootRebaseRecovery(
             .map { "\($0.displayName): \($0.message)" }
         if targets.isEmpty {
             clearMultiRootRebaseSession(session)
-            multiRootRebaseSession = nil
+            rebaseWorkspace.multiRootSession = nil
             feedbackCenter.warning("Multi-root rebase aborted", detail: failures.joined(separator: "\n"))
         } else {
-            multiRootRebaseRollbackContext = MultiRootRebaseRollbackContext(
+            rebaseWorkspace.multiRootRollbackContext = MultiRootRebaseRollbackContext(
                 sessionID: session.id,
                 branch: root.branch,
                 targets: targets,
@@ -2532,11 +2532,11 @@ func handleMultiRootRebaseRecovery(
 }
 
 func rollbackPersistedMultiRootRebase() {
-    guard let session = multiRootRebaseSession else { return }
+    guard let session = rebaseWorkspace.multiRootSession else { return }
     let targets = multiRootRebaseRollbackTargets(for: session)
     guard !targets.isEmpty else {
         clearMultiRootRebaseSession(session)
-        multiRootRebaseSession = nil
+        rebaseWorkspace.multiRootSession = nil
         feedbackCenter.warning(
             "Multi-root rebase rollback unavailable",
             detail: "No completed root has an expected HEAD to restore.",
@@ -2544,9 +2544,9 @@ func rollbackPersistedMultiRootRebase() {
         )
         return
     }
-    multiRootRebaseRollbackContext = MultiRootRebaseRollbackContext(
+    rebaseWorkspace.multiRootRollbackContext = MultiRootRebaseRollbackContext(
         sessionID: session.id,
-        branch: session.roots.first?.branch ?? rebaseBranch,
+        branch: session.roots.first?.branch ?? rebaseWorkspace.branch,
         targets: targets,
         failures: session.roots
             .filter { $0.state == .failed || $0.state == .aborted || $0.state == .pending }
@@ -2556,10 +2556,10 @@ func rollbackPersistedMultiRootRebase() {
 }
 
 func keepPersistedMultiRootRebasePartial() {
-    guard let session = multiRootRebaseSession else { return }
+    guard let session = rebaseWorkspace.multiRootSession else { return }
     let context = MultiRootRebaseRollbackContext(
         sessionID: session.id,
-        branch: session.roots.first?.branch ?? rebaseBranch,
+        branch: session.roots.first?.branch ?? rebaseWorkspace.branch,
         targets: multiRootRebaseRollbackTargets(for: session),
         failures: session.roots
             .filter { $0.state == .failed || $0.state == .aborted || $0.state == .pending }
@@ -2569,10 +2569,10 @@ func keepPersistedMultiRootRebasePartial() {
 }
 
 func keepMultiRootRebasePartial(_ context: MultiRootRebaseRollbackContext) {
-    multiRootRebaseRollbackContext = nil
-    if let session = multiRootRebaseSession, session.id == context.sessionID {
+    rebaseWorkspace.multiRootRollbackContext = nil
+    if let session = rebaseWorkspace.multiRootSession, session.id == context.sessionID {
         clearMultiRootRebaseSession(session)
-        multiRootRebaseSession = nil
+        rebaseWorkspace.multiRootSession = nil
     }
     feedbackCenter.warning(
         "Partial rebase kept",
@@ -2586,8 +2586,8 @@ func rollbackMultiRootRebase(
     completionTitle: String = "Multi-root rebase rollback completed"
 ) {
     guard !targets.isEmpty else { return }
-    let context = multiRootRebaseRollbackContext
-    multiRootRebaseRollbackContext = nil
+    let context = rebaseWorkspace.multiRootRollbackContext
+    rebaseWorkspace.multiRootRollbackContext = nil
     let protectedPatterns = effectiveProtectedBranchPatterns
     let notificationID = multiRootRebaseNotificationID()
     beginFeedbackOperation(
@@ -2644,10 +2644,10 @@ func rollbackMultiRootRebase(
         await MainActor.run {
             self.loadMultiRoots()
             if rollbackFailures.isEmpty {
-                if let session = self.multiRootRebaseSession {
+                if let session = self.rebaseWorkspace.multiRootSession {
                     clearMultiRootRebaseSession(session)
                 }
-                self.multiRootRebaseSession = nil
+                self.rebaseWorkspace.multiRootSession = nil
                 if let notificationID {
                     self.feedbackCenter.expire(notificationID: notificationID)
                 }
@@ -2668,7 +2668,7 @@ func rollbackMultiRootRebase(
                     notificationID: notificationID
                 )
                 if let context {
-                    self.multiRootRebaseRollbackContext = MultiRootRebaseRollbackContext(
+                    self.rebaseWorkspace.multiRootRollbackContext = MultiRootRebaseRollbackContext(
                         sessionID: context.sessionID,
                         branch: context.branch,
                         targets: rollbackRemaining,
@@ -2683,8 +2683,8 @@ func rollbackMultiRootRebase(
 func doRebaseContinue() {
     guard let repo else { return }
     beginFeedbackOperation("Continue rebase")
-    let seed = rebaseUndoSeed
-    let selectedRootPath = rebaseRootPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    let seed = rebaseWorkspace.undoSeed
+    let selectedRootPath = rebaseWorkspace.rootPath.trimmingCharacters(in: .whitespacesAndNewlines)
     let repositoryPath = seed?.repositoryPath ?? selectedRootPath
     let currentRepositoryPath = repo.workdir() ?? ""
     Task.detached(priority: .userInitiated) {
@@ -2706,27 +2706,27 @@ func doRebaseContinue() {
             )
             await MainActor.run {
                 if repositoryPath.isEmpty || repositoryPath == currentRepositoryPath {
-                    self.entries = st
+                    self.repositoryStatus.entries = st
                 }
-                self.rebasePaused = outcome.paused
-                self.rebasePauseReason = outcome.pauseReason
-                self.rebaseConflicts = outcome.conflicts
+                self.rebaseWorkspace.paused = outcome.paused
+                self.rebaseWorkspace.pauseReason = outcome.pauseReason
+                self.rebaseWorkspace.conflicts = outcome.conflicts
                 if outcome.paused, outcome.pauseReason == .conflict {
                     let names = outcome.conflicts.prefix(3).joined(separator: "、")
                     let suffix = names.isEmpty ? "" : "：\(names)"
-                    self.rebaseFeedback = "再次冲突 \(outcome.conflicts.count) 个文件\(suffix)"
-                    self.rebaseUndoSeed = seed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.feedback = "再次冲突 \(outcome.conflicts.count) 个文件\(suffix)"
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let seed {
                         saveRebaseUndoSeed(seed)
                     }
-                    self.showMergeRevisionsDialog = true
+                    self.operationRecovery.showConflictResolver = true
                 } else {
-                    self.rebaseFeedback = outcome.paused ? "再次暂停在 edit 提交" : "变基完成"
+                    self.rebaseWorkspace.feedback = outcome.paused ? "再次暂停在 edit 提交" : "变基完成"
                     if !outcome.paused {
-                        self.showMergeRevisionsDialog = false
-                        self.rebaseUndoSeed = nil
-                        self.rebaseUndoTarget = undoTarget
+                        self.operationRecovery.showConflictResolver = false
+                        self.rebaseWorkspace.undoSeed = nil
+                        self.rebaseWorkspace.undoTarget = undoTarget
                         if let seed {
                             clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                         }
@@ -2745,8 +2745,8 @@ func doRebaseContinue() {
                             )
                         }
                     } else {
-                        self.rebaseUndoSeed = seed
-                        self.rebaseUndoTarget = nil
+                        self.rebaseWorkspace.undoSeed = seed
+                        self.rebaseWorkspace.undoTarget = nil
                         if let seed {
                             saveRebaseUndoSeed(seed)
                         }
@@ -2775,7 +2775,7 @@ func doRebaseContinue() {
                 canStageAndRetry = false
             }
             await MainActor.run {
-                self.rebaseFeedback = detail
+                self.rebaseWorkspace.feedback = detail
                 self.feedbackCenter.error(
                     "Rebase continue failed",
                     detail: detail,
@@ -2791,8 +2791,8 @@ func doRebaseContinue() {
 func stageAndRetryRebaseContinue() {
     guard let repo else { return }
     beginFeedbackOperation("Stage-and-Retry Rebase")
-    let seed = rebaseUndoSeed
-    let selectedRootPath = rebaseRootPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    let seed = rebaseWorkspace.undoSeed
+    let selectedRootPath = rebaseWorkspace.rootPath.trimmingCharacters(in: .whitespacesAndNewlines)
     let repositoryPath = seed?.repositoryPath ?? selectedRootPath
     let currentRepositoryPath = repo.workdir() ?? ""
     Task.detached(priority: .userInitiated) {
@@ -2815,18 +2815,18 @@ func stageAndRetryRebaseContinue() {
             )
             await MainActor.run {
                 if repositoryPath.isEmpty || repositoryPath == currentRepositoryPath {
-                    self.entries = st
+                    self.repositoryStatus.entries = st
                 }
-                self.rebasePaused = outcome.paused
-                self.rebasePauseReason = outcome.pauseReason
-                self.rebaseConflicts = outcome.conflicts
-                self.rebaseFeedback = outcome.paused
+                self.rebaseWorkspace.paused = outcome.paused
+                self.rebaseWorkspace.pauseReason = outcome.pauseReason
+                self.rebaseWorkspace.conflicts = outcome.conflicts
+                self.rebaseWorkspace.feedback = outcome.paused
                     ? "Rebase 继续后再次暂停"
                     : "Rebase 完成"
                 if !outcome.paused {
-                    self.showMergeRevisionsDialog = false
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = undoTarget
+                    self.operationRecovery.showConflictResolver = false
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = undoTarget
                     if let seed {
                         clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
                     }
@@ -2845,15 +2845,15 @@ func stageAndRetryRebaseContinue() {
                         )
                     }
                 } else if outcome.pauseReason == .conflict {
-                    self.rebaseUndoSeed = seed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let seed {
                         saveRebaseUndoSeed(seed)
                     }
-                    self.showMergeRevisionsDialog = true
+                    self.operationRecovery.showConflictResolver = true
                 } else {
-                    self.rebaseUndoSeed = seed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let seed {
                         saveRebaseUndoSeed(seed)
                     }
@@ -2875,25 +2875,25 @@ func stageAndRetryRebaseContinue() {
 
 func doRebaseAbort() {
     guard let repo else { return }
-    let repositoryPath = rebaseUndoSeed?.repositoryPath ?? repo.workdir() ?? ""
+    let repositoryPath = rebaseWorkspace.undoSeed?.repositoryPath ?? repo.workdir() ?? ""
     beginFeedbackOperation("Abort rebase")
     Task.detached(priority: .userInitiated) {
         do {
             try repo.rebaseAbort()
             let st = try repo.status()
             await MainActor.run {
-                self.entries = st
-                self.rebasePaused = false
-                self.rebasePauseReason = nil
-                self.rebaseConflicts = []
-                self.rebaseUndoSeed = nil
-                self.rebaseUndoTarget = nil
+                self.repositoryStatus.entries = st
+                self.rebaseWorkspace.paused = false
+                self.rebaseWorkspace.pauseReason = nil
+                self.rebaseWorkspace.conflicts = []
+                self.rebaseWorkspace.undoSeed = nil
+                self.rebaseWorkspace.undoTarget = nil
                 clearRebaseUndoSeed(repositoryPath: repositoryPath)
-                self.rebaseFeedback = "已中止变基"
+                self.rebaseWorkspace.feedback = "已中止变基"
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
             }
-        } catch { await MainActor.run { self.rebaseFeedback = "\(error)" } }
+        } catch { await MainActor.run { self.rebaseWorkspace.feedback = "\(error)" } }
     }
 }
 

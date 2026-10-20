@@ -5,6 +5,66 @@ import AppKit
 struct ContentView: View {
     @Environment(\.openWindow) var openWindow
 
+    /// 项目路径、仓库与主窗口导航状态。
+    @StateObject var projectWorkspace: ProjectWorkspaceState
+
+    /// 工作区状态快照、刷新协调与暂存模型。
+    @StateObject var repositoryStatus: RepositoryStatusState = RepositoryStatusState()
+
+    /// 文件选择、版本查看、预览与补丁交互状态。
+    @StateObject var fileWorkspace: FileWorkspaceState = FileWorkspaceState()
+
+    /// 单 root 与多 root 提交草稿、提交选项和后续动作。
+    @StateObject var commitWorkspace: CommitWorkspaceState = CommitWorkspaceState()
+
+    /// 克隆对话框、取消句柄与请求代际。
+    @StateObject var cloneWorkspace: CloneWorkspaceState = CloneWorkspaceState()
+
+    /// LFS 面板的能力、文件、跟踪输入与加载反馈。
+    @StateObject var lfsWorkspace: LfsWorkspaceState = LfsWorkspaceState()
+
+    /// Git hooks 面板、脚本选择和编辑草稿。
+    @StateObject var hooksWorkspace: HooksWorkspaceState = HooksWorkspaceState()
+
+    /// Git root 发现、聚合快照与批量更新事务。
+    @StateObject var multiRootWorkspace: MultiRootWorkspaceState = MultiRootWorkspaceState()
+
+    /// 操作恢复、冲突解析与操作日志的窗口状态。
+    @StateObject var operationRecovery: OperationRecoveryState = OperationRecoveryState()
+
+    /// Merge 对话框选项、多 root 回滚和冲突收尾上下文。
+    @StateObject var mergeWorkspace: MergeWorkspaceState = MergeWorkspaceState()
+
+    /// Rebase 草稿、todo 编辑、进行中会话、重试与撤销上下文。
+    @StateObject var rebaseWorkspace: RebaseWorkspaceState = RebaseWorkspaceState()
+
+    /// 版本比较输入、来源仓库、文件列表与加载任务。
+    @StateObject var comparisonWorkspace: ComparisonWorkspaceState = ComparisonWorkspaceState()
+
+    /// 远程仓库列表与单 root、多 root 配置对话框。
+    @StateObject var remoteWorkspace: RemoteWorkspaceState = RemoteWorkspaceState()
+
+    /// 项目 Git 偏好、自动 fetch、身份、签名与 SSH 设置草稿。
+    @StateObject var gitSettings: GitSettingsState = GitSettingsState()
+
+    /// 托管平台设置、身份提示与代码评审入口。
+    @StateObject var hostingWorkspace: HostingWorkspaceState = HostingWorkspaceState()
+
+    /// 推送选项、目标引用与多 root 重试上下文。
+    @StateObject var pushWorkspace: PushWorkspaceState = PushWorkspaceState()
+
+    /// Pull 对话框的快照、更新方式和请求代际。
+    @StateObject var pullWorkspace: PullWorkspaceState = PullWorkspaceState()
+
+    /// 子模块列表、输入、反馈与独立日志预览。
+    @StateObject var submoduleWorkspace: SubmoduleWorkspaceState = SubmoduleWorkspaceState()
+
+    /// Worktree 列表与目标 root 下的新建对话框。
+    @StateObject var worktreeWorkspace: WorktreeWorkspaceState = WorktreeWorkspaceState()
+
+    /// 选中提交和指定 root 的 HEAD Reset 对话框。
+    @StateObject var resetWorkspace: ResetWorkspaceState = ResetWorkspaceState()
+
     /// Stash / Unstash 工作页状态（对话框、预览、请求身份）。
     @StateObject var stashUI = StashWorkspaceState()
 
@@ -53,10 +113,6 @@ struct ContentView: View {
     let externalLogTabsPersistenceKey: String?
     @StateObject var feedbackCenter = FeedbackCenter()
     @StateObject var credentialAuth = CredentialAuthController()
-    @State var projectPath: String?
-    @State var projectRepo: Repository?
-    @State var path: String = ""
-    @State var toolWindowMode: ToolWindowMode = .commit
     // ContentView is also hosted by the AppKit fallback window used when a
     // repository path is passed on the command line. SceneStorage is only
     // valid inside a SwiftUI Scene and causes repeated runtime warnings (and
@@ -126,29 +182,15 @@ struct ContentView: View {
     var globalProtectedBranchPatterns = GitProtectedBranchRules.defaultPatterns
     @AppStorage(GitProtectedBranchRules.synchronizeKey)
     var globalProtectedBranchSynchronize = GitProtectedBranchRules.defaultSynchronize
-    @State var projectProtectedBranchPatterns: String?
-    @State var projectProtectedBranchSynchronize: Bool?
-    @State var projectIncomingCheckStrategyRaw: String?
-    @State var projectFetchTagsMode: GitFetchTagsModeChoice = .default
-    @State var projectUpdateMethod: GitUpdateMethodChoice = .merge
-    @State var showProjectGitSettings = false
-    @State var showUpdateProjectOptions = false
     @AppStorage("arbor.log.showChangesFromParents.v1") var logShowChangesFromParents = false
     @AppStorage("arbor.log.showOnlyAffectedChanges.v1") var logShowOnlyAffectedChanges = false
-    @State var autoFetchFailureFingerprint: String?
-    @State var autoFetchIncomingFingerprint: String?
-    @State var autoFetchIncomingBranches: Set<GitIncomingBranch> = []
-    /// Each retry creates a new task generation. The monitor always performs
-    /// its first check immediately, matching IntelliJ when a strategy is
-    /// enabled or a project is activated.
-    @State var autoFetchRunGeneration = 0
     var repo: Repository? {
-        projectRepo
+        projectWorkspace.repository
     }
 
     var searchEverywhereGitRoots: [SearchEverywhereGitRoot] {
-        if !multiRootBranchSnapshots.isEmpty {
-            return multiRootBranchSnapshots.map { snapshot in
+        if !multiRootWorkspace.branchSnapshots.isEmpty {
+            return multiRootWorkspace.branchSnapshots.map { snapshot in
                 SearchEverywhereGitRoot(
                     rootPath: snapshot.rootPath,
                     displayName: snapshot.displayName,
@@ -174,24 +216,24 @@ struct ContentView: View {
     }
 
     var newWorktreeRepository: Repository? {
-        guard let rootPath = newWorktreeRootPath, !rootPath.isEmpty else {
+        guard let rootPath = worktreeWorkspace.rootPath, !rootPath.isEmpty else {
             return repo
         }
         return try? openRepository(path: rootPath)
     }
 
     var newWorktreeBranches: [BranchInfo] {
-        guard let rootPath = newWorktreeRootPath,
-              let snapshot = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath }) else {
+        guard let rootPath = worktreeWorkspace.rootPath,
+              let snapshot = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath }) else {
             return branchWorkspace.branches
         }
         return snapshot.branches
     }
 
     var newWorktreeWorktrees: [WorktreeInfo] {
-        guard let rootPath = newWorktreeRootPath,
-              let snapshot = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath }) else {
-            return worktrees
+        guard let rootPath = worktreeWorkspace.rootPath,
+              let snapshot = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath }) else {
+            return worktreeWorkspace.worktrees
         }
         return snapshot.worktrees
     }
@@ -225,7 +267,7 @@ struct ContentView: View {
         if let primary = repo?.workdir(), !primary.isEmpty {
             paths.append(primary)
         }
-        paths.append(contentsOf: multiRoots.map(\.path))
+        paths.append(contentsOf: multiRootWorkspace.roots.map(\.path))
         if let active = logList.activeRootPath, !active.isEmpty {
             paths.append(active)
         }
@@ -236,16 +278,16 @@ struct ContentView: View {
         if let workdir = repo?.workdir(), !workdir.isEmpty {
             return canonicalExternalLogPath(workdir)
         }
-        if let projectPath, !projectPath.isEmpty {
+        if let projectPath = projectWorkspace.path, !projectPath.isEmpty {
             return canonicalExternalLogPath(projectPath)
         }
         return nil
     }
 
     var availableShelfRoots: [GitRootInfo] {
-        guard multiRoots.count > 1 else { return [] }
+        guard multiRootWorkspace.roots.count > 1 else { return [] }
         let primary = primaryShelfRootPath
-        return multiRoots.sorted { lhs, rhs in
+        return multiRootWorkspace.roots.sorted { lhs, rhs in
             let lhsIsPrimary = canonicalExternalLogPath(lhs.path) == primary
             let rhsIsPrimary = canonicalExternalLogPath(rhs.path) == primary
             if lhsIsPrimary != rhsIsPrimary { return lhsIsPrimary }
@@ -285,7 +327,7 @@ struct ContentView: View {
                   primaryRootPath: primaryShelfRootPath
               ) else { return nil }
         return shelfWorkspace.rootSnapshots[rootPath]
-            ?? multiRootBranchSnapshots.first(where: {
+            ?? multiRootWorkspace.branchSnapshots.first(where: {
                 canonicalExternalLogPath($0.rootPath) == rootPath
             }).map {
                 ShelfRootSnapshot(
@@ -310,7 +352,7 @@ struct ContentView: View {
               !shelfRootSelectionIsPrimary(
                   selectedRootPath: activeRoot,
                   primaryRootPath: primaryShelfRootPath
-              ) else { return changeLists }
+              ) else { return repositoryStatus.changeLists }
         return activeShelfSnapshot?.changeLists ?? []
     }
 
@@ -411,7 +453,7 @@ struct ContentView: View {
         // already kept in view state, so use them instead.
         if let repositoryPath = commit.repositoryPath,
            !repositoryPath.isEmpty {
-            if let snapshot = multiRootBranchSnapshots.first(where: {
+            if let snapshot = multiRootWorkspace.branchSnapshots.first(where: {
                 $0.rootPath == repositoryPath
             }) {
                 return snapshot.branches.first(where: \.isCurrent)?.name
@@ -427,7 +469,7 @@ struct ContentView: View {
     func logRemotes(for commit: CommitInfo) -> [RemoteInfo] {
         if let repositoryPath = commit.repositoryPath,
            !repositoryPath.isEmpty {
-            if let snapshot = multiRootBranchSnapshots.first(where: {
+            if let snapshot = multiRootWorkspace.branchSnapshots.first(where: {
                 $0.rootPath == repositoryPath
             }) {
                 return snapshot.remotes
@@ -449,25 +491,25 @@ struct ContentView: View {
     }
 
     var activeLogRemotes: [RemoteInfo] {
-        logList.activeRootPath == nil ? remotes : logRuntime.activeRemotes
+        logList.activeRootPath == nil ? remoteWorkspace.remotes : logRuntime.activeRemotes
     }
 
     /// Include repository identity so a project restored before its
     /// repository finishes loading starts the monitor when the repo arrives,
     /// and a linked worktree switch replaces the watched Git directory.
     var repositoryIndexMonitorID: String {
-        "\(projectPath ?? "")|\(repo?.gitDir() ?? "closed")"
+        "\(projectWorkspace.path ?? "")|\(repo?.gitDir() ?? "closed")"
     }
 
     var autoFetchRootPaths: [String] {
         mergedAutoFetchRootPaths(
             primary: repo?.workdir(),
-            discovered: multiRoots.map(\.path)
+            discovered: multiRootWorkspace.roots.map(\.path)
         )
     }
 
     var autoFetchMonitorID: String {
-        "\(repositoryIndexMonitorID)|\(autoFetchRootPaths.joined(separator: "|"))|\(incomingCheckStrategy.rawValue)|tags-\(fetchTagsMode)|run-\(autoFetchRunGeneration)"
+        "\(repositoryIndexMonitorID)|\(autoFetchRootPaths.joined(separator: "|"))|\(incomingCheckStrategy.rawValue)|tags-\(fetchTagsMode)|run-\(gitSettings.autoFetchRunGeneration)"
     }
 
     var shelfLifecycleMonitorID: String {
@@ -475,22 +517,22 @@ struct ContentView: View {
     }
 
     var autoFetchNotificationIDPrefix: String {
-        let identity = projectPath.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+        let identity = projectWorkspace.path.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
             ?? "no-project"
         return "git.fetch.\(identity)"
     }
 
     var protectedBranchPatterns: String {
-        projectProtectedBranchPatterns ?? globalProtectedBranchPatterns
+        gitSettings.projectProtectedBranchPatterns ?? globalProtectedBranchPatterns
     }
 
     var protectedBranchSynchronize: Bool {
-        projectProtectedBranchSynchronize ?? globalProtectedBranchSynchronize
+        gitSettings.projectProtectedBranchSynchronize ?? globalProtectedBranchSynchronize
     }
 
     var incomingCheckStrategy: GitIncomingCheckStrategy {
         guard incomingOutgoingInfoEnabled else { return .none }
-        if let projectIncomingCheckStrategyRaw {
+        if let projectIncomingCheckStrategyRaw = gitSettings.projectIncomingCheckStrategyRaw {
             return GitIncomingCheckStrategy(rawValue: projectIncomingCheckStrategyRaw) ?? .none
         }
         return resolveGitIncomingCheckStrategy(
@@ -502,60 +544,12 @@ struct ContentView: View {
     }
 
     var fetchTagsMode: FetchTagsMode {
-        projectFetchTagsMode.engineValue
+        gitSettings.projectFetchTagsMode.engineValue
     }
-    @State var entries: [FileEntry] = []
-    @State var changeLists: [ChangeListInfo] = []
-    @State var refreshGate = RepositoryRefreshGate()
-    @State var repositoryChangeBatch = RepositoryChangeBatch()
-    @State var repositoryExternalVCSActionManager = RepositoryExternalVCSActionManager()
-    @State var repositoryDirtyScopeManager = RepositoryDirtyScopeManager()
-    @State var repositoryDirtyFileManager = RepositoryDirtyFileManager()
-    @State var repositoryChangeDeliveryTask: Task<Void, Never>?
-    @State var ignoredRules: [IgnoreRuleInfo] = []
-    @State var headId: String?
-    @State var loadError: String?
-    @State var isLoading = false
-    @State var isShowingCachedStatusSnapshot = false
-    @State var commitMessage: String = ""
-    @State var commitFeedback: String?
-    @State var amendMode = false
-    @State var recentMessages: [String] = []
-    @State var selection: String?
-    @State var fileSelection: String?
-    @State var fileSelectionVersion: FileContentVersion = .local
-    /// Monotonic request used by the Project file-tree Annotate action. The
-    /// file viewer owns the blame task; the parent only selects the path and
-    /// asks the viewer to enter its existing Code/Blame mode.
-    @State var fileContentBlameRequestID = 0
-    @State var fileTreeDiffRequest: FileTreeDiffRequest?
-    @State var fileReferenceComparisonRequest: FileReferenceComparisonRequest?
-    @State var currentRevisionRequest: CurrentRevisionRequest?
-    /// Commit workspace preview stays inside the left Stage panel, matching
-    /// rebased's split diff preview; it must not replace the right Log editor.
-    @State var commitPreviewPath: String?
-    @State var commitPreviewVisible = false
-    @State var commitPreviewMode: StagingPreviewMode = .unstaged
-    @State var commitPreviewComparisonMode: DiffMode?
-    @State var commitPreviewThreeVersions = false
-    @State var pendingProjectPath: String?
-    @State var showProjectSwitchAlert = false
-    @State var showCloneDialog = false
-    @State var cloneURL = ""
-    @State var cloneParentDirectory = FileManager.default.homeDirectoryForCurrentUser.path
-    @State var cloneDirectoryName = ""
-    @State var cloneShallow = false
-    @State var cloneDepth = "1"
-    @State var cloneInProgress = false
-    @State var cloneCancelling = false
-    @State var cloneCancelHandle: GitCancelHandle?
-    @State var cloneRequestGeneration = 0
     // IntelliJ's git.clone.recurse.submodules advanced setting defaults to
     // true; persist the same preference instead of resetting it per dialog.
     @AppStorage(GitCloneSettings.recurseSubmodulesKey)
     var cloneRecursiveSubmodules = GitCloneSettings.defaultRecurseSubmodules
-    /// 逐行暂存入口：侧栏「逐行」点击后选中文件并让 diff 视图进入选择模式
-    @State var selectionModePath: String?
     // 日志模式
     /// IntelliJ shows an action-group popup when a commit has multiple
     /// parents or children. Keep the resolved records separate from the
@@ -565,345 +559,10 @@ struct ContentView: View {
     /// preserves Cmd/Shift selections for toolbar and future batch actions.
     @AppStorage("arbor.log.recentPathFilters.v1") var logRecentPathFiltersRaw = ""
     @AppStorage("arbor.log.visibleRootPaths.v1") var logVisibleRootPathsPersistedRaw = ""
-    /// Phase 5:log 加载代际计数——切换条件后旧请求结果直接丢弃(取消行为)。
-    /// Keep the active history request cancellable. Generation checks protect
-    /// state correctness; cancelling the task also prevents superseded log
-    /// loads from competing for CPU while the user changes filters or panes.
-    /// Coalesce several filter/control mutations arriving in one main-actor
-    /// turn before starting the expensive VisibleGraph refresh.
-    /// A commit referenced by a notification or reflog may not be in the
-    /// currently visible history page. Keep that detail record separate from
-    /// the paged graph so the inspector never falls back to an empty pane.
-    @State var revisionBrowserCommit: CommitInfo?
-    @State var revisionBrowserPath: String?
-    @State var showRevisionBrowser = false
-    // Git LFS 面板状态（能力探测 / 跟踪规则 / 文件列表 / hooks）
-    @State var showLfsPanel = false
-    @State var lfsCapability: LfsCapability?
-    @State var lfsPatterns: [LfsTrackedPattern] = []
-    @State var lfsFiles: [LfsFileEntry] = []
-    @State var lfsHooks: LfsHookState?
-    @State var lfsBusy = false
-    @State var lfsFeedback: String?
-    @State var lfsTrackInput = ""
-    @State var lfsRemoteName = ""
-    @State var lfsShowAllRevisions = false
-    @State var lfsSelectedPaths: Set<String> = []
-    // Git hooks 面板状态（面板列表 / 选中脚本 / 编辑草稿）
-    @State var showHooksPanel = false
-    @State var gitHooks: [GitHookInfo] = []
-    @State var gitHooksLocation: GitHooksLocation?
-    @State var selectedGitHook: String?
-    @State var gitHookContents: GitHookContents?
-    @State var gitHookDraft = ""
-    @State var gitHooksBusy = false
-    @State var gitHooksFeedback: String?
-    @State var lfsTrackedPaths: Set<String> = []
-    @State var lfsPointerPaths: Set<String> = []
-    @State var compareLoadTask: Task<Void, Never>?
-    /// REPO-001:多 root 发现与聚合结果
-    @State var multiRoots: [GitRootInfo] = []
-    /// Keep root discovery cancellable so startup and filesystem events cannot
-    /// queue several repository-wide scans at once.
-    @State var multiRootLoadTask: Task<Void, Never>?
-    @State var multiRootLoadGeneration = 0
-    @State var multiRootLoadNeedsRefresh = false
-    @State var multiRootLoadCompletion: (() -> Void)?
-    @State var multiRootBranchSnapshots: [GitRootBranchSnapshot] = []
-    @State var multiRootResults: [RootOperationResult] = []
-    @State var multiRootChangeGroups: [MultiRootChangeGroup] = []
-    @State var multiRootChangesLoading = false
-    @State var multiRootChangesError: String?
-    @State var multiRootChangesGeneration = 0
-    @State var showMultiRootChanges = false
-    @State var showMultiRootCommitDialog = false
-    @State var multiRootCommitMessage = ""
-    @State var multiRootCommitRecentMessages: [String] = []
-    @State var multiRootCommitAmendMode = false
-    @State var multiRootCommitSkipHooks = false
-    @State var multiRootCommitAuthorName = ""
-    @State var multiRootCommitAuthorEmail = ""
-    @State var multiRootCommitCommitterName = ""
-    @State var multiRootCommitCommitterEmail = ""
-    @State var multiRootCommitSignOff = false
-    @State var multiRootCommitCoAuthors = ""
-    @State var multiRootCommitSelectedPaths: [MultiRootChangeSelection]?
-    @State var multiRootConflictGroups: [MultiRootConflictGroup] = []
-    @State var multiRootConflictBatchWorking = false
-    @State var multiRootConflictBatchError: String?
-    @State var showMultiRootMergeDialog = false
-    @State var multiRootMergeBranchName = ""
-    @State var multiRootMergeSelectedRootPaths: Set<String> = []
-    @State var multiRootMergeMergedBranchesByRoot: [String: Set<String>] = [:]
-    @State var multiRootMergeDialogGeneration = 0
-    @State var multiRootMergeRollbackContext: MultiRootMergeRollbackContext?
-    @State var multiRootRunning = false
-    /// Closes the small discovery window before Update Project can publish
-    /// its ordinary multi-root runner state. It is deliberately separate from
-    /// `multiRootRunning` so single-root Update does not appear as a multi-root
-    /// result while roots are being discovered.
-    @State var updateProjectDiscoveryRunning = false
-    @State var multiRootUpdateRebase = false
-    /// Explicit per-root methods selected by the rebase-over-merge warning.
-    /// A nil value means the project-wide method applies to every root.
-    @State var multiRootUpdateRebaseRootPaths: Set<String>?
-    @State var multiRootUpdateRetryAvailable = false
-    @State var multiRootCheckoutUpdateRetryAvailable = false
-    @State var multiRootCheckoutUpdateRetryContext: MultiRootCheckoutUpdateRetryContext?
-    @State var multiRootPushRetryContext: MultiRootPushRetryContext?
-    /// 项目级统一冲突 resolver：一次维护所有 root 的 pending queue，
-    /// 当前 root 的三栏编辑器由 active* 状态驱动。
-    @State var showMultiRootConflictResolver = false
-    @State var multiRootResolverRoots: [MultiRootConflictResolverRoot] = []
-    @State var multiRootResolverActiveRootPath: String?
-    @State var multiRootResolverActiveRepo: Repository?
-    @State var multiRootResolverActiveEntries: [FileEntry] = []
-    @State var multiRootResolverActiveInitialPath: String?
-    @State var multiRootResolverActiveKind: MultiRootConflictResolverKind?
-    @State var multiRootResolverWorking = false
-    @State var multiRootResolverError: String?
-    @State var multiRootResolverLoadGeneration = 0
-    /// The Log dashboard may be scoped to a nested Git root without changing
-    /// the project's primary repository context used by Commit/Status panes.
-    /// External Git Log windows can aggregate all or a selected subset of the
-    /// project's discovered Git roots. An empty set means the selector has
-    /// not been initialized yet (or discovery currently has no roots).
-    @State var externalLogRootSelectionInitialized = false
-    @State var externalLogRootRequestConsumed = false
-    @State var externalLogAggregateLoadStarted = false
-    @State var externalLogSessionDisposed = false
-    /// Each aggregate-log root owns an independent engine pagination cursor.
-    /// Keeping this separate from the merged row count prevents a later page
-    /// from re-querying the entire root history just to discard its prefix.
-    @State var compareRev1: String = ""
-    @State var compareRev2: String = ""
-    @State var compareRepositoryPath: String?
-    @State var compareWithWorkingTree = false
-    @State var activeCompareRepo: Repository?
-    @State var treeChanges: [TreeChange] = []
-    @State var compareSelection: String?
-    @State var compareSelectedPaths: Set<String> = []
-    @State var compareError: String?
-    /// Reflog is a repository-local history. Keep its root separate from the
-    /// aggregate VCS Log filters so switching from a multi-root graph cannot
-    /// leave the Reflog panel showing an unrelated or stale repository.
-    @State var rebasePaused = false
-    /// OPS-001 统一操作状态（merge/rebase/cherry-pick/revert），Recovery Bar 数据源。
-    @State var operationState: OperationState?
-    /// 每个 Git root 最近一次已发布的 operation recovery 状态。外部 Git
-    /// 操作会反复触发 metadata refresh，按 fingerprint 去重可避免同一
-    /// 暂停操作不断重发通知，同时允许新冲突文件或操作阶段重新提示。
-    @State var operationRecoveryNotificationFingerprints: [String: String] = [:]
-    /// Per-root persisted Log Revert/Cherry-pick recovery notices. This is
-    /// separate from operation_state(): Git may have completed or never
-    /// started the sequencer while the app was being terminated.
-    @State var resolvedConflictPaths: [String] = []
-    @State var operationFeedback: String?
-    /// REBASE-001 todo 编辑器状态
-    @State var showRebaseTodoEditor = false
-    @State var rebaseTodoItems: [RebaseTodoItem] = []
-    @State var rebaseTodoOnto = ""
-    @State var rebaseTodoPreserveMerges = false
-    @State var rebaseTodoRoot = false
-    /// Native Git todo fallback.  This keeps label/reset/merge/exec and any
-    /// future Git commands as editable text instead of forcing them through
-    /// the structured six-action model.
-    @State var showRawRebaseTodoEditor = false
-    @State var rebaseRawTodoText = ""
-    @State var showRawRebaseMessageEditor = false
-    @State var rawRebaseMessageText = ""
-    @State var rawRebaseMessageRepository: Repository?
-    /// Log HEAD Reword uses Git's `--amend --only` path so staged changes stay staged.
-    /// Log Fixup/Squash keeps IntelliJ's optional Commit and Rebase executor
-    /// available until the generated commit is created.
-    @State var pendingAutoSquashRebase: PendingAutoSquashRebase?
-    /// IntelliJ warns before editing the initial commit instead of silently
-    /// rejecting the action.
-    @State var showInitialCommitRewordAlert = false
-    @State var pendingInitialCommitReword: CommitInfo?
-    @State var showInitialCommitRewriteAlert = false
-    @State var pendingInitialCommitRewrite: PendingInitialCommitRewrite?
-    /// IDX-001 三层 staging 模型（二进制徽标/忽略入口数据源）。
-    @State var stagingModel: StagingModel?
-    /// index tracker：外部 Git 修改 index 后提示刷新。
-    @State var lastIndexRevision: IndexRevision?
-    /// Invalidates read-only version viewers and staging diff previews after
-    /// any visible status refresh, including worktree-only changes where the
-    /// index did not change.
-    @State var fileContentRefreshToken = 0
-    @State var rebasePauseReason: RebasePauseReason?
-    @State var rebaseConflicts: [String] = []
     // 分支模式
-    @State var mergeBranch: String = ""
-    @State var mergeMergedBranches: Set<String> = []
-    @State var mergeDialogGeneration = 0
-    @State var mergeStrategyRaw = MergeStrategyChoice.automatic.rawValue
     @AppStorage(GitDeleteOnMergeOption.key) var mergeDeleteOnMergeRaw = GitDeleteOnMergeOption.defaultOption.rawValue
-    @State var mergeCommitMessage = ""
-    @State var mergeUseCustomCommitMessage = false
-    @State var mergeNoCommit = false
-    @State var mergeNoVerify = false
-    @State var mergeAllowUnrelatedHistories = false
-    @State var mergeFeedback: String?
-    // 远程
-    @State var remotes: [RemoteInfo] = []
-    @State var isShallowRepository = false
-    @State var pushForce = false
-    @State var remoteProtectedBranchPatterns: [String] = []
-    /// Hosted protection is repository-scoped. Keep it separate from the
-    /// primary root's legacy presentation state so a multi-root push cannot
-    /// accidentally use another repository's cached rules.
-    @State var remoteProtectedBranchPatternsByRoot: [String: [String]] = [:]
-    @State var remoteName: String = ""
-    @State var remoteUrl: String = ""
-    /// REMOTE-001 Configure Remotes Dialog 状态
-    @State var showSearchEverywhere = false
     @StateObject var vcsQuickActionsPanel = VCSQuickActionsPanelCoordinator()
-    @State var searchEverywhereQuery = ""
-    @State var showRemoteConfigDialog = false
-    @State var remotePushUrl: String = ""
-    @State var remoteFetchRefspec: String = ""
-    @State var remotePushRefspec: String = ""
-    @State var multiRootRemoteConfigContext: MultiRootRemoteConfigContext?
-    @State var multiRootRemoteConfigAggregateContext: MultiRootRemoteConfigAggregateContext?
     @StateObject var branchCleanupWindow = BranchCleanupWindowCoordinator()
-    @State var multiRootRemoteName: String = ""
-    @State var multiRootRemoteURL: String = ""
-    @State var multiRootRemotePushURL: String = ""
-    @State var multiRootRemoteFetchRefspec: String = ""
-    @State var multiRootRemotePushRefspec: String = ""
-    // 变基
-    @State var rebaseOnto: String = ""
-    @State var rebaseBranch: String = ""
-    @State var rebaseRootPath: String = ""
-    @State var rebaseRange: [CommitInfo] = []
-    @State var rebaseActions: [RebaseAction] = []
-    @State var rebaseRangeGeneration = 0
-    @State var rebaseInteractive = false
-    @State var rebasePreserveMerges = false
-    @State var rebaseAutoSquash = false
-    @State var rebaseKeepEmpty = false
-    @State var rebaseUpdateRefs = false
-    @State var rebaseRoot = false
-    @State var rebaseApplyToAllRoots = false
-    @State var showMultiRootRebaseEditor = false
-    @State var multiRootRebaseDrafts: [MultiRootRebaseTodoDraft] = []
-    @State var multiRootRawTodoContext: MultiRootRawTodoContext?
-    @State var multiRootRawTodoText = ""
-    @State var multiRootRebaseSession: MultiRootRebaseSession?
-    @State var multiRootRebaseRollbackContext: MultiRootRebaseRollbackContext?
-    @State var rebaseRetryContext: RebaseRetryContext?
-    @State var rebaseUndoSeed: RebaseUndoSeed?
-    @State var rebaseUndoTarget: RebaseUndoTarget?
-    @State var rebaseFeedback: String?
-    @State var submoduleUrl: String = ""
-    @State var submodulePath: String = ""
-    @State var submodules: [SubmoduleInfo] = []
-    @State var submoduleFeedback: String?
-    @State var showSubmoduleLog = false
-    @State var submoduleLogPath = ""
-    @State var submoduleLogEntries: [CommitInfo] = []
-    @State var submoduleLogError: String?
-    @State var worktrees: [WorktreeInfo] = []
-    @State var worktreeFeedback: String?
-    @State var showNewWorktreeDialog = false
-    /// Root selected by a Branches Popup worktree action. Keeping this
-    /// separate from `repo` prevents a multi-root popup from silently
-    /// creating the worktree in the primary repository.
-    @State var newWorktreeRootPath: String?
-    @State var newWorktreeReference = ""
-    @State var newWorktreeIsTag = false
-    @State var newWorktreePath = ""
-    @State var newWorktreeBranch = ""
-    @State var operationsViewMode: OperationsViewMode = .history
-    @State var operationLogFocusNotificationID: String?
-    @State var consoleResult: GitCommandResult?
-    @State var skipHooks = false
-    @State var beforeCommitCommands: [BeforeCommitCommand] = []
-    @State var showBeforeCommitSettings = false
-    @State var showIdentitySettings = false
-    @State var pendingIdentityCommitRetry = false
-    @State var showGpgAgentSettings = false
-    @State var showGitSSHSettings = false
-    @State var gitSSHCommand = ""
-    @State var gitSSHKnownHostsFile = ""
-    @State var gitSSHIdentityFile = ""
-    @State var gitSSHHostKeyPolicy: SshHostKeyPolicy = .strict
-    @State var gitSSHAuthMethod: SshAuthMethod = .auto
-    @State var gitCredentialHelperConfig = ""
-    @State var gitCredentialHelpers: [CredentialHelperInfo] = []
-    @State var gitSSHAgentDiagnostics: SshAgentDiagnostics?
-    @State var lastSuccessfulSSHAuthentications: [SSHAuthenticationRecord] = []
-    @State var identityName = ""
-    @State var identityEmail = ""
-    @State var identitySetNameEmailGlobally = GitIdentityScopeSettings.defaultSetNameEmailGlobally
-    @State var identitySigningKey = ""
-    @State var identitySigningFormat = "gpg"
-    @State var identitySignCommits = false
-    @State var identityAuthorName = ""
-    @State var identityAuthorEmail = ""
-    @State var identityRecentAuthors: [String] = []
-    @State var identityCommitterName = ""
-    @State var identityCommitterEmail = ""
-    @State var identitySignOff = false
-    @State var identityCoAuthors = ""
-    @State var showPushDialog = false
-    @State var showMultiRootPushOptions = false
-    @State var multiRootPushOptionsRootPaths: [String]?
-    @State var multiRootPushOptionsFromCommit = false
-    @State var multiRootPushContext: MultiRootPushContext?
-    @State var addCommitsToRemoteBranchContext: AddCommitsToRemoteBranchContext?
-    @State var pushDialogMode: PushDialogMode = .push
-    /// IntelliJ's Commit and Push executor commits first and opens the Push
-    /// options only after the commit succeeds. Keep that intent out of the
-    /// push dialog so a failed commit can never publish anything.
-    @State var pendingCommitAndPush = false
-    @State var pushDialogRefspec: String?
-    @State var pushDialogRemote: String?
-    @State var pushDialogBranch: String?
-    @State var pushDialogSourceRevision: String?
-    @State var pushFeedback: String?
-    @State var mergeInProgress = false
-    /// Source local branch captured by an engine merge. Kept until the
-    /// explicit finish path completes so Delete-on-Merge survives conflict
-    /// resolution in the current app session.
-    @State var pendingMergeDeleteBranch: String?
-    /// ORIG_HEAD fallback covers a merge resumed after the view was recreated;
-    /// the in-memory value is preferred while this session owns the boundary.
-    @State var mergeInitialHead: String?
-    @State var showHostingSettings = false
-    @State var showHostingHub = false
-    @State var showHostingAuthPrompt = false
-    @State var reviewCommentCommit: CommitInfo?
-    @State var reviewCommentRepository: HostingRepository?
-    @State var showReviewComment = false
-    // Rebased 页面级弹出与对话框
-    @State var showMergeActionDialog = false
-    @State var showRebaseActionDialog = false
-    @State var showPullDialog = false
-    @State var pullDialogSnapshots: [GitRootBranchSnapshot] = []
-    @State var pullDialogRebase = false
-    @State var pullDialogGeneration = 0
-    @State var uncommitRequest: RebasedUncommitRequest?
-    @State var pendingApplyPatch: RebasedApplyPatchRequest?
-    @State var patchExportRequest: PatchExportRequest?
-    @State var pendingIgnoreFileCreation: IgnoreFileCreationRequest?
-    @State var showResetDialog = false
-    @State var resetTargetCommit: CommitInfo?
-    @State var resetTargetCommits: [CommitInfo] = []
-    @State var resetMode: ResetMode = .mixed
-    @State var showHeadResetDialog = false
-    @State var headResetRootPath = ""
-    @State var headResetTarget = "HEAD"
-    @State var headResetMode: ResetMode = .mixed
-    @State var smartOperationRequest: SmartOperationRequest?
-    @State var showMergeRevisionsDialog = false
-    /// The conflict dialog can be opened from the left Commit/Stash workspace
-    /// while Git Log owns the right editor workspace. Keep its initial file
-    /// independent from the main editor selection so opening the resolver does
-    /// not replace the Log graph underneath it.
-    @State var mergeInitialPath: String?
-    @State var feedbackDetailMessage: FeedbackMessage?
 
     init(
         projectPath: String? = nil,
@@ -927,12 +586,9 @@ struct ContentView: View {
         ) ?? [:]
         _logRuntime = StateObject(wrappedValue: LogRuntimeState(
             aggregateRootPaths: normalizedInitialExternalLogRoots,
-            aggregateRepositories: initialLogRepositories
+            aggregateRepositories: initialLogRepositories,
+            externalRootSelectionInitialized: externalLogWindow && !normalizedInitialExternalLogRoots.isEmpty
         ))
-        _externalLogRootSelectionInitialized = State(
-            initialValue: externalLogWindow && !self.initialExternalLogRootPaths.isEmpty
-        )
-        _externalLogSessionDisposed = State(initialValue: false)
         // Rebased reopens the most recent project instead of dropping the
         // user into an empty welcome surface on every launch. An explicit
         // command-line project remains authoritative; otherwise choose the
@@ -971,8 +627,6 @@ struct ContentView: View {
             tabs: externalLogWindow ? restoredExternalTabs : [LogTabDescriptor()],
             activeTabID: externalLogWindow ? restoredActiveTabID : nil
         ))
-        _projectPath = State(initialValue: recoveredPath)
-        _path = State(initialValue: recoveredPath ?? "")
         _logBranchesPanel = StateObject(wrappedValue: LogBranchesPanelState(
             groupByDirectory: GitBranchesPopupSettings.value(
                 GitBranchesPopupSettings.groupByDirectoryKey,
@@ -991,7 +645,11 @@ struct ContentView: View {
             .flatMap(ToolWindowMode.init(rawValue:))
         // --log is an explicit launch request; otherwise restore the last
         // workspace so reopening a project returns to the same Git surface.
-        _toolWindowMode = State(initialValue: initialToolWindowMode == .log ? .log : (rememberedMode ?? initialToolWindowMode))
+        _projectWorkspace = StateObject(wrappedValue: ProjectWorkspaceState(
+            path: recoveredPath,
+            inputPath: recoveredPath ?? "",
+            toolWindowMode: initialToolWindowMode == .log ? .log : (rememberedMode ?? initialToolWindowMode)
+        ))
     }
 
     // Kept internal so the AppKit/WindowGroup lifecycle recovery can repeat
@@ -1021,27 +679,27 @@ struct ContentView: View {
         return gitDirectories.first
     }
 
-    var hasStaged: Bool { entries.contains { $0.staged != .unchanged } }
+    var hasStaged: Bool { repositoryStatus.entries.contains { $0.staged != .unchanged } }
     var hasLocalChanges: Bool {
-        entries.contains {
+        repositoryStatus.entries.contains {
             $0.staged != .unchanged || $0.unstaged != .unchanged
         }
     }
     /// 未暂存组：unstaged 维度有变更（含冲突文件，冲突显示在 unstaged 维度）
     var unstagedEntries: [FileEntry] {
-        entries.filter {
+        repositoryStatus.entries.filter {
             $0.unstaged != .unchanged
                 && $0.unstaged != .untracked
                 && $0.unstaged != .ignored
         }
     }
     var untrackedEntries: [FileEntry] {
-        entries.filter { $0.unstaged == .untracked }
+        repositoryStatus.entries.filter { $0.unstaged == .untracked }
     }
     /// Rebased-style pull preserves the complete local workspace, including
     /// files that Git has not started tracking yet.
     var hasTrackedChanges: Bool {
-        entries.contains {
+        repositoryStatus.entries.contains {
             $0.staged != .unchanged
                 || ($0.unstaged != .unchanged
                     && $0.unstaged != .untracked
@@ -1052,13 +710,13 @@ struct ContentView: View {
     /// the operation entirely automatic instead of waiting for the engine to
     /// discover a remote path collision after the pull has already started.
     var hasUntrackedOrIgnoredFiles: Bool {
-        entries.contains { $0.unstaged == .untracked || $0.unstaged == .ignored }
+        repositoryStatus.entries.contains { $0.unstaged == .untracked || $0.unstaged == .ignored }
     }
     /// 已暂存组：staged 维度有变更
-    var stagedEntries: [FileEntry] { entries.filter { $0.staged != .unchanged } }
+    var stagedEntries: [FileEntry] { repositoryStatus.entries.filter { $0.staged != .unchanged } }
     var selectedEntry: FileEntry? {
-        guard let selection else { return nil }
-        return entries.first { $0.path == selection }
+        guard let selection = fileWorkspace.selection else { return nil }
+        return repositoryStatus.entries.first { $0.path == selection }
     }
     var selectedEntryIsConflicted: Bool {
         guard let selectedEntry else { return false }
@@ -1068,16 +726,16 @@ struct ContentView: View {
         // `restore --source HEAD --staged --worktree` is only valid when the
         // selected path exists in HEAD. Until the asynchronous staging model
         // has supplied that fact, keep the destructive main-menu action off.
-        guard !shelfWorkspace.isWorkspaceTabActive, stagingModel != nil else { return nil }
+        guard !shelfWorkspace.isWorkspaceTabActive, repositoryStatus.stagingModel != nil else { return nil }
         return arborSelectedRevertPath(
-            entries: entries,
-            candidates: [commitPreviewPath, selection, fileSelection],
+            entries: repositoryStatus.entries,
+            candidates: [fileWorkspace.previewPath, fileWorkspace.selection, fileWorkspace.fileSelection],
             headPresentByPath: stagingPresenceByPath.mapValues(\.head)
         )
     }
     var selectedWorkspacePath: String? {
         guard !shelfWorkspace.isWorkspaceTabActive else { return nil }
-        return [commitPreviewPath, selection, fileSelection]
+        return [fileWorkspace.previewPath, fileWorkspace.selection, fileWorkspace.fileSelection]
             .compactMap { $0 }
             .first { !$0.isEmpty }
     }
@@ -1088,7 +746,7 @@ struct ContentView: View {
               !primaryRootPath.isEmpty else { return nil }
 
         let isDirectory: Bool
-        if selectedPath == fileSelection, let projectPath {
+        if selectedPath == fileWorkspace.fileSelection, let projectPath = projectWorkspace.path {
             var directory = ObjCBool(false)
             _ = FileManager.default.fileExists(
                 atPath: URL(fileURLWithPath: projectPath)
@@ -1102,8 +760,8 @@ struct ContentView: View {
         }
 
         let roots: [GitRootInfo]
-        if !multiRoots.isEmpty {
-            roots = multiRoots
+        if !multiRootWorkspace.roots.isEmpty {
+            roots = multiRootWorkspace.roots
         } else {
             roots = [GitRootInfo(
                 path: primaryRootPath,
@@ -1111,9 +769,9 @@ struct ContentView: View {
                 relativePath: ".",
                 isSubmodule: false,
                 headBranch: currentBranchName,
-                headId: headId,
+                headId: repositoryStatus.headId,
                 dirty: hasLocalChanges,
-                operation: operationState?.kind
+                operation: operationRecovery.operation?.kind
             )]
         }
         guard let target = fileReferenceComparisonTarget(
@@ -1122,7 +780,7 @@ struct ContentView: View {
             roots: roots
         ) else { return nil }
 
-        let matchingEntries = entries.filter { $0.path == normalizedPath }
+        let matchingEntries = repositoryStatus.entries.filter { $0.path == normalizedPath }
         let statuses = matchingEntries.flatMap { [$0.staged, $0.unstaged] }
         let hasConflict = statuses.contains(.conflicted)
         let hasIgnored = statuses.contains(.ignored)
@@ -1143,17 +801,17 @@ struct ContentView: View {
             canAdd: !isDirectory && hasUntracked && !hasIgnored && !hasConflict,
             canAnnotate: isPrimaryRoot
                 && !isDirectory
-                && projectFileTreeCanAnnotate(path: normalizedPath, entries: entries),
+                && projectFileTreeCanAnnotate(path: normalizedPath, entries: repositoryStatus.entries),
             canCompareWithHead: !isDirectory
                 && projectFileTreeCanCompareWithSameVersion(
                     path: normalizedPath,
-                    entries: entries
+                    entries: repositoryStatus.entries
                 ),
             canCompareWithSelectedRevision: !isDirectory
                 && projectFileTreeCanCompareWithSelectedRevision(
                     path: normalizedPath,
                     isDirectory: false,
-                    entries: entries
+                    entries: repositoryStatus.entries
                 )
         )
     }
@@ -1174,11 +832,11 @@ struct ContentView: View {
             } ?? nil)
     }
     var selectedTreeChange: TreeChange? {
-        guard let compareSelection else { return nil }
-        return treeChanges.first { $0.path == compareSelection }
+        guard let compareSelection = comparisonWorkspace.selection else { return nil }
+        return comparisonWorkspace.treeChanges.first { $0.path == compareSelection }
     }
     var selectedTreeChanges: [TreeChange] {
-        orderedCompareSelection(changes: treeChanges, selectedPaths: compareSelectedPaths)
+        orderedCompareSelection(changes: comparisonWorkspace.treeChanges, selectedPaths: comparisonWorkspace.selectedPaths)
     }
     var selectedBranchComparisonCommit: CommitInfo? {
         let commits = branchComparison.selectionSide == .first
@@ -1221,7 +879,7 @@ struct ContentView: View {
     }
 
     var hostingRepositories: [HostingRepository] {
-        hostingRepositories(for: remotes)
+        hostingRepositories(for: remoteWorkspace.remotes)
     }
 
     var hostingRepository: HostingRepository? {
@@ -1235,12 +893,12 @@ struct ContentView: View {
     func effectiveProtectedBranchPatterns(forRootPath rootPath: String?) -> [String] {
         let cachedPatterns = GitProtectedBranchRules.remotePatterns(
             forRootPath: rootPath,
-            primaryPatterns: remoteProtectedBranchPatterns,
-            patternsByRoot: remoteProtectedBranchPatternsByRoot
+            primaryPatterns: gitSettings.remoteProtectedBranchPatterns,
+            patternsByRoot: gitSettings.remoteProtectedBranchPatternsByRoot
         )
         let remotePatterns: [String] = {
             guard let rootPath,
-                  !remoteProtectedBranchPatternsByRoot.keys.contains(
+                  !gitSettings.remoteProtectedBranchPatternsByRoot.keys.contains(
                     canonicalExternalLogPath(rootPath)
                   ) else {
                 return cachedPatterns
@@ -1266,9 +924,9 @@ struct ContentView: View {
 
     var currentBranchHasUnfetchedIncoming: Bool {
         hasUnfetchedIncomingBranch(
-            rootPath: repo?.workdir() ?? projectPath,
+            rootPath: repo?.workdir() ?? projectWorkspace.path,
             branch: currentBranchName,
-            in: autoFetchIncomingBranches
+            in: gitSettings.autoFetchIncomingBranches
         )
     }
 
@@ -1276,21 +934,21 @@ struct ContentView: View {
         mainView
             .modifier(
                 MultiRootMergePresentationModifier(
-                    isPresented: $showMultiRootMergeDialog,
-                    selectedRootPaths: $multiRootMergeSelectedRootPaths,
+                    isPresented: $mergeWorkspace.showMultiRootDialog,
+                    selectedRootPaths: $mergeWorkspace.multiRootSelectedRootPaths,
                     strategy: Binding(
-                        get: { MergeStrategyChoice(rawValue: mergeStrategyRaw) ?? .automatic },
-                        set: { mergeStrategyRaw = $0.rawValue }
+                        get: { MergeStrategyChoice(rawValue: mergeWorkspace.strategyRaw) ?? .automatic },
+                        set: { mergeWorkspace.strategyRaw = $0.rawValue }
                     ),
-                    commitMessage: $mergeCommitMessage,
-                    useCustomCommitMessage: $mergeUseCustomCommitMessage,
-                    noCommit: $mergeNoCommit,
-                    noVerify: $mergeNoVerify,
-                    allowUnrelatedHistories: $mergeAllowUnrelatedHistories,
-                    rollbackContext: $multiRootMergeRollbackContext,
-                    branchName: multiRootMergeBranchName,
-                    snapshots: multiRootBranchSnapshots,
-                    mergedBranchesByRoot: multiRootMergeMergedBranchesByRoot,
+                    commitMessage: $mergeWorkspace.commitMessage,
+                    useCustomCommitMessage: $mergeWorkspace.useCustomCommitMessage,
+                    noCommit: $mergeWorkspace.noCommit,
+                    noVerify: $mergeWorkspace.noVerify,
+                    allowUnrelatedHistories: $mergeWorkspace.allowUnrelatedHistories,
+                    rollbackContext: $mergeWorkspace.multiRootRollbackContext,
+                    branchName: mergeWorkspace.multiRootBranchName,
+                    snapshots: multiRootWorkspace.branchSnapshots,
+                    mergedBranchesByRoot: mergeWorkspace.multiRootMergedBranchesByRoot,
                     onMerge: startMultiRootMergeFromDialog,
                     onCancel: dismissMultiRootMergeDialog,
                     onRollback: { targets in rollbackMultiRootMerge(targets) },
@@ -1331,11 +989,11 @@ struct ContentView: View {
                     guard !updatedRefs.isEmpty,
                           self.repo?.gitDir() == expectedGitDir,
                           self.autoFetchMonitorID == expectedMonitorID else { return }
-                    autoFetchIncomingFingerprint = nil
-                    autoFetchFailureFingerprint = nil
+                    gitSettings.autoFetchIncomingFingerprint = nil
+                    gitSettings.autoFetchFailureFingerprint = nil
                     DiagnosticsLogger.shared.record(
                         operation: "auto-fetch",
-                        repositoryPath: projectPath,
+                        repositoryPath: projectWorkspace.path,
                         code: "updated-\(updatedRefs.count)-refs"
                     )
                     loadRepoData(includeComparisons: false)
@@ -1345,21 +1003,21 @@ struct ContentView: View {
                 onUnfetched: { snapshot in
                     guard self.repo?.gitDir() == expectedGitDir,
                           self.autoFetchMonitorID == expectedMonitorID else { return }
-                    autoFetchIncomingBranches = applyingAutoFetchIncomingSnapshot(
+                    gitSettings.autoFetchIncomingBranches = applyingAutoFetchIncomingSnapshot(
                         snapshot,
-                        to: autoFetchIncomingBranches
+                        to: gitSettings.autoFetchIncomingBranches
                     )
-                    guard !autoFetchIncomingBranches.isEmpty else {
+                    guard !gitSettings.autoFetchIncomingBranches.isEmpty else {
                         feedbackCenter.expire(notificationID: "\(autoFetchNotificationIDPrefix).incoming")
-                        autoFetchIncomingFingerprint = nil
+                        gitSettings.autoFetchIncomingFingerprint = nil
                         return
                     }
                     let displayValues = groupedAutoFetchIncomingBranches(
-                        Array(autoFetchIncomingBranches)
+                        Array(gitSettings.autoFetchIncomingBranches)
                     ).map(\.displayValue)
                     let fingerprint = autoFetchNotificationFingerprint(displayValues)
-                    guard fingerprint != autoFetchIncomingFingerprint else { return }
-                    autoFetchIncomingFingerprint = fingerprint
+                    guard fingerprint != gitSettings.autoFetchIncomingFingerprint else { return }
+                    gitSettings.autoFetchIncomingFingerprint = fingerprint
                     feedbackCenter.warning(
                         "Incoming changes available",
                         detail: displayValues.joined(separator: "\n"),
@@ -1379,12 +1037,12 @@ struct ContentView: View {
                           self.autoFetchMonitorID == expectedMonitorID else { return }
                     guard !failures.isEmpty else {
                         feedbackCenter.expire(notificationID: "\(autoFetchNotificationIDPrefix).error")
-                        autoFetchFailureFingerprint = nil
+                        gitSettings.autoFetchFailureFingerprint = nil
                         return
                     }
                     let fingerprint = autoFetchNotificationFingerprint(failures)
-                    guard fingerprint != autoFetchFailureFingerprint else { return }
-                    autoFetchFailureFingerprint = fingerprint
+                    guard fingerprint != gitSettings.autoFetchFailureFingerprint else { return }
+                    gitSettings.autoFetchFailureFingerprint = fingerprint
                     let retryAction = self.autoFetchRecoveryFeedbackAction(
                         .retryCheck,
                         rootPaths: self.autoFetchRootPaths
@@ -1415,17 +1073,17 @@ struct ContentView: View {
             )
         }
         .onChange(of: autoFetchMonitorID) { _, _ in
-            autoFetchFailureFingerprint = nil
-            autoFetchIncomingFingerprint = nil
-            autoFetchIncomingBranches = []
+            gitSettings.autoFetchFailureFingerprint = nil
+            gitSettings.autoFetchIncomingFingerprint = nil
+            gitSettings.autoFetchIncomingBranches = []
         }
         .onChange(of: incomingOutgoingInfoEnabled) { _, enabled in
             guard !enabled else { return }
             feedbackCenter.expire(notificationID: "\(autoFetchNotificationIDPrefix).incoming")
             feedbackCenter.expire(notificationID: "\(autoFetchNotificationIDPrefix).error")
-            autoFetchFailureFingerprint = nil
-            autoFetchIncomingFingerprint = nil
-            autoFetchIncomingBranches = []
+            gitSettings.autoFetchFailureFingerprint = nil
+            gitSettings.autoFetchIncomingFingerprint = nil
+            gitSettings.autoFetchIncomingBranches = []
         }
         .onAppear {
             setExternalConversionEnabled(enabled: gitExternalConversionEnabled)
@@ -1436,12 +1094,12 @@ struct ContentView: View {
             applyExternalConversionSetting()
             refreshAll(showFeedback: false)
         }
-        .focusedValue(\.arborRepositoryIsShallow, projectRepo == nil ? nil : isShallowRepository)
+        .focusedValue(\.arborRepositoryIsShallow, projectWorkspace.repository == nil ? nil : repositoryStatus.isShallowRepository)
         .focusedValue(\.arborRepositoryAvailable, repo != nil)
         .focusedValue(\.arborVCSActionContext, vcsActionContext)
         .focusedValue(
             \.arborVCSOperationContext,
-            operationState.flatMap { state in
+            operationRecovery.operation.flatMap { state in
                 repo?.workdir().map {
                     ArborVCSOperationContext(
                         rootPath: $0,
@@ -1470,15 +1128,15 @@ struct ContentView: View {
         .overlay(alignment: .trailing) {
             conflictResolverOverlays
         }
-        .sheet(isPresented: $showHooksPanel) {
+        .sheet(isPresented: $hooksWorkspace.showPanel) {
             HooksPanelView(
-                hooks: gitHooks,
-                location: gitHooksLocation,
-                contents: gitHookContents,
-                busy: gitHooksBusy,
-                feedback: gitHooksFeedback,
-                selectedName: $selectedGitHook,
-                draft: $gitHookDraft,
+                hooks: hooksWorkspace.hooks,
+                location: hooksWorkspace.location,
+                contents: hooksWorkspace.contents,
+                busy: hooksWorkspace.busy,
+                feedback: hooksWorkspace.feedback,
+                selectedName: $hooksWorkspace.selection,
+                draft: $hooksWorkspace.draft,
                 onRefresh: { reloadGitHooks() },
                 onSelect: { selectGitHook($0) },
                 onSave: { saveGitHookDraft() },
@@ -1486,21 +1144,21 @@ struct ContentView: View {
                 onToggleEnabled: { toggleGitHookEnabled($0) },
                 onInstallSample: { installGitHookSample($0) },
                 onDelete: { deleteGitHook($0) },
-                onDismiss: { showHooksPanel = false }
+                onDismiss: { hooksWorkspace.showPanel = false }
             )
         }
-        .sheet(isPresented: $showLfsPanel) {
+        .sheet(isPresented: $lfsWorkspace.showPanel) {
             LfsPanelView(
-                capability: lfsCapability,
-                patterns: lfsPatterns,
-                files: lfsFiles,
-                hooks: lfsHooks,
-                busy: lfsBusy,
-                feedback: lfsFeedback,
-                selectedPaths: $lfsSelectedPaths,
-                trackInput: $lfsTrackInput,
-                showAllRevisions: $lfsShowAllRevisions,
-                remoteName: $lfsRemoteName,
+                capability: lfsWorkspace.capability,
+                patterns: lfsWorkspace.patterns,
+                files: lfsWorkspace.files,
+                hooks: lfsWorkspace.hooks,
+                busy: lfsWorkspace.busy,
+                feedback: lfsWorkspace.feedback,
+                selectedPaths: $lfsWorkspace.selectedPaths,
+                trackInput: $lfsWorkspace.trackInput,
+                showAllRevisions: $lfsWorkspace.showAllRevisions,
+                remoteName: $lfsWorkspace.remoteName,
                 onRefresh: { reloadLfsState() },
                 onTrack: { lfsTrackCurrentInput() },
                 onUntrack: { lfsUntrack($0) },
@@ -1511,41 +1169,41 @@ struct ContentView: View {
                 onPush: { lfsPushObjects() },
                 onPrune: { lfsPruneObjects() },
                 onCheckout: { lfsCheckoutPointers() },
-                onDismiss: { showLfsPanel = false }
+                onDismiss: { lfsWorkspace.showPanel = false }
             )
         }
-        .sheet(isPresented: $showRevisionBrowser) {
-            if let repo = logRepository, let commit = revisionBrowserCommit {
+        .sheet(isPresented: $fileWorkspace.showRevisionBrowser) {
+            if let repo = logRepository, let commit = fileWorkspace.revisionBrowserCommit {
                 RevisionBrowserView(
                     repo: repo,
                     revision: commit.id,
                     commitTitle: commit.summary,
-                    initialPath: revisionBrowserPath
+                    initialPath: fileWorkspace.revisionBrowserPath
                 )
             }
         }
-        .sheet(item: $fileReferenceComparisonRequest) { request in
+        .sheet(item: $fileWorkspace.referenceComparisonRequest) { request in
             FileReferenceComparisonView(
                 repo: request.repo,
                 path: request.path,
                 isDirectory: request.isDirectory,
                 mode: request.mode,
-                onClose: { fileReferenceComparisonRequest = nil }
+                onClose: { fileWorkspace.referenceComparisonRequest = nil }
             )
         }
-        .sheet(item: $currentRevisionRequest) { request in
+        .sheet(item: $fileWorkspace.currentRevisionRequest) { request in
             CurrentRevisionView(
                 path: request.path,
                 commit: request.commit,
-                onClose: { currentRevisionRequest = nil }
+                onClose: { fileWorkspace.currentRevisionRequest = nil }
             )
         }
-        .sheet(isPresented: $showSubmoduleLog) {
+        .sheet(isPresented: $submoduleWorkspace.showLog) {
             SubmoduleLogView(
-                path: submoduleLogPath,
-                commits: submoduleLogEntries,
-                error: submoduleLogError,
-                onClose: { showSubmoduleLog = false }
+                path: submoduleWorkspace.logPath,
+                commits: submoduleWorkspace.logEntries,
+                error: submoduleWorkspace.logError,
+                onClose: { submoduleWorkspace.showLog = false }
             )
         }
         .sheet(item: $branchWorkspace.deleteRecovery) { context in
@@ -1600,7 +1258,7 @@ struct ContentView: View {
                 RemoteTagsDialogView(
                     repo: repo,
                     broker: credentialAuth.broker,
-                    remotes: remotes,
+                    remotes: remoteWorkspace.remotes,
                     onDeleted: { remote, tag in
                         feedbackCenter.success("Remote tag deleted", detail: "\(remote)/\(tag)")
                         refreshAll(showFeedback: false)
@@ -1616,7 +1274,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $tagWorkspace.showMultiRootRemoteTagsDialog) {
             MultiRootRemoteTagsDialogView(
-                roots: multiRoots,
+                roots: multiRootWorkspace.roots,
                 broker: credentialAuth.broker,
                 onResult: { successes, failures, cancelled in
                     loadMultiRoots()
@@ -1663,7 +1321,7 @@ struct ContentView: View {
         .sheet(isPresented: $branchCleanup.showFindMergedDialog, onDismiss: dismissFindMergedBranches) {
             FindMergedBranchesDialogView(
                 roots: branchCleanup.roots,
-                projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "",
+                projectName: projectWorkspace.path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "",
                 targetBranch: $branchCleanup.targetBranch,
                 prefix: $branchCleanup.prefix,
                 isRunning: branchCleanup.isRunning,
@@ -1679,18 +1337,18 @@ struct ContentView: View {
         .sheet(isPresented: $branchCleanup.showReport) {
             FindMergedReportEditorView(report: branchCleanup.reportText)
         }
-        .sheet(isPresented: $showMultiRootChanges) {
+        .sheet(isPresented: $multiRootWorkspace.showChanges) {
             MultiRootChangesBrowser(
-                groups: multiRootChangeGroups,
-                isLoading: multiRootChangesLoading,
-                error: multiRootChangesError,
+                groups: multiRootWorkspace.changeGroups,
+                isLoading: multiRootWorkspace.changesLoading,
+                error: multiRootWorkspace.changesError,
                 onRefresh: loadMultiRootChanges,
                 onStage: stageMultiRootPath,
                 onUnstage: unstageMultiRootPath,
                 onStageSelected: stageMultiRootPaths,
                 onUnstageSelected: unstageMultiRootPaths,
                 onCommitSelected: { selectedChanges in
-                    showMultiRootChanges = false
+                    multiRootWorkspace.showChanges = false
                     DispatchQueue.main.async {
                         openMultiRootCommitDialog(selectedChanges)
                     }
@@ -1699,59 +1357,59 @@ struct ContentView: View {
                 onUnstageAll: unstageAllMultiRootPath
             )
         }
-        .sheet(isPresented: $showMultiRootCommitDialog) {
+        .sheet(isPresented: $commitWorkspace.showMultiRootDialog) {
             MultiRootCommitDialogView(
-                groups: multiRootChangeGroups.map(MultiRootCommitGroup.init(changeGroup:)),
-                isLoading: multiRootChangesLoading,
-                error: multiRootChangesError,
-                recentMessages: multiRootCommitRecentMessages,
+                groups: multiRootWorkspace.changeGroups.map(MultiRootCommitGroup.init(changeGroup:)),
+                isLoading: multiRootWorkspace.changesLoading,
+                error: multiRootWorkspace.changesError,
+                recentMessages: commitWorkspace.multiRootRecentMessages,
                 onTemplate: loadMultiRootCommitTemplate,
-                onBeforeCommitSettings: { showBeforeCommitSettings = true },
-                onIdentitySettings: { showIdentitySettings = true },
-                message: $multiRootCommitMessage,
-                amendMode: $multiRootCommitAmendMode,
-                skipHooks: $multiRootCommitSkipHooks,
-                authorName: $multiRootCommitAuthorName,
-                authorEmail: $multiRootCommitAuthorEmail,
-                committerName: $multiRootCommitCommitterName,
-                committerEmail: $multiRootCommitCommitterEmail,
-                signOff: $multiRootCommitSignOff,
-                coAuthors: $multiRootCommitCoAuthors,
-                selectedChanges: multiRootCommitSelectedPaths,
+                onBeforeCommitSettings: { commitWorkspace.showBeforeCommitSettings = true },
+                onIdentitySettings: { gitSettings.showIdentitySettings = true },
+                message: $commitWorkspace.multiRootMessage,
+                amendMode: $commitWorkspace.multiRootAmendMode,
+                skipHooks: $commitWorkspace.multiRootSkipHooks,
+                authorName: $commitWorkspace.multiRootAuthorName,
+                authorEmail: $commitWorkspace.multiRootAuthorEmail,
+                committerName: $commitWorkspace.multiRootCommitterName,
+                committerEmail: $commitWorkspace.multiRootCommitterEmail,
+                signOff: $commitWorkspace.multiRootSignOff,
+                coAuthors: $commitWorkspace.multiRootCoAuthors,
+                selectedChanges: commitWorkspace.multiRootSelectedPaths,
                 onCommit: commitMultiRootSelectedRoots,
                 onCommitAndPush: commitAndPushMultiRootSelectedRoots,
                 onCommitSelectedChanges: commitMultiRootSelectedChanges,
                 onCommitAndPushSelectedChanges: commitAndPushMultiRootSelectedChanges,
-                onCancel: { showMultiRootCommitDialog = false }
+                onCancel: { commitWorkspace.showMultiRootDialog = false }
             )
         }
-        .onChange(of: showMergeRevisionsDialog) { _, isPresented in
-            if !isPresented { mergeInitialPath = nil }
+        .onChange(of: operationRecovery.showConflictResolver) { _, isPresented in
+            if !isPresented { operationRecovery.initialPath = nil }
         }
-        .alert("打开另一个项目？", isPresented: $showProjectSwitchAlert) {
+        .alert("打开另一个项目？", isPresented: $projectWorkspace.showSwitchAlert) {
             Button("替换当前窗口") { replacePendingProject() }
             Button("新窗口") {
-                openWindow(id: "project", value: pendingProjectPath)
-                pendingProjectPath = nil
+                openWindow(id: "project", value: projectWorkspace.pendingPath)
+                projectWorkspace.pendingPath = nil
             }
-            Button("取消", role: .cancel) { pendingProjectPath = nil }
+            Button("取消", role: .cancel) { projectWorkspace.pendingPath = nil }
         } message: {
-            Text("当前窗口正在显示 \(projectRepo?.displayName() ?? "一个项目")。选择如何打开新项目。")
+            Text("当前窗口正在显示 \(projectWorkspace.repository?.displayName() ?? "一个项目")。选择如何打开新项目。")
         }
         .alert("Create .gitignore?", isPresented: Binding(
-            get: { pendingIgnoreFileCreation != nil },
+            get: { fileWorkspace.pendingIgnoreFileCreation != nil },
             set: { isPresented in
-                if !isPresented { pendingIgnoreFileCreation = nil }
+                if !isPresented { fileWorkspace.pendingIgnoreFileCreation = nil }
             }
         )) {
             Button("Create") {
                 confirmPendingIgnoreFileCreation()
             }
             Button("Cancel", role: .cancel) {
-                pendingIgnoreFileCreation = nil
+                fileWorkspace.pendingIgnoreFileCreation = nil
             }
         } message: {
-            if let request = pendingIgnoreFileCreation {
+            if let request = fileWorkspace.pendingIgnoreFileCreation {
                 Text(
                     "No suitable .gitignore exists in the repository root. "
                         + "Create one and ignore \(request.paths.count) selected "
@@ -1769,7 +1427,7 @@ struct ContentView: View {
         .sheet(isPresented: $credentialAuth.isPresented) {
             CredentialDialogView(controller: credentialAuth)
         }
-        .sheet(item: $multiRootRemoteConfigAggregateContext) { context in
+        .sheet(item: $remoteWorkspace.multiRootRemoteConfigAggregateContext) { context in
             MultiRootRemoteConfigDialogView(
                 roots: context.roots,
                 onAdd: { rootPath, name, url, fetchAfterAdd, completion in
@@ -1799,11 +1457,11 @@ struct ContentView: View {
                 },
                 onRefresh: loadMultiRootRemoteConfigAggregate,
                 onCancel: {
-                    multiRootRemoteConfigAggregateContext = nil
+                    remoteWorkspace.multiRootRemoteConfigAggregateContext = nil
                 }
             )
         }
-        .sheet(isPresented: $showRemoteConfigDialog) {
+        .sheet(isPresented: $remoteWorkspace.showConfigDialog) {
             remoteConfigSheet
         }
         .sheet(isPresented: $branchWorkspace.showUpstreamDialog) {
@@ -1835,15 +1493,15 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $showRebaseTodoEditor) {
+        .sheet(isPresented: $rebaseWorkspace.showTodoEditor) {
             rebaseTodoSheet
         }
-        .sheet(isPresented: $showRawRebaseTodoEditor) {
+        .sheet(isPresented: $rebaseWorkspace.showRawTodoEditor) {
             rebaseRawTodoSheet
         }
-        .sheet(isPresented: $showRawRebaseMessageEditor) {
+        .sheet(isPresented: $rebaseWorkspace.showRawMessageEditor) {
             RawRebaseMessageEditorView(
-                message: $rawRebaseMessageText,
+                message: $rebaseWorkspace.rawMessageText,
                 onSave: submitRawRebaseMessage,
                 onCancel: cancelRawRebaseMessage
             )
@@ -1874,24 +1532,24 @@ struct ContentView: View {
                 onConfirm: submitLogSquash
             )
         }
-        .alert("Rewrite Initial Commit?", isPresented: $showInitialCommitRewordAlert) {
+        .alert("Rewrite Initial Commit?", isPresented: $logRewrite.showInitialCommitRewordAlert) {
             Button("Continue") {
                 confirmInitialCommitReword()
             }
             Button("Cancel", role: .cancel) {
-                pendingInitialCommitReword = nil
+                logRewrite.pendingInitialCommitReword = nil
                 logRewrite.rewordCommit = nil
                 logRewrite.rewordUsesRootRebase = false
             }
         } message: {
             Text("The initial commit has no parent. Continue with this history rewrite?")
         }
-        .alert("Rewrite Initial Commit?", isPresented: $showInitialCommitRewriteAlert) {
+        .alert("Rewrite Initial Commit?", isPresented: $logRewrite.showInitialCommitRewriteAlert) {
             Button("Continue") {
                 confirmInitialCommitRewrite()
             }
             Button("Cancel", role: .cancel) {
-                pendingInitialCommitRewrite = nil
+                logRewrite.pendingInitialCommitRewrite = nil
             }
         } message: {
             Text("The selected history includes the initial commit. Continue with this history rewrite?")
@@ -1903,11 +1561,11 @@ struct ContentView: View {
             showInitializePanel()
         }
         .onReceive(NotificationCenter.default.publisher(for: .arborCloneProjectDialog)) { _ in
-            showCloneDialog = true
+            cloneWorkspace.showDialog = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .arborOpenCommitDetail)) { notification in
             guard let id = notification.object as? String else { return }
-            toolWindowMode = .log
+            projectWorkspace.toolWindowMode = .log
             toolWindowExpanded = true
             projectPanelExpanded = false
             logList.viewMode = .graph
@@ -1917,12 +1575,12 @@ struct ContentView: View {
             // old staging/file selection alive makes mainContext render a
             // diff viewer over the Log workspace and looks like the history
             // page disappeared.
-            selection = nil
-            fileSelection = nil
-            selectionModePath = nil
-            commitPreviewPath = nil
-            commitPreviewVisible = false
-            commitPreviewThreeVersions = false
+            fileWorkspace.selection = nil
+            fileWorkspace.fileSelection = nil
+            fileWorkspace.selectionModePath = nil
+            fileWorkspace.previewPath = nil
+            fileWorkspace.previewVisible = false
+            fileWorkspace.previewThreeVersions = false
             logSelectionState.selection = id
             logSelectionState.selectedIDs = [id]
             loadCommitDetailsIfNeeded(id)
@@ -1940,13 +1598,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .arborVCSAction)) { notification in
             handleArborVCSActionNotification(notification)
         }
-        .sheet(isPresented: $showSearchEverywhere) {
+        .sheet(isPresented: $projectWorkspace.showSearchEverywhere) {
             SearchEverywhereView(
                 roots: searchEverywhereGitRoots,
-                query: $searchEverywhereQuery,
+                query: $projectWorkspace.searchQuery,
                 onSelect: { item in
-                    showSearchEverywhere = false
-                    searchEverywhereQuery = ""
+                    projectWorkspace.showSearchEverywhere = false
+                    projectWorkspace.searchQuery = ""
                     switch item.kind {
                     case .localBranch, .remoteBranch, .tag:
                         navigateLogToBranch(rootPath: item.rootPath, branch: item.revision)
@@ -1955,22 +1613,22 @@ struct ContentView: View {
                     }
                 },
                 onCancel: {
-                    showSearchEverywhere = false
-                    searchEverywhereQuery = ""
+                    projectWorkspace.showSearchEverywhere = false
+                    projectWorkspace.searchQuery = ""
                 }
             )
         }
     }
 
     func presentVCSQuickActionsPanel() {
-        let hasUnstagedChanges = entries.contains {
+        let hasUnstagedChanges = repositoryStatus.entries.contains {
             $0.unstaged != .unchanged
                 && $0.unstaged != .ignored
                 && $0.unstaged != .conflicted
         }
         vcsQuickActionsPanel.present(
             items: vcsQuickActionItems(
-                isShallowRepository: isShallowRepository,
+                isShallowRepository: repositoryStatus.isShallowRepository,
                 hasCurrentBranch: hasCurrentBranch,
                 hasConflicts: hasConflicts,
                 hasUnstagedTrackedChanges: vcsActionContext.hasUnstagedTrackedChanges,
@@ -1993,26 +1651,26 @@ struct ContentView: View {
     }
 
     private var hasConflicts: Bool {
-        entries.contains {
+        repositoryStatus.entries.contains {
             $0.staged == .conflicted || $0.unstaged == .conflicted
         }
     }
 
     var vcsActionContext: ArborVCSActionContext {
-        let hasLocalChanges = entries.contains {
+        let hasLocalChanges = repositoryStatus.entries.contains {
             ($0.staged != .unchanged && $0.staged != .ignored)
                 || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
         }
-        let hasUnstagedTrackedChanges = entries.contains {
+        let hasUnstagedTrackedChanges = repositoryStatus.entries.contains {
             $0.unstaged != .unchanged
                 && $0.unstaged != .untracked
                 && $0.unstaged != .ignored
                 && $0.unstaged != .conflicted
         }
-        let hasStagedChanges = entries.contains {
+        let hasStagedChanges = repositoryStatus.entries.contains {
             $0.staged != .unchanged && $0.staged != .ignored
         }
-        let hasProjectCommitChanges = multiRootChangeGroups.contains { group in
+        let hasProjectCommitChanges = multiRootWorkspace.changeGroups.contains { group in
             group.entries.contains {
                 $0.staged != .unchanged
                     && $0.staged != .ignored
@@ -2020,10 +1678,10 @@ struct ContentView: View {
             }
         }
         let allRepositoriesHaveHeadCommit: Bool
-        if multiRoots.isEmpty {
-            allRepositoriesHaveHeadCommit = headId != nil
+        if multiRootWorkspace.roots.isEmpty {
+            allRepositoriesHaveHeadCommit = repositoryStatus.headId != nil
         } else {
-            allRepositoriesHaveHeadCommit = multiRoots.allSatisfy { $0.headId != nil }
+            allRepositoriesHaveHeadCommit = multiRootWorkspace.roots.allSatisfy { $0.headId != nil }
         }
         return ArborVCSActionContext(
             hasRepository: repo != nil,
@@ -2033,50 +1691,50 @@ struct ContentView: View {
             hasUnstagedTrackedChanges: hasUnstagedTrackedChanges,
             hasStagedChanges: hasStagedChanges,
             hasConflicts: hasConflicts,
-            isShallowRepository: isShallowRepository,
-            hasRemotes: !remotes.isEmpty,
+            isShallowRepository: repositoryStatus.isShallowRepository,
+            hasRemotes: !remoteWorkspace.remotes.isEmpty,
             hasFetchInProgress: isArborFetchInProgress(
                 isRunning: feedbackCenter.isRunning,
                 operationName: feedbackCenter.operationName
             ),
             hasBackgroundVCSOperation: isArborBackgroundVCSOperationInProgress(
                 feedbackIsRunning: feedbackCenter.isRunning,
-                multiRootIsRunning: multiRootRunning || updateProjectDiscoveryRunning
+                multiRootIsRunning: multiRootWorkspace.running || multiRootWorkspace.updateDiscoveryRunning
             ),
-            projectPath: projectPath,
-            hasMultipleGitRoots: multiRoots.count > 1,
+            projectPath: projectWorkspace.path,
+            hasMultipleGitRoots: multiRootWorkspace.roots.count > 1,
             hasProjectCommitChanges: hasProjectCommitChanges || hasStagedChanges,
             hasTrackedUpstream: currentSyncStatus.map {
                 $0.trackingExists && !$0.upstream.isEmpty
             } ?? false,
-            hasSingleGitRoot: multiRoots.count == 1,
-            hasRepositoryOperationInProgress: operationState != nil
-                || multiRoots.contains { $0.operation != nil },
+            hasSingleGitRoot: multiRootWorkspace.roots.count == 1,
+            hasRepositoryOperationInProgress: operationRecovery.operation != nil
+                || multiRootWorkspace.roots.contains { $0.operation != nil },
             hasMergeInProgress: isArborMergeInProgress(
-                currentOperation: operationState?.kind,
-                roots: multiRoots
+                currentOperation: operationRecovery.operation?.kind,
+                roots: multiRootWorkspace.roots
             ),
             hasRebaseInProgress: isArborRebaseInProgress(
-                currentOperation: operationState?.kind,
-                roots: multiRoots,
-                hasMultiRootSession: multiRootRebaseSession != nil
+                currentOperation: operationRecovery.operation?.kind,
+                roots: multiRootWorkspace.roots,
+                hasMultiRootSession: rebaseWorkspace.multiRootSession != nil
             ),
             hasNormalOrDetachedRepository: hasArborNormalOrDetachedRepository(
-                currentOperation: operationState?.kind,
+                currentOperation: operationRecovery.operation?.kind,
                 currentRootPath: repo?.workdir(),
-                roots: multiRoots
+                roots: multiRootWorkspace.roots
             ),
             selectedLocalChangePath: selectedLocalChangePath,
             selectedResolvedConflictPath: selectedWorkspacePath.flatMap {
-                resolvedConflictPaths.contains($0) ? $0 : nil
+                operationRecovery.resolvedConflictPaths.contains($0) ? $0 : nil
             },
             selectedFileAction: selectedFileActionContext
         )
     }
 
     var resetHeadRootOptions: [GitRootInfo] {
-        if !multiRoots.isEmpty {
-            return multiRoots.filter { $0.operation == nil }
+        if !multiRootWorkspace.roots.isEmpty {
+            return multiRootWorkspace.roots.filter { $0.operation == nil }
         }
         guard let rootPath = repo?.workdir(), !rootPath.isEmpty else { return [] }
         return [GitRootInfo(
@@ -2086,16 +1744,16 @@ struct ContentView: View {
             isSubmodule: false,
             headBranch: branchWorkspace.branches.first(where: { $0.isCurrent })?.name,
             headId: nil,
-            dirty: entries.contains {
+            dirty: repositoryStatus.entries.contains {
                 $0.staged != .unchanged || $0.unstaged != .unchanged
             },
-            operation: operationState?.kind
+            operation: operationRecovery.operation?.kind
         )]
     }
 
     var stashRootOptions: [GitRootInfo] {
-        if !multiRoots.isEmpty {
-            return multiRoots
+        if !multiRootWorkspace.roots.isEmpty {
+            return multiRootWorkspace.roots
         }
         return resetHeadRootOptions
     }
@@ -2123,26 +1781,26 @@ struct ContentView: View {
                 // the repository is opening. Showing the generic Arbor shell
                 // during that interval makes a valid project launch look like
                 // the welcome page and differs from rebased's project window.
-                projectName: projectRepo?.displayName()
-                    ?? projectPath.map { URL(fileURLWithPath: $0).lastPathComponent }
+                projectName: projectWorkspace.repository?.displayName()
+                    ?? projectWorkspace.path.map { URL(fileURLWithPath: $0).lastPathComponent }
                     ?? "Arbor",
-                projectPath: projectPath,
+                projectPath: projectWorkspace.path,
                 currentBranch: currentBranchName,
                 hasRepository: repo != nil,
-                isLoading: isLoading || feedbackCenter.isRunning,
+                isLoading: repositoryStatus.isLoading || feedbackCenter.isRunning,
                 onOpenProject: showOpenPanel,
                 onRefresh: refreshAll,
                 onUpdate: { doPull(nil, rebase: false) },
                 onCommit: {
-                    toolWindowMode = .commit
+                    projectWorkspace.toolWindowMode = .commit
                     toolWindowExpanded = true
                 },
                 onPush: { beginPushDialog() },
                 onFetch: { doFetch(nil) },
-                onHosting: { showHostingHub = true },
-                isShallowRepository: isShallowRepository,
+                onHosting: { hostingWorkspace.showHostingHub = true },
+                isShallowRepository: repositoryStatus.isShallowRepository,
                 hasCurrentBranch: branchWorkspace.branches.contains { $0.isCurrent },
-                hasConflicts: entries.contains {
+                hasConflicts: repositoryStatus.entries.contains {
                     $0.staged == .conflicted || $0.unstaged == .conflicted
                 },
                 onQuickAction: { action in
@@ -2152,24 +1810,24 @@ struct ContentView: View {
                     )
                 },
                 onSearch: {
-                    searchEverywhereQuery = ""
-                    showSearchEverywhere = true
+                    projectWorkspace.searchQuery = ""
+                    projectWorkspace.showSearchEverywhere = true
                 },
                 recentProjects: loadRecentPaths(),
                 onOpenRecent: requestOpenProject,
                 operationItems: gitMergeRebaseWidgetItems(
                     currentRootPath: repo?.workdir(),
-                    currentOperation: operationState?.kind,
-                    roots: multiRoots
+                    currentOperation: operationRecovery.operation?.kind,
+                    roots: multiRootWorkspace.roots
                 ),
-                currentOperationState: operationState,
-                resolvedConflictPaths: resolvedConflictPaths,
+                currentOperationState: operationRecovery.operation,
+                resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                 onRevertResolved: revertResolvedPath,
                 onOperationAction: { action, rootPath in
                     handleVCSActionRequest(
                         ArborVCSActionRequest(
                             kind: .operationRecovery,
-                            projectPath: projectPath,
+                            projectPath: projectWorkspace.path,
                             rootPath: rootPath,
                             shelfName: "",
                             operationRecoveryAction: action
@@ -2182,23 +1840,23 @@ struct ContentView: View {
 
             WorkspaceSplitLayout(
                 persistedSidebarWidth: $savedWorkspaceSidebarWidth,
-                selectedToolWindow: toolWindowMode,
+                selectedToolWindow: projectWorkspace.toolWindowMode,
                 // Rebased keeps the selected Git tool window on the left and
                 // opens Git Log in the editor workspace on the right. Log is
                 // therefore a second workspace, not a replacement for the
                 // Commit/Stash column.
                 sidebarVisible: true,
                 onSelectToolWindow: { mode in
-                    toolWindowMode = mode
+                    projectWorkspace.toolWindowMode = mode
                     toolWindowExpanded = true
                     if mode == .log {
                         projectPanelExpanded = false
                         // Git Log is an editor-like workspace, not a narrow
                         // tool-window table. Clear file context so the main
                         // workspace can own the history graph and inspector.
-                        selection = nil
-                        fileSelection = nil
-                        selectionModePath = nil
+                        fileWorkspace.selection = nil
+                        fileWorkspace.fileSelection = nil
+                        fileWorkspace.selectionModePath = nil
                         logList.viewMode = .graph
                         loadLog()
                     }
@@ -2212,28 +1870,28 @@ struct ContentView: View {
 
             RebasedStatusBar(
                 branch: currentBranchName,
-                headID: headId,
-                changedCount: entries.filter {
+                headID: repositoryStatus.headId,
+                changedCount: repositoryStatus.entries.filter {
                     $0.staged != .unchanged
                         || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
                 }.count,
-                projectPath: projectPath,
+                projectPath: projectWorkspace.path,
                 onBranch: { branchWorkspace.showPopover = true },
                 feedbackCenter: feedbackCenter,
                 syncStatus: currentSyncStatus,
                 hasUnfetchedIncoming: currentBranchHasUnfetchedIncoming,
                 onOperationLog: {
-                    operationsViewMode = feedbackCenter.isRunning ? .tasks : .history
-                    toolWindowMode = .operations
+                    operationRecovery.viewMode = feedbackCenter.isRunning ? .tasks : .history
+                    projectWorkspace.toolWindowMode = .operations
                     toolWindowExpanded = true
                 },
                 onCancelOperation: feedbackCenter.cancel,
-                onFeedbackDetails: { feedbackDetailMessage = $0 }
+                onFeedbackDetails: { projectWorkspace.feedbackDetailMessage = $0 }
             )
         }
         .frame(minWidth: 980, minHeight: 540)
         .background(Design.Colors.canvas)
-        .onChange(of: toolWindowMode, initial: false) { _, mode in
+        .onChange(of: projectWorkspace.toolWindowMode, initial: false) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: "arbor.toolWindowMode")
             if mode == .commit {
                 refreshAll()
@@ -2251,7 +1909,7 @@ struct ContentView: View {
             if let toast = feedbackCenter.toast {
                 FeedbackToastView(
                     message: toast,
-                    onDetails: { feedbackDetailMessage = toast },
+                    onDetails: { projectWorkspace.feedbackDetailMessage = toast },
                     onDismiss: feedbackCenter.dismissToast
                 )
                 .padding(.trailing, 18)
@@ -2259,23 +1917,23 @@ struct ContentView: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .sheet(item: $feedbackDetailMessage) { message in
+        .sheet(item: $projectWorkspace.feedbackDetailMessage) { message in
             FeedbackDetailView(
                 message: message,
-                onDismiss: { feedbackDetailMessage = nil },
+                onDismiss: { projectWorkspace.feedbackDetailMessage = nil },
                 onOpenSSHSettings: {
-                    feedbackDetailMessage = nil
+                    projectWorkspace.feedbackDetailMessage = nil
                     loadGitSSHSettings()
                 }
             )
         }
-        .alert("GitHub authentication failed", isPresented: $showHostingAuthPrompt) {
-            Button("Configure GitHub token") { showHostingSettings = true }
+        .alert("GitHub authentication failed", isPresented: $hostingWorkspace.showHostingAuthPrompt) {
+            Button("Configure GitHub token") { hostingWorkspace.showHostingSettings = true }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Configure a GitHub token in Settings, then retry the git operation.")
         }
-        .sheet(isPresented: $showHostingSettings) {
+        .sheet(isPresented: $hostingWorkspace.showHostingSettings) {
             if let hostingRepository {
                 HostingSettingsView(repository: hostingRepository)
             } else {
@@ -2283,22 +1941,22 @@ struct ContentView: View {
                     .padding(24)
             }
         }
-        .sheet(isPresented: $showHostingHub) {
+        .sheet(isPresented: $hostingWorkspace.showHostingHub) {
             HostingHubView(
-                remoteURL: remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil })?.url,
-                showSettings: $showHostingSettings,
+                remoteURL: remoteWorkspace.remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil })?.url,
+                showSettings: $hostingWorkspace.showHostingSettings,
                 onCheckoutIncomingBranch: { detail in
-                    guard let projectPath,
+                    guard let projectPath = projectWorkspace.path,
                           let branch = detail.pullRequest.headBranch,
                           !branch.isEmpty,
-                          let remote = remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil }) else {
+                          let remote = remoteWorkspace.remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil }) else {
                         feedbackCenter.error(
                             "Checkout incoming branch failed",
                             detail: "The hosting change request is not connected to an available Git root or remote."
                         )
                         return
                     }
-                    showHostingHub = false
+                    hostingWorkspace.showHostingHub = false
                     checkoutBranchInRoot(
                         rootPath: projectPath,
                         reference: "\(remote.name)/\(branch)",
@@ -2306,7 +1964,7 @@ struct ContentView: View {
                     )
                 },
                 onShowInGitLog: { detail in
-                    guard let projectPath,
+                    guard let projectPath = projectWorkspace.path,
                           let revision = detail.headRevision,
                           !revision.isEmpty else {
                         feedbackCenter.error(
@@ -2315,17 +1973,17 @@ struct ContentView: View {
                         )
                         return
                     }
-                    showHostingHub = false
-                    toolWindowMode = .log
+                    hostingWorkspace.showHostingHub = false
+                    projectWorkspace.toolWindowMode = .log
                     toolWindowExpanded = true
                     navigateLogToRevision(rootPath: projectPath, revision: revision)
                 }
             )
             .frame(minWidth: 980, minHeight: 620)
         }
-        .sheet(isPresented: $showReviewComment) {
-            if let commit = reviewCommentCommit,
-               let repository = reviewCommentRepository ?? hostingRepository {
+        .sheet(isPresented: $hostingWorkspace.showReviewComment) {
+            if let commit = hostingWorkspace.reviewCommentCommit,
+               let repository = hostingWorkspace.reviewCommentRepository ?? hostingRepository {
                 ReviewCommentSheet(
                     repository: repository,
                     commitID: commit.id,
@@ -2333,34 +1991,34 @@ struct ContentView: View {
                 )
         }
     }
-        .sheet(item: $addCommitsToRemoteBranchContext) { context in
+        .sheet(item: $pushWorkspace.addCommitsToRemoteBranchContext) { context in
             RebasedRemoteBranchSelectionDialog(
                 commits: context.commits,
                 remoteBranches: context.remoteBranches,
-                onCancel: { addCommitsToRemoteBranchContext = nil },
+                onCancel: { pushWorkspace.addCommitsToRemoteBranchContext = nil },
                 onSelect: { remoteBranch in
-                    addCommitsToRemoteBranchContext = nil
+                    pushWorkspace.addCommitsToRemoteBranchContext = nil
                     prepareAddCommitsToRemoteBranch(remoteBranch, commits: context.commits)
                 }
             )
         }
-        .sheet(isPresented: $showMultiRootPushOptions) {
+        .sheet(isPresented: $pushWorkspace.showMultiRootPushOptions) {
             MultiRootPushOptionsDialog(
-                snapshots: multiRootBranchSnapshots.filter { snapshot in
-                    guard let selected = multiRootPushOptionsRootPaths else { return true }
+                snapshots: multiRootWorkspace.branchSnapshots.filter { snapshot in
+                    guard let selected = pushWorkspace.multiRootPushOptionsRootPaths else { return true }
                     return selected.contains(snapshot.rootPath)
                 },
                 onCancel: {
-                    showMultiRootPushOptions = false
-                    multiRootPushOptionsRootPaths = nil
-                    multiRootPushOptionsFromCommit = false
+                    pushWorkspace.showMultiRootPushOptions = false
+                    pushWorkspace.multiRootPushOptionsRootPaths = nil
+                    pushWorkspace.multiRootPushOptionsFromCommit = false
                 },
                 onPush: { targets, tagMode, skipHooks, force, forceWithLease in
-                    let rootPaths = multiRootPushOptionsRootPaths
-                    let fromCommit = multiRootPushOptionsFromCommit
-                    showMultiRootPushOptions = false
-                    multiRootPushOptionsRootPaths = nil
-                    multiRootPushOptionsFromCommit = false
+                    let rootPaths = pushWorkspace.multiRootPushOptionsRootPaths
+                    let fromCommit = pushWorkspace.multiRootPushOptionsFromCommit
+                    pushWorkspace.showMultiRootPushOptions = false
+                    pushWorkspace.multiRootPushOptionsRootPaths = nil
+                    pushWorkspace.multiRootPushOptionsFromCommit = false
                     runMultiRootPush(
                         selectedRootPaths: rootPaths,
                         explicitTargets: targets,
@@ -2373,37 +2031,37 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(isPresented: $showPushDialog) {
+        .sheet(isPresented: $pushWorkspace.showDialog) {
             PushDialogView(
-                remotes: remotes,
+                remotes: remoteWorkspace.remotes,
                 branches: branchWorkspace.branches,
                 commits: logList.entries,
-                mode: pushDialogMode,
-                defaultRemote: pushDialogRemote,
-                defaultBranch: pushDialogBranch
+                mode: pushWorkspace.dialogMode,
+                defaultRemote: pushWorkspace.dialogRemote,
+                defaultBranch: pushWorkspace.dialogBranch
                     ?? branchWorkspace.branches.first(where: { $0.isCurrent })?.name,
-                defaultSourceRevision: pushDialogSourceRevision,
+                defaultSourceRevision: pushWorkspace.dialogSourceRevision,
                 currentHasUpstream: branchWorkspace.syncStatuses.first(where: {
-                    $0.branch == (pushDialogSourceRevision ?? currentBranchName)
+                    $0.branch == (pushWorkspace.dialogSourceRevision ?? currentBranchName)
                 })?.trackingExists ?? false,
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
-                defaultRefspec: pushDialogRefspec,
-                defaultPushTagMode: GitPushTagSettings.projectTagMode(for: projectPath),
+                defaultRefspec: pushWorkspace.dialogRefspec,
+                defaultPushTagMode: GitPushTagSettings.projectTagMode(for: projectWorkspace.path),
                 defaultRunHooks: true,
                 onCancel: {
-                    showPushDialog = false
-                    pushDialogRefspec = nil
-                    pushDialogRemote = nil
-                    pushDialogBranch = nil
-                    pushDialogSourceRevision = nil
+                    pushWorkspace.showDialog = false
+                    pushWorkspace.dialogRefspec = nil
+                    pushWorkspace.dialogRemote = nil
+                    pushWorkspace.dialogBranch = nil
+                    pushWorkspace.dialogSourceRevision = nil
                 },
                 onPush: { remote, branch, force, setUpstream, forceWithLease, refspec, tagMode, skipHooks in
-                    showPushDialog = false
-                    pushDialogRefspec = nil
-                    pushDialogRemote = nil
-                    pushDialogBranch = nil
-                    pushDialogSourceRevision = nil
-                    if pushDialogMode == .commitAndPush {
+                    pushWorkspace.showDialog = false
+                    pushWorkspace.dialogRefspec = nil
+                    pushWorkspace.dialogRemote = nil
+                    pushWorkspace.dialogBranch = nil
+                    pushWorkspace.dialogSourceRevision = nil
+                    if pushWorkspace.dialogMode == .commitAndPush {
                         commitAndPush(
                             remote: remote,
                             branch: branch,
@@ -2425,17 +2083,17 @@ struct ContentView: View {
                     }
                 },
                 onConfigureRemotes: {
-                    showPushDialog = false
+                    pushWorkspace.showDialog = false
                     beginConfigureRemotes()
                 },
                 onConfigureSSH: {
-                    showPushDialog = false
+                    pushWorkspace.showDialog = false
                     loadGitSSHSettings()
                 },
                 repo: repo
             )
         }
-        .sheet(item: $multiRootPushContext) { context in
+        .sheet(item: $pushWorkspace.multiRootPushContext) { context in
             PushDialogView(
                 remotes: context.remotes,
                 branches: context.branches,
@@ -2450,10 +2108,10 @@ struct ContentView: View {
                 defaultPushTagMode: context.defaultPushTagMode,
                 defaultRunHooks: true,
                 onCancel: {
-                    multiRootPushContext = nil
+                    pushWorkspace.multiRootPushContext = nil
                 },
                 onPush: { remote, branch, force, setUpstream, forceWithLease, refspec, tagMode, skipHooks in
-                    multiRootPushContext = nil
+                    pushWorkspace.multiRootPushContext = nil
                     pushInRoot(
                         rootPath: context.rootPath,
                         remote: remote,
@@ -2467,7 +2125,7 @@ struct ContentView: View {
                     )
                 },
                 onConfigureRemotes: {
-                    multiRootPushContext = nil
+                    pushWorkspace.multiRootPushContext = nil
                     DispatchQueue.main.async {
                         beginMultiRootRemoteConfig(rootPath: context.rootPath)
                     }
@@ -2478,15 +2136,15 @@ struct ContentView: View {
                 repo: context.repo
             )
         }
-        .sheet(item: $multiRootRemoteConfigContext) { context in
+        .sheet(item: $remoteWorkspace.multiRootRemoteConfigContext) { context in
             RemoteConfigDialogView(
                 remotes: context.remotes,
-                name: $multiRootRemoteName,
-                url: $multiRootRemoteURL,
-                pushUrl: $multiRootRemotePushURL,
-                fetchRefspec: $multiRootRemoteFetchRefspec,
-                pushRefspec: $multiRootRemotePushRefspec,
-                initialSelectedName: multiRootRemoteName,
+                name: $remoteWorkspace.multiRootRemoteName,
+                url: $remoteWorkspace.multiRootRemoteURL,
+                pushUrl: $remoteWorkspace.multiRootRemotePushURL,
+                fetchRefspec: $remoteWorkspace.multiRootRemoteFetchRefspec,
+                pushRefspec: $remoteWorkspace.multiRootRemotePushRefspec,
+                initialSelectedName: remoteWorkspace.multiRootRemoteName,
                 onAdd: { fetchAfterAdd in
                     addRemoteInRoot(rootPath: context.rootPath, fetchAfterAdd: fetchAfterAdd)
                 },
@@ -2500,24 +2158,24 @@ struct ContentView: View {
                     saveRemoteConfigInRoot(rootPath: context.rootPath)
                 },
                 onCancel: {
-                    multiRootRemoteConfigContext = nil
+                    remoteWorkspace.multiRootRemoteConfigContext = nil
                 },
                 onRefresh: {
                     loadMultiRootRemoteConfig(rootPath: context.rootPath)
                 }
             )
         }
-        .sheet(isPresented: $showBeforeCommitSettings) {
+        .sheet(isPresented: $commitWorkspace.showBeforeCommitSettings) {
             beforeCommitSettingsSheet
         }
-        .sheet(isPresented: $showProjectGitSettings) {
-            if let projectPath {
+        .sheet(isPresented: $gitSettings.showProjectGitSettings) {
+            if let projectPath = projectWorkspace.path {
                 ProjectGitIncomingChangesSettingsView(
                     projectPath: projectPath,
                     rootPaths: GitExecutableSettings.registeredRoots(
                         projectPath: projectPath,
                         repositoryRoot: repo?.workdir(),
-                        discoveredRoots: multiRoots.map(\.path)
+                        discoveredRoots: multiRootWorkspace.roots.map(\.path)
                     ),
                     onSaved: {
                         if let repo {
@@ -2525,11 +2183,11 @@ struct ContentView: View {
                                 path: GitExecutableSettings.projectOverride(for: projectPath)
                             )
                         }
-                        projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(
+                        gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(
                             for: projectPath
                         )
-                        projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
-                        projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
+                        gitSettings.projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
+                        gitSettings.projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
                     }
                 )
             } else {
@@ -2537,31 +2195,31 @@ struct ContentView: View {
                     .padding(24)
             }
         }
-        .sheet(isPresented: $showUpdateProjectOptions) {
-            if let projectPath {
+        .sheet(isPresented: $gitSettings.showUpdateProjectOptions) {
+            if let projectPath = projectWorkspace.path {
                 UpdateProjectOptionsDialogView(
                     projectPath: projectPath,
-                    rootCount: max(1, multiRoots.count),
-                    initialUpdateMethod: projectUpdateMethod,
-                    showsResetAction: multiRoots.count == 1,
+                    rootCount: max(1, multiRootWorkspace.roots.count),
+                    initialUpdateMethod: gitSettings.projectUpdateMethod,
+                    showsResetAction: multiRootWorkspace.roots.count == 1,
                     onUpdate: { method, shouldShowNextTime in
-                        projectUpdateMethod = method
+                        gitSettings.projectUpdateMethod = method
                         GitUpdateMethodSettings.save(method, for: projectPath)
                         GitUpdateOptionsDialogSettings.saveShouldShow(
                             shouldShowNextTime,
                             for: projectPath
                         )
-                        showUpdateProjectOptions = false
+                        gitSettings.showUpdateProjectOptions = false
                         executeMultiRootUpdate(rebase: method == .rebase)
                     },
                     onResetToRemote: {
-                        showUpdateProjectOptions = false
+                        gitSettings.showUpdateProjectOptions = false
                         DispatchQueue.main.async {
                             resetCurrentBranchToRemote()
                         }
                     },
                     onCancel: {
-                        showUpdateProjectOptions = false
+                        gitSettings.showUpdateProjectOptions = false
                     }
                 )
             } else {
@@ -2569,70 +2227,70 @@ struct ContentView: View {
                     .padding(24)
             }
         }
-        .sheet(isPresented: $showIdentitySettings) {
+        .sheet(isPresented: $gitSettings.showIdentitySettings) {
             GitIdentitySettingsView(
-                name: $identityName,
-                email: $identityEmail,
-                setNameEmailGlobally: $identitySetNameEmailGlobally,
-                signingKey: $identitySigningKey,
-                signingFormat: $identitySigningFormat,
-                signCommits: $identitySignCommits,
-                authorName: $identityAuthorName,
-                authorEmail: $identityAuthorEmail,
-                committerName: $identityCommitterName,
-                committerEmail: $identityCommitterEmail,
-                signOff: $identitySignOff,
-                coAuthors: $identityCoAuthors,
-                recentAuthors: identityRecentAuthors,
+                name: $gitSettings.identityName,
+                email: $gitSettings.identityEmail,
+                setNameEmailGlobally: $gitSettings.identitySetNameEmailGlobally,
+                signingKey: $gitSettings.identitySigningKey,
+                signingFormat: $gitSettings.identitySigningFormat,
+                signCommits: $gitSettings.identitySignCommits,
+                authorName: $gitSettings.identityAuthorName,
+                authorEmail: $gitSettings.identityAuthorEmail,
+                committerName: $gitSettings.identityCommitterName,
+                committerEmail: $gitSettings.identityCommitterEmail,
+                signOff: $gitSettings.identitySignOff,
+                coAuthors: $gitSettings.identityCoAuthors,
+                recentAuthors: gitSettings.identityRecentAuthors,
                 onSelectRecentAuthor: { author in
                     guard let parsed = GitCommitAuthorHistorySettings.parse(author) else { return }
-                    identityAuthorName = parsed.name
-                    identityAuthorEmail = parsed.email
+                    gitSettings.identityAuthorName = parsed.name
+                    gitSettings.identityAuthorEmail = parsed.email
                 },
-                onSave: { setGitIdentity(); showIdentitySettings = false },
+                onSave: { setGitIdentity(); gitSettings.showIdentitySettings = false },
                 onCancel: {
-                    pendingIdentityCommitRetry = false
-                    showIdentitySettings = false
+                    gitSettings.pendingIdentityCommitRetry = false
+                    gitSettings.showIdentitySettings = false
                 },
                 onGpgAgent: {
-                    showIdentitySettings = false
-                    DispatchQueue.main.async { showGpgAgentSettings = true }
+                    gitSettings.showIdentitySettings = false
+                    DispatchQueue.main.async { gitSettings.showGpgAgentSettings = true }
                 }
             )
         }
-        .sheet(isPresented: $showGpgAgentSettings) {
+        .sheet(isPresented: $gitSettings.showGpgAgentSettings) {
             GpgAgentSettingsView()
         }
-        .onChange(of: showIdentitySettings) { _, isPresented in
+        .onChange(of: gitSettings.showIdentitySettings) { _, isPresented in
             if isPresented {
-                identitySetNameEmailGlobally = GitIdentityScopeSettings.setNameEmailGlobally(
-                    for: projectPath
+                gitSettings.identitySetNameEmailGlobally = GitIdentityScopeSettings.setNameEmailGlobally(
+                    for: projectWorkspace.path
                 )
-                identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectPath)
+                gitSettings.identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectWorkspace.path)
             }
-            if !isPresented && showMultiRootCommitDialog {
+            if !isPresented && commitWorkspace.showMultiRootDialog {
                 syncMultiRootCommitIdentityDraftFromSettings()
             }
         }
-        .sheet(isPresented: $showGitSSHSettings) {
+        .sheet(isPresented: $gitSettings.showGitSSHSettings) {
             GitSSHSettingsView(
-                command: $gitSSHCommand,
-                knownHostsFile: $gitSSHKnownHostsFile,
-                identityFile: $gitSSHIdentityFile,
-                hostKeyPolicy: $gitSSHHostKeyPolicy,
-                authMethod: $gitSSHAuthMethod,
-                credentialHelperConfig: $gitCredentialHelperConfig,
-                credentialHelpers: gitCredentialHelpers,
+                command: $gitSettings.gitSSHCommand,
+                knownHostsFile: $gitSettings.gitSSHKnownHostsFile,
+                identityFile: $gitSettings.gitSSHIdentityFile,
+                hostKeyPolicy: $gitSettings.gitSSHHostKeyPolicy,
+                authMethod: $gitSettings.gitSSHAuthMethod,
+                credentialHelperConfig: $gitSettings.gitCredentialHelperConfig,
+                credentialHelpers: gitSettings.gitCredentialHelpers,
                 onRefreshCredentialHelpers: loadGitCredentialHelpers,
-                sshAgentDiagnostics: gitSSHAgentDiagnostics,
+                sshAgentDiagnostics: gitSettings.gitSSHAgentDiagnostics,
                 onRefreshSSHAgentDiagnostics: loadGitSSHAgentDiagnostics,
-                lastSuccessfulAuthentications: lastSuccessfulSSHAuthentications,
+                lastSuccessfulAuthentications: gitSettings.lastSuccessfulSSHAuthentications,
                 onClearLastSuccessfulAuthentications: {
                     credentialAuth.clearSSHAuthenticationRecords()
-                    lastSuccessfulSSHAuthentications = []
+                    gitSettings.lastSuccessfulSSHAuthentications = []
                 },
-                onSave: { saveGitSSHSettings(); showGitSSHSettings = false },
-                onCancel: { showGitSSHSettings = false }
+                onSave: { saveGitSSHSettings(); gitSettings.showGitSSHSettings = false },
+                onCancel: { gitSettings.showGitSSHSettings = false }
             )
         }
         .sheet(isPresented: $stashUI.showDiff) {
@@ -2702,11 +2360,11 @@ struct ContentView: View {
                 onCancel: dismissNewBranchDialog
             )
         }
-        .sheet(isPresented: $showNewWorktreeDialog) {
+        .sheet(isPresented: $worktreeWorkspace.showCreateDialog) {
             RebasedNewWorktreeDialog(
-                rootPath: newWorktreeRootPath ?? repo?.workdir(),
-                reference: newWorktreeReference,
-                isTag: newWorktreeIsTag,
+                rootPath: worktreeWorkspace.rootPath ?? repo?.workdir(),
+                reference: worktreeWorkspace.reference,
+                isTag: worktreeWorkspace.isTag,
                 occupiedBranches: Set(newWorktreeWorktrees.map(\.branch).filter { !$0.isEmpty }),
                 validateBranchName: { value in
                     guard let targetRepo = newWorktreeRepository else { return nil }
@@ -2720,14 +2378,14 @@ struct ContentView: View {
                         return errorMessage(error)
                     }
                 },
-                path: $newWorktreePath,
-                branch: $newWorktreeBranch,
+                path: $worktreeWorkspace.path,
+                branch: $worktreeWorkspace.branch,
                 onCreate: { path, branch in
                     createWorktree(
                         path: path,
                         branch: branch,
-                        revision: newWorktreeReference,
-                        rootPath: newWorktreeRootPath
+                        revision: worktreeWorkspace.reference,
+                        rootPath: worktreeWorkspace.rootPath
                     )
                     dismissNewWorktreeDialog()
                 },
@@ -2741,13 +2399,13 @@ struct ContentView: View {
                 checkout: $branchWorkspace.multiRootNewCheckout,
                 resetExisting: $branchWorkspace.multiRootNewResetExisting,
                 selectedRootPaths: $branchWorkspace.multiRootNewSelectedRootPaths,
-                roots: multiRoots,
+                roots: multiRootWorkspace.roots,
                 existingBranchNames: branchWorkspace.multiRootExistingNames,
                 validateName: { value in
                     let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !candidate.isEmpty else { return nil }
                     let selectedPaths = branchWorkspace.multiRootNewSelectedRootPaths.isEmpty
-                        ? multiRoots.map(\.path)
+                        ? multiRootWorkspace.roots.map(\.path)
                         : Array(branchWorkspace.multiRootNewSelectedRootPaths)
                     for rootPath in selectedPaths {
                         let exists = branchWorkspace.multiRootExistingNames[rootPath]?.contains(candidate) == true
@@ -2782,7 +2440,7 @@ struct ContentView: View {
                 newName: $branchWorkspace.multiRootRenameNewName,
                 unsetUpstream: $branchWorkspace.multiRootRenameUnsetUpstream,
                 selectedRootPaths: $branchWorkspace.multiRootRenameSelectedRootPaths,
-                snapshots: multiRootBranchSnapshots,
+                snapshots: multiRootWorkspace.branchSnapshots,
                 validateName: validateMultiRootRenameName,
                 onRename: {
                     renameMultiRootBranch(
@@ -2823,7 +2481,7 @@ struct ContentView: View {
             RebasedMultiRootDeleteBranchDialog(
                 branchName: branchWorkspace.multiRootDeleteName,
                 selectedRootPaths: $branchWorkspace.multiRootDeleteSelectedRootPaths,
-                snapshots: multiRootBranchSnapshots,
+                snapshots: multiRootWorkspace.branchSnapshots,
                 onDelete: {
                     deleteMultiRootBranch(
                         name: branchWorkspace.multiRootDeleteName,
@@ -2837,7 +2495,7 @@ struct ContentView: View {
             RebasedMultiRootDeleteTagDialog(
                 tagName: tagWorkspace.multiRootDeleteName,
                 selectedRootPaths: $tagWorkspace.multiRootDeleteSelectedRootPaths,
-                snapshots: multiRootBranchSnapshots,
+                snapshots: multiRootWorkspace.branchSnapshots,
                 onDelete: {
                     deleteMultiRootTag(
                         name: tagWorkspace.multiRootDeleteName,
@@ -2852,7 +2510,7 @@ struct ContentView: View {
                 remoteBranch: branchWorkspace.multiRootRemoteDeleteName,
                 selectedRootPaths: $branchWorkspace.multiRootRemoteDeleteSelectedRootPaths,
                 deleteTracking: $branchWorkspace.multiRootRemoteDeleteTracking,
-                snapshots: multiRootBranchSnapshots,
+                snapshots: multiRootWorkspace.branchSnapshots,
                 onDelete: {
                     deleteMultiRootRemoteBranch(
                         remoteBranch: branchWorkspace.multiRootRemoteDeleteName,
@@ -2863,39 +2521,39 @@ struct ContentView: View {
                 onCancel: dismissMultiRootRemoteDeleteDialog
             )
         }
-        .sheet(isPresented: $showMergeActionDialog) {
+        .sheet(isPresented: $mergeWorkspace.showActionDialog) {
             RebasedMergeDialog(
-                branch: $mergeBranch,
+                branch: $mergeWorkspace.branch,
                 strategy: Binding(
-                    get: { MergeStrategyChoice(rawValue: mergeStrategyRaw) ?? .automatic },
-                    set: { mergeStrategyRaw = $0.rawValue }
+                    get: { MergeStrategyChoice(rawValue: mergeWorkspace.strategyRaw) ?? .automatic },
+                    set: { mergeWorkspace.strategyRaw = $0.rawValue }
                 ),
-                commitMessage: $mergeCommitMessage,
-                useCustomCommitMessage: $mergeUseCustomCommitMessage,
-                noCommit: $mergeNoCommit,
-                noVerify: $mergeNoVerify,
-                allowUnrelatedHistories: $mergeAllowUnrelatedHistories,
+                commitMessage: $mergeWorkspace.commitMessage,
+                useCustomCommitMessage: $mergeWorkspace.useCustomCommitMessage,
+                noCommit: $mergeWorkspace.noCommit,
+                noVerify: $mergeWorkspace.noVerify,
+                allowUnrelatedHistories: $mergeWorkspace.allowUnrelatedHistories,
                 branches: branchWorkspace.branches,
-                mergedBranches: mergeMergedBranches,
+                mergedBranches: mergeWorkspace.mergedBranches,
                 onMerge: {
-                    showMergeActionDialog = false
+                    mergeWorkspace.showActionDialog = false
                     doMerge()
                 },
-                onCancel: { showMergeActionDialog = false }
+                onCancel: { mergeWorkspace.showActionDialog = false }
             )
         }
-        .sheet(isPresented: $showPullDialog) {
+        .sheet(isPresented: $pullWorkspace.showDialog) {
             PullDialogView(
-                snapshots: pullDialogSnapshots,
-                defaultRootPath: repo?.workdir() ?? multiRoots.first?.path,
-                defaultRebase: pullDialogRebase,
-                initialOptions: GitPullDialogSettingsStore.load(for: projectPath).options,
+                snapshots: pullWorkspace.snapshots,
+                defaultRootPath: repo?.workdir() ?? multiRootWorkspace.roots.first?.path,
+                defaultRebase: pullWorkspace.rebase,
+                initialOptions: GitPullDialogSettingsStore.load(for: projectWorkspace.path).options,
                 blockedRootPaths: Set(
-                    multiRoots
+                    multiRootWorkspace.roots
                         .filter { $0.operation != nil }
                         .map { canonicalExternalLogPath($0.path) }
                 ).union(
-                    operationState != nil
+                    operationRecovery.operation != nil
                         ? Set([repo?.workdir()].compactMap { $0 }.map(canonicalExternalLogPath))
                         : []
                 ),
@@ -2904,41 +2562,41 @@ struct ContentView: View {
                     operationName: feedbackCenter.operationName
                 ),
                 onCancel: {
-                    showPullDialog = false
-                    pullDialogSnapshots = []
+                    pullWorkspace.showDialog = false
+                    pullWorkspace.snapshots = []
                 },
                 onPull: { selection in
-                    showPullDialog = false
-                    pullDialogSnapshots = []
+                    pullWorkspace.showDialog = false
+                    pullWorkspace.snapshots = []
                     savePullDialogSettings(selection.options)
                     executePullDialogSelection(selection)
                 },
                 onFetch: fetchPullDialogRemote
             )
         }
-        .sheet(isPresented: $showRebaseActionDialog) {
+        .sheet(isPresented: $rebaseWorkspace.showActionDialog) {
             RebasedRebaseDialog(
-                onto: $rebaseOnto,
-                branch: $rebaseBranch,
-                repositoryPath: $rebaseRootPath,
-                interactive: $rebaseInteractive,
-                preserveMerges: $rebasePreserveMerges,
-                autoSquash: $rebaseAutoSquash,
-                keepEmpty: $rebaseKeepEmpty,
-                updateRefs: $rebaseUpdateRefs,
-                root: $rebaseRoot,
-                applyToAllRepositories: $rebaseApplyToAllRoots,
-                rangeCount: rebaseRange.count,
+                onto: $rebaseWorkspace.onto,
+                branch: $rebaseWorkspace.branch,
+                repositoryPath: $rebaseWorkspace.rootPath,
+                interactive: $rebaseWorkspace.interactive,
+                preserveMerges: $rebaseWorkspace.preserveMerges,
+                autoSquash: $rebaseWorkspace.autoSquash,
+                keepEmpty: $rebaseWorkspace.keepEmpty,
+                updateRefs: $rebaseWorkspace.updateRefs,
+                root: $rebaseWorkspace.root,
+                applyToAllRepositories: $rebaseWorkspace.applyToAllRoots,
+                rangeCount: rebaseWorkspace.range.count,
                 repositories: rebaseRepositories,
                 branches: rebaseBranchOptions,
                 onLoadRange: loadRebaseRange,
                 onRangeInputsChanged: invalidateLoadedRebaseRange,
                 onRepositoryChanged: selectRebaseRepository,
                 onStart: {
-                    showRebaseActionDialog = false
+                    rebaseWorkspace.showActionDialog = false
                     saveRebaseDialogSettings()
-                    if rebaseApplyToAllRoots {
-                        if rebaseInteractive {
+                    if rebaseWorkspace.applyToAllRoots {
+                        if rebaseWorkspace.interactive {
                             prepareMultiRootRebaseEditor()
                         } else {
                             doMultiRootRebase(drafts: nil)
@@ -2947,44 +2605,44 @@ struct ContentView: View {
                         doRebase()
                     }
                 },
-                onCancel: { showRebaseActionDialog = false }
+                onCancel: { rebaseWorkspace.showActionDialog = false }
             )
         }
-        .sheet(isPresented: $showMultiRootRebaseEditor) {
+        .sheet(isPresented: $rebaseWorkspace.showMultiRootEditor) {
             MultiRootRebaseTodoEditorView(
-                onto: rebaseOnto,
-                branch: rebaseBranch,
-                drafts: $multiRootRebaseDrafts,
-                preserveMerges: rebasePreserveMerges,
-                autoSquash: rebaseAutoSquash,
-                keepEmpty: rebaseKeepEmpty,
-                updateRefs: rebaseUpdateRefs,
-                root: rebaseRoot,
+                onto: rebaseWorkspace.onto,
+                branch: rebaseWorkspace.branch,
+                drafts: $rebaseWorkspace.multiRootDrafts,
+                preserveMerges: rebaseWorkspace.preserveMerges,
+                autoSquash: rebaseWorkspace.autoSquash,
+                keepEmpty: rebaseWorkspace.keepEmpty,
+                updateRefs: rebaseWorkspace.updateRefs,
+                root: rebaseWorkspace.root,
                 onStart: {
-                    showMultiRootRebaseEditor = false
-                    doMultiRootRebase(drafts: multiRootRebaseDrafts)
+                    rebaseWorkspace.showMultiRootEditor = false
+                    doMultiRootRebase(drafts: rebaseWorkspace.multiRootDrafts)
                 },
                 onCancel: {
-                    showMultiRootRebaseEditor = false
-                    multiRootRebaseDrafts = []
+                    rebaseWorkspace.showMultiRootEditor = false
+                    rebaseWorkspace.multiRootDrafts = []
                 },
                 onOpenRawTodo: prepareMultiRootRawTodoEditor
             )
         }
-        .sheet(item: $multiRootRawTodoContext) { context in
+        .sheet(item: $rebaseWorkspace.multiRootRawTodoContext) { context in
             RawRebaseTodoEditorView(
                 onto: context.onto,
-                text: $multiRootRawTodoText,
+                text: $rebaseWorkspace.multiRootRawTodoText,
                 preserveMerges: context.preserveMerges,
                 root: context.root,
                 onStart: { finishMultiRootRawTodoEditor(context) },
                 onCancel: {
-                    multiRootRawTodoContext = nil
-                    multiRootRawTodoText = ""
+                    rebaseWorkspace.multiRootRawTodoContext = nil
+                    rebaseWorkspace.multiRootRawTodoText = ""
                 }
             )
         }
-        .sheet(item: $multiRootRebaseRollbackContext) { context in
+        .sheet(item: $rebaseWorkspace.multiRootRollbackContext) { context in
             RebasedMultiRootRebaseRollbackView(
                 branch: context.branch,
                 targets: context.targets,
@@ -2996,7 +2654,7 @@ struct ContentView: View {
                     keepMultiRootRebasePartial(context)
                 },
                 onDone: {
-                    multiRootRebaseRollbackContext = nil
+                    rebaseWorkspace.multiRootRollbackContext = nil
                 }
             )
         }
@@ -3018,7 +2676,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $stashUI.showUnstashDialog) {
             RebasedUnstashDialog(
-                roots: multiRoots,
+                roots: multiRootWorkspace.roots,
                 selectedRootPath: stashUI.unstashRootPath,
                 isLoadingRoot: stashUI.unstashRootLoading,
                 stashes: stashUI.unstashStashes,
@@ -3126,7 +2784,7 @@ struct ContentView: View {
         .sheet(isPresented: $stashUI.showFilesDialog) {
             RebasedStashFilesDialog(
                 message: $stashUI.filesMessage,
-                entries: entries.filter {
+                entries: repositoryStatus.entries.filter {
                     $0.unstaged != .ignored &&
                     $0.unstaged != .conflicted &&
                     $0.staged != .conflicted
@@ -3139,21 +2797,21 @@ struct ContentView: View {
                 onCancel: { stashUI.showFilesDialog = false }
             )
         }
-        .sheet(isPresented: $showCloneDialog) {
+        .sheet(isPresented: $cloneWorkspace.showDialog) {
             RebasedCloneDialog(
-                url: $cloneURL,
-                parentDirectory: $cloneParentDirectory,
-                directoryName: $cloneDirectoryName,
+                url: $cloneWorkspace.url,
+                parentDirectory: $cloneWorkspace.parentDirectory,
+                directoryName: $cloneWorkspace.directoryName,
                 recursiveSubmodules: $cloneRecursiveSubmodules,
-                shallowClone: $cloneShallow,
-                depth: $cloneDepth,
-                isRunning: cloneInProgress,
-                isCancelling: cloneCancelling,
+                shallowClone: $cloneWorkspace.shallow,
+                depth: $cloneWorkspace.depth,
+                isRunning: cloneWorkspace.inProgress,
+                isCancelling: cloneWorkspace.cancelling,
                 onChooseParent: chooseCloneParentDirectory,
                 onClone: cloneRepositoryFromDialog,
                 onCancel: cancelCloneRepositoryFromDialog
             )
-            .interactiveDismissDisabled(cloneInProgress)
+            .interactiveDismissDisabled(cloneWorkspace.inProgress)
         }
         .sheet(isPresented: $tagWorkspace.showCreateDialog) {
             RebasedTagDialog(
@@ -3178,7 +2836,7 @@ struct ContentView: View {
             RebasedShelveDialog(
                 name: $shelfWorkspace.name,
                 repo: repo,
-                entries: entries,
+                entries: repositoryStatus.entries,
                 onShelve: { paths, includeUntracked, includeIgnored in
                     shelfWorkspace.showCreateDialog = false
                     doShelve(
@@ -3206,19 +2864,19 @@ struct ContentView: View {
                 onCancel: { shelfWorkspace.showLocationDialog = false }
             )
         }
-        .sheet(item: $pendingApplyPatch) { request in
+        .sheet(item: $fileWorkspace.pendingApplyPatch) { request in
             if let repo {
                 RebasedUnshelveDialog(
                     name: request.fileName,
                     paths: request.paths,
                     initialPaths: request.paths,
-                    changeLists: changeLists,
+                    changeLists: repositoryStatus.changeLists,
                     repo: repo,
                     patchText: request.patch,
                     removeAppliedFilesFromShelf: .constant(false),
                     onUnshelve: { _, _, _, _, _, _, _ in },
                     onApplyPatch: { paths, selections, targetName, basePath, pathStrip in
-                        pendingApplyPatch = nil
+                        fileWorkspace.pendingApplyPatch = nil
                         applyImportedPatch(
                             fileName: request.fileName,
                             patch: request.patch,
@@ -3229,88 +2887,88 @@ struct ContentView: View {
                             pathStrip: pathStrip
                         )
                     },
-                    onCancel: { pendingApplyPatch = nil }
+                    onCancel: { fileWorkspace.pendingApplyPatch = nil }
                 )
             }
         }
-        .sheet(item: $patchExportRequest) { request in
+        .sheet(item: $fileWorkspace.patchExportRequest) { request in
             RebasedPatchExportDialog(
                 request: request,
                 onExport: { options in
-                    patchExportRequest = nil
+                    fileWorkspace.patchExportRequest = nil
                     DispatchQueue.main.async {
                         request.onExport(options)
                     }
                 },
-                onCancel: { patchExportRequest = nil }
+                onCancel: { fileWorkspace.patchExportRequest = nil }
             )
         }
-        .sheet(isPresented: $showHeadResetDialog) {
+        .sheet(isPresented: $resetWorkspace.showHeadDialog) {
             RebasedHeadResetDialog(
                 roots: resetHeadRootOptions,
-                selectedRootPath: $headResetRootPath,
-                target: $headResetTarget,
-                mode: $headResetMode,
+                selectedRootPath: $resetWorkspace.headRootPath,
+                target: $resetWorkspace.headTarget,
+                mode: $resetWorkspace.headMode,
                 onValidate: { target, rootPath in
                     validateResetHeadTarget(target, rootPath: rootPath)
                 },
                 onReset: {
-                    showHeadResetDialog = false
+                    resetWorkspace.showHeadDialog = false
                     resetHead(
-                        rootPath: headResetRootPath,
-                        target: headResetTarget,
-                        mode: headResetMode
+                        rootPath: resetWorkspace.headRootPath,
+                        target: resetWorkspace.headTarget,
+                        mode: resetWorkspace.headMode
                     )
                 },
-                onCancel: { showHeadResetDialog = false }
+                onCancel: { resetWorkspace.showHeadDialog = false }
             )
         }
-        .sheet(isPresented: $showResetDialog) {
-            if let resetTargetCommit {
+        .sheet(isPresented: $resetWorkspace.showDialog) {
+            if let resetTargetCommit = resetWorkspace.targetCommit {
                 RebasedResetDialog(
                     commit: resetTargetCommit,
-                    targetCommits: resetTargetCommits,
-                    mode: $resetMode,
+                    targetCommits: resetWorkspace.targetCommits,
+                    mode: $resetWorkspace.mode,
                     onReset: {
-                        showResetDialog = false
-                        if resetTargetCommits.count > 1 {
-                            resetCommitsAcrossRoots(resetTargetCommits, mode: resetMode)
+                        resetWorkspace.showDialog = false
+                        if resetWorkspace.targetCommits.count > 1 {
+                            resetCommitsAcrossRoots(resetWorkspace.targetCommits, mode: resetWorkspace.mode)
                         } else {
-                            resetCommit(resetTargetCommit, mode: resetMode)
+                            resetCommit(resetTargetCommit, mode: resetWorkspace.mode)
                         }
                     },
-                    onCancel: { showResetDialog = false },
-                    multiRootResetAvailable: resetTargetCommits.count > 1,
+                    onCancel: { resetWorkspace.showDialog = false },
+                    multiRootResetAvailable: resetWorkspace.targetCommits.count > 1,
                     onResetAcrossRoots: { mode in
-                        showResetDialog = false
-                        resetCommitsAcrossRoots(resetTargetCommits, mode: mode)
+                        resetWorkspace.showDialog = false
+                        resetCommitsAcrossRoots(resetWorkspace.targetCommits, mode: mode)
                     }
                 )
             }
         }
-        .sheet(item: $uncommitRequest) { request in
+        .sheet(item: $commitWorkspace.uncommitRequest) { request in
             RebasedUncommitDialog(
                 request: request,
                 onUncommit: { targetName in
-                    uncommitRequest = nil
+                    commitWorkspace.uncommitRequest = nil
                     performUncommit(request, targetName: targetName)
                 },
-                onCancel: { uncommitRequest = nil }
+                onCancel: { commitWorkspace.uncommitRequest = nil }
             )
         }
-        .sheet(item: $smartOperationRequest) { request in
+        .sheet(item: $operationRecovery.smartOperationRequest) { request in
             RebasedSmartOperationDialog(
                 request: request,
                 onSmart: {
-                    smartOperationRequest = nil
+                    operationRecovery.smartOperationRequest = nil
                     request.onSmart()
                 },
                 onForce: {
-                    smartOperationRequest = nil
+                    operationRecovery.smartOperationRequest = nil
                     request.onForce?()
                 },
                 onCancel: {
-                    smartOperationRequest = nil
+                    operationRecovery.smartOperationRequest = nil
                     feedbackCenter.warning(
                         "Git operation cancelled",
                         detail: "Local changes were kept."
@@ -3323,18 +2981,18 @@ struct ContentView: View {
     @ViewBuilder
     private var beforeCommitSettingsSheet: some View {
         BeforeCommitSettingsView(
-            commands: $beforeCommitCommands,
-            onIdentity: { showIdentitySettings = true }
+            commands: $commitWorkspace.beforeCommitCommands,
+            onIdentity: { gitSettings.showIdentitySettings = true }
         )
     }
 
     private func selectChangedFile(_ path: String) {
-        commitPreviewPath = path
-        commitPreviewComparisonMode = nil
-        commitPreviewThreeVersions = false
-        selectionModePath = nil
-        selection = nil
-        fileSelection = nil
+        fileWorkspace.previewPath = path
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
         // GitStagePanel separates selection from the Show Diff Preview action.
         // Changing a row updates an already-open preview, but does not
         // silently reopen a preview the user explicitly hid.
@@ -3345,15 +3003,15 @@ struct ContentView: View {
         // no IDE editor. When Log owns the editor workspace, preserve that
         // workspace and keep the source action inside the Commit/Stash side
         // instead of replacing the selected history with a file viewer.
-        if toolWindowMode == .log {
-            commitPreviewPath = path
-            commitPreviewComparisonMode = nil
-            commitPreviewThreeVersions = false
-            fileSelectionVersion = .local
-            selectionModePath = nil
-            selection = nil
-            fileSelection = nil
-            commitPreviewVisible = true
+        if projectWorkspace.toolWindowMode == .log {
+            fileWorkspace.previewPath = path
+            fileWorkspace.previewComparisonMode = nil
+            fileWorkspace.previewThreeVersions = false
+            fileWorkspace.version = .local
+            fileWorkspace.selectionModePath = nil
+            fileWorkspace.selection = nil
+            fileWorkspace.fileSelection = nil
+            fileWorkspace.previewVisible = true
             feedbackCenter.warning(
                 "Open Source is not an IDE editor",
                 detail: "The Commit/Stash preview remains open so Git Log is not replaced.",
@@ -3361,29 +3019,29 @@ struct ContentView: View {
             )
             return
         }
-        commitPreviewPath = nil
-        commitPreviewComparisonMode = nil
-        commitPreviewThreeVersions = false
-        selection = nil
-        selectionModePath = nil
-        fileSelection = path
-        fileSelectionVersion = .local
-        commitPreviewVisible = false
+        fileWorkspace.previewPath = nil
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.selection = nil
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.fileSelection = path
+        fileWorkspace.version = .local
+        fileWorkspace.previewVisible = false
     }
 
     private func previewFirstChangedFile() {
-        if commitPreviewVisible {
-            commitPreviewVisible = false
-            commitPreviewThreeVersions = false
+        if fileWorkspace.previewVisible {
+            fileWorkspace.previewVisible = false
+            fileWorkspace.previewThreeVersions = false
             return
         }
-        commitPreviewPath = entries.first(where: {
+        fileWorkspace.previewPath = repositoryStatus.entries.first(where: {
             $0.staged != .unchanged
                 || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
         })?.path
-        commitPreviewComparisonMode = nil
-        commitPreviewThreeVersions = false
-        commitPreviewVisible = true
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.previewVisible = true
     }
 
     private func showCommitDiffPreview(_ path: String) {
@@ -3392,46 +3050,46 @@ struct ContentView: View {
         // file-selection path: when Log is active, the right workspace must
         // remain the graph/details inspector and the diff belongs beside the
         // Commit/Stash tree on the left.
-        commitPreviewPath = path
-        commitPreviewComparisonMode = nil
-        commitPreviewMode = .unstaged
-        commitPreviewThreeVersions = false
-        selectionModePath = nil
-        selection = nil
-        fileSelection = nil
-        commitPreviewVisible = true
+        fileWorkspace.previewPath = path
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewMode = .unstaged
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.previewVisible = true
     }
 
     private func showCommitStagedDiffPreview(_ path: String) {
-        commitPreviewPath = path
-        commitPreviewComparisonMode = nil
-        commitPreviewMode = .staged
-        commitPreviewThreeVersions = false
-        selectionModePath = nil
-        selection = nil
-        fileSelection = nil
-        commitPreviewVisible = true
+        fileWorkspace.previewPath = path
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewMode = .staged
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.previewVisible = true
     }
 
     private func showCommitLocalStagedDiffPreview(_ path: String) {
-        commitPreviewPath = path
-        commitPreviewComparisonMode = stagingComparisonDiffMode(for: .localWithStaged)
-        commitPreviewMode = .unstaged
-        commitPreviewThreeVersions = false
-        selectionModePath = nil
-        selection = nil
-        fileSelection = nil
-        commitPreviewVisible = true
+        fileWorkspace.previewPath = path
+        fileWorkspace.previewComparisonMode = stagingComparisonDiffMode(for: .localWithStaged)
+        fileWorkspace.previewMode = .unstaged
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.previewVisible = true
     }
 
     private func showCommitThreeVersionsPreview(_ path: String) {
-        commitPreviewPath = path
-        commitPreviewComparisonMode = nil
-        commitPreviewThreeVersions = true
-        selectionModePath = nil
-        selection = nil
-        fileSelection = nil
-        commitPreviewVisible = true
+        fileWorkspace.previewPath = path
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewThreeVersions = true
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.previewVisible = true
     }
 
     private func showCommitLocalVersion(_ path: String) {
@@ -3443,31 +3101,31 @@ struct ContentView: View {
     }
 
     private func showCommitFileVersion(_ path: String, version: FileContentVersion) {
-        commitPreviewPath = nil
-        commitPreviewComparisonMode = nil
-        commitPreviewVisible = false
-        commitPreviewThreeVersions = false
-        fileTreeDiffRequest = nil
-        selection = nil
-        selectionModePath = nil
-        fileSelectionVersion = version
-        fileSelection = path
+        fileWorkspace.previewPath = nil
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewVisible = false
+        fileWorkspace.previewThreeVersions = false
+        fileWorkspace.treeDiffRequest = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.version = version
+        fileWorkspace.fileSelection = path
     }
 
     func annotateProjectFile(_ path: String) {
         guard let normalizedPath = normalizedRepositoryRelativePath(path) else { return }
-        toolWindowMode = .commit
-        fileTreeDiffRequest = nil
-        selection = nil
-        selectionModePath = nil
+        projectWorkspace.toolWindowMode = .commit
+        fileWorkspace.treeDiffRequest = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.selectionModePath = nil
         logSelectionState.selection = nil
-        fileSelectionVersion = .local
-        fileSelection = normalizedPath
-        fileContentBlameRequestID &+= 1
+        fileWorkspace.version = .local
+        fileWorkspace.fileSelection = normalizedPath
+        fileWorkspace.blameRequestID &+= 1
     }
 
     func openFirstConflictFromAction() {
-        guard let conflictedPath = firstConflictedPath(in: entries) else { return }
+        guard let conflictedPath = firstConflictedPath(in: repositoryStatus.entries) else { return }
         openConflictFromStage(conflictedPath)
     }
 
@@ -3475,30 +3133,30 @@ struct ContentView: View {
         // The resolver is a sheet over the current workspace. In Log mode the
         // right editor must remain the Log graph, so pass the initial file via
         // a dedicated dialog context instead of the global editor selection.
-        mergeInitialPath = path
-        if toolWindowMode != .log { selection = path }
-        fileSelection = nil
-        selectionModePath = nil
-        commitPreviewPath = nil
-        commitPreviewComparisonMode = nil
-        commitPreviewVisible = false
-        commitPreviewThreeVersions = false
-        showMergeRevisionsDialog = true
+        operationRecovery.initialPath = path
+        if projectWorkspace.toolWindowMode != .log { fileWorkspace.selection = path }
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.previewPath = nil
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewVisible = false
+        fileWorkspace.previewThreeVersions = false
+        operationRecovery.showConflictResolver = true
     }
 
     @ViewBuilder
     private var activeToolWindowContent: some View {
-        switch toolWindowMode {
+        switch projectWorkspace.toolWindowMode {
         case .commit, .log:
             RebasedCommitWorkspace(
-                projectPath: projectPath,
+                projectPath: projectWorkspace.path,
                 repo: repo,
                 repositoryWorkdir: repo?.workdir(),
                 shelfRepo: activeShelfRepository,
-                entries: entries,
-                changeLists: changeLists,
+                entries: repositoryStatus.entries,
+                changeLists: repositoryStatus.changeLists,
                 untrackedEntries: untrackedEntries,
-                ignoredRules: ignoredRules,
+                ignoredRules: repositoryStatus.ignoredRules,
                 stashes: stashUI.stashes,
                 shelves: activeShelfList,
                 deletedShelves: activeDeletedShelfList,
@@ -3514,21 +3172,21 @@ struct ContentView: View {
                 isShelfRootLoading: shelfWorkspace.rootLoading,
                 shelfRootError: shelfWorkspace.rootError,
                 onShelfRootChange: setShelfRoot,
-                isLoading: isLoading,
-                isShowingCachedStatusSnapshot: isShowingCachedStatusSnapshot,
+                isLoading: repositoryStatus.isLoading,
+                isShowingCachedStatusSnapshot: repositoryStatus.isShowingCachedStatusSnapshot,
                 hasStaged: hasStaged,
-                commitFeedback: commitFeedback,
-                operationState: operationState,
-                operationFeedback: operationFeedback,
+                commitFeedback: commitWorkspace.feedback,
+                operationState: operationRecovery.operation,
+                operationFeedback: operationRecovery.feedback,
                 binaryPaths: stagingBinaryPaths,
-                lfsTrackedPaths: lfsTrackedPaths,
-                lfsPointerPaths: lfsPointerPaths,
+                lfsTrackedPaths: lfsWorkspace.trackedPaths,
+                lfsPointerPaths: lfsWorkspace.pointerPaths,
                 stagingPresence: stagingPresenceByPath,
-                refreshToken: fileContentRefreshToken,
-                recentMessages: recentMessages,
-                commitMessage: $commitMessage,
-                amendMode: $amendMode,
-                skipHooks: $skipHooks,
+                refreshToken: fileWorkspace.refreshToken,
+                recentMessages: commitWorkspace.recentMessages,
+                commitMessage: $commitWorkspace.message,
+                amendMode: $commitWorkspace.amendMode,
+                skipHooks: $commitWorkspace.skipHooks,
                 onStage: stagePath,
                 onStageWithoutContent: stageWithoutContent,
                 onStageWithoutContentAll: stageWithoutContentAll,
@@ -3542,12 +3200,12 @@ struct ContentView: View {
                 onShowStagedVersionPath: showCommitStagedVersion,
                 onShowStagedDiffPath: showCommitStagedDiffPreview,
                 onShowThreeVersionsPath: showCommitThreeVersionsPreview,
-                previewMode: $commitPreviewMode,
-                comparisonMode: commitPreviewComparisonMode,
-                showThreeVersions: $commitPreviewThreeVersions,
-                previewPath: $commitPreviewPath,
-                isPreviewVisible: $commitPreviewVisible,
-                selectionModePath: $selectionModePath,
+                previewMode: $fileWorkspace.previewMode,
+                comparisonMode: fileWorkspace.previewComparisonMode,
+                showThreeVersions: $fileWorkspace.previewThreeVersions,
+                previewPath: $fileWorkspace.previewPath,
+                isPreviewVisible: $fileWorkspace.previewVisible,
+                selectionModePath: $fileWorkspace.selectionModePath,
                 onRestore: { path in restoreFileFromHead(path) },
                 onRevertUnstaged: revertUnstagedPath,
                 onRefresh: refreshAll,
@@ -3559,11 +3217,11 @@ struct ContentView: View {
                 onActivateChangeList: activateChangeList,
                 onMovePathsToChangeList: movePathsToChangeList,
                 onTemplate: loadTemplate,
-                onBeforeCommitSettings: { showBeforeCommitSettings = true },
+                onBeforeCommitSettings: { commitWorkspace.showBeforeCommitSettings = true },
                 onCommit: { doCommit() },
                 onCommitAll: commitAllTrackedChanges,
                 onCommitAndRebase: { doCommit(rebaseAfterCommit: true) },
-                autoSquashCommitKind: pendingAutoSquashRebase?.kind,
+                autoSquashCommitKind: rebaseWorkspace.pendingAutoSquash?.kind,
                 onCommitAndPush: beginCommitAndPush,
                 onOperationContinue: doOperationContinue,
                 onOperationSkip: doOperationSkip,
@@ -3813,7 +3471,7 @@ struct ContentView: View {
                     paths.forEach(excludePathFromRepo)
                 },
                 onOpenConflict: openConflictFromStage,
-                resolvedConflictPaths: resolvedConflictPaths,
+                resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                 onRevertResolved: revertResolvedPath,
                 onShowHistory: { path in showFileHistory(path) },
                 onEditGitignore: editGitignore,
@@ -3821,7 +3479,7 @@ struct ContentView: View {
             )
         case .operations:
             VStack(spacing: 0) {
-                Picker("操作视图", selection: $operationsViewMode) {
+                Picker("操作视图", selection: $operationRecovery.viewMode) {
                     ForEach(OperationsViewMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -3830,33 +3488,33 @@ struct ContentView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 Divider()
-                switch operationsViewMode {
+                switch operationRecovery.viewMode {
                 case .tasks:
                     GitTasksView(
                         feedbackCenter: feedbackCenter,
-                        focusNotificationID: $operationLogFocusNotificationID,
-                        onOpenHistory: { operationsViewMode = .history }
+                        focusNotificationID: $operationRecovery.logFocusNotificationID,
+                        onOpenHistory: { operationRecovery.viewMode = .history }
                     )
                 case .history:
                     OperationLogView(
                         feedbackCenter: feedbackCenter,
-                        focusNotificationID: $operationLogFocusNotificationID
+                        focusNotificationID: $operationRecovery.logFocusNotificationID
                     )
                 case .console:
                     GitConsoleView(
-                        result: consoleResult,
+                        result: operationRecovery.consoleResult,
                         onRun: runGitConsole,
-                        onClear: { consoleResult = nil }
+                        onClear: { operationRecovery.consoleResult = nil }
                     )
                 case .roots:
                     MultiRootPanel(
-                        roots: multiRoots,
-                        results: multiRootResults,
-                        conflictGroups: multiRootConflictGroups,
-                        isRunning: multiRootRunning,
-                        canRetryFailedUpdate: multiRootUpdateRetryAvailable,
-                        canRetryFailedCheckoutUpdate: multiRootCheckoutUpdateRetryAvailable,
-                        canRetryFailedPush: multiRootPushRetryContext != nil,
+                        roots: multiRootWorkspace.roots,
+                        results: multiRootWorkspace.results,
+                        conflictGroups: operationRecovery.multiRootConflictGroups,
+                        isRunning: multiRootWorkspace.running,
+                        canRetryFailedUpdate: multiRootWorkspace.updateRetryAvailable,
+                        canRetryFailedCheckoutUpdate: multiRootWorkspace.checkoutUpdateRetryAvailable,
+                        canRetryFailedPush: pushWorkspace.multiRootPushRetryContext != nil,
                         onOperation: { op in executeMultiRootOperation(op, message: nil) },
                         onCommitAll: { openMultiRootCommitDialog() },
                         onCheckout: { reference, detach in
@@ -3872,8 +3530,8 @@ struct ContentView: View {
                         onAcceptConflicts: { targets, pick in
                             acceptMultiRootConflicts(targets, pick: pick)
                         },
-                        conflictBatchWorking: multiRootConflictBatchWorking,
-                        conflictBatchError: multiRootConflictBatchError,
+                        conflictBatchWorking: operationRecovery.multiRootConflictBatchWorking,
+                        conflictBatchError: operationRecovery.multiRootConflictBatchError,
                         stashConflicts: stashRecovery.multiRootConflicts,
                         onResolveStashConflict: openMultiRootStashConflict,
                         updateStashRoots: stashRecovery.multiRootUpdateStashedRoots,
@@ -3883,8 +3541,8 @@ struct ContentView: View {
                     )
                 case .submodules:
                     SubmodulePanel(
-                        submodules: submodules,
-                        feedback: submoduleFeedback,
+                        submodules: submoduleWorkspace.submodules,
+                        feedback: submoduleWorkspace.feedback,
                         onAdd: submoduleAdd,
                         onUpdate: submoduleUpdate,
                         onSync: submoduleSync,
@@ -3900,8 +3558,8 @@ struct ContentView: View {
                     )
                 case .worktrees:
                     WorktreePanel(
-                        worktrees: worktrees,
-                        feedback: worktreeFeedback,
+                        worktrees: worktreeWorkspace.worktrees,
+                        feedback: worktreeWorkspace.feedback,
                         onRefresh: loadWorktrees,
                         onCreate: { path, branch, revision in
                             createWorktree(path: path, branch: branch, revision: revision)
@@ -3954,13 +3612,13 @@ struct ContentView: View {
                 // add a second generic tool-window title above that row;
                 // doing so shifts the entire left workspace down and makes
                 // the Commit/Stash surface structurally different.
-                if toolWindowExpanded || toolWindowMode == .log {
+                if toolWindowExpanded || projectWorkspace.toolWindowMode == .log {
                     activeToolWindowContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     WorkspacePanelHeader(
-                        title: LocalizedStringKey(toolWindowMode.title),
-                        systemImage: toolWindowMode.systemImage,
+                        title: LocalizedStringKey(projectWorkspace.toolWindowMode.title),
+                        systemImage: projectWorkspace.toolWindowMode.systemImage,
                         isExpanded: false,
                         onToggle: {
                             withAnimation(.easeInOut(duration: 0.16)) {
@@ -3969,7 +3627,7 @@ struct ContentView: View {
                         }
                     )
                 }
-            } else if toolWindowMode == .log {
+            } else if projectWorkspace.toolWindowMode == .log {
                 // The activity-rail folder is the Project tool-window
                 // switch in Rebased. Keep the Log workspace on the right,
                 // while replacing the left Commit/Stash surface with the
@@ -3999,18 +3657,18 @@ struct ContentView: View {
                     )
                     ProjectTreePane(
                         repo: repo,
-                        projectPath: projectPath,
-                        headId: headId,
-                        entries: entries,
+                        projectPath: projectWorkspace.path,
+                        headId: repositoryStatus.headId,
+                        entries: repositoryStatus.entries,
                         selection: Binding(
-                            get: { fileSelection },
+                            get: { fileWorkspace.fileSelection },
                             set: { value in
-                                fileTreeDiffRequest = nil
-                                fileSelection = value
-                                fileSelectionVersion = .local
+                                fileWorkspace.treeDiffRequest = nil
+                                fileWorkspace.fileSelection = value
+                                fileWorkspace.version = .local
                                 if value != nil {
-                                    selection = nil
-                                    selectionModePath = nil
+                                    fileWorkspace.selection = nil
+                                    fileWorkspace.selectionModePath = nil
                                     logSelectionState.selection = nil
                                 }
                             }
@@ -4030,7 +3688,7 @@ struct ContentView: View {
                         onAdd: stageProjectTreePath,
                         onRevert: restoreProjectTreePath,
                         onResolveConflicts: openConflictFromStage,
-                        resolvedConflictPaths: resolvedConflictPaths,
+                        resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                         onRevertResolved: revertResolvedPath,
                         showHeader: false
                     )
@@ -4040,8 +3698,8 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     VStack(spacing: 0) {
                     WorkspacePanelHeader(
-                        title: LocalizedStringKey(toolWindowMode.title),
-                        systemImage: toolWindowMode.systemImage,
+                        title: LocalizedStringKey(projectWorkspace.toolWindowMode.title),
+                        systemImage: projectWorkspace.toolWindowMode.systemImage,
                         isExpanded: toolWindowExpanded,
                         onToggle: {
                             withAnimation(.easeInOut(duration: 0.16)) {
@@ -4096,18 +3754,18 @@ struct ContentView: View {
                     if projectPanelExpanded {
                         ProjectTreePane(
                             repo: repo,
-                            projectPath: projectPath,
-                            headId: headId,
-                            entries: entries,
+                            projectPath: projectWorkspace.path,
+                            headId: repositoryStatus.headId,
+                            entries: repositoryStatus.entries,
                             selection: Binding(
-                            get: { fileSelection },
+                            get: { fileWorkspace.fileSelection },
                             set: { value in
-                                fileTreeDiffRequest = nil
-                                fileSelection = value
-                                fileSelectionVersion = .local
+                                fileWorkspace.treeDiffRequest = nil
+                                fileWorkspace.fileSelection = value
+                                fileWorkspace.version = .local
                                 if value != nil {
-                                        selection = nil
-                                        selectionModePath = nil
+                                        fileWorkspace.selection = nil
+                                        fileWorkspace.selectionModePath = nil
                                         logSelectionState.selection = nil
                                     }
                                 }
@@ -4127,7 +3785,7 @@ struct ContentView: View {
                             onAdd: stageProjectTreePath,
                             onRevert: restoreProjectTreePath,
                             onResolveConflicts: openConflictFromStage,
-                            resolvedConflictPaths: resolvedConflictPaths,
+                            resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                             onRevertResolved: revertResolvedPath,
                             showHeader: false
                         )
@@ -4145,7 +3803,7 @@ struct ContentView: View {
     }
 
     private func toggleProjectToolWindow() {
-        if toolWindowMode == .log {
+        if projectWorkspace.toolWindowMode == .log {
             projectPanelExpanded.toggle()
         } else {
             projectPanelExpanded = true
@@ -4154,11 +3812,11 @@ struct ContentView: View {
 
     @ViewBuilder
     private var mainContext: some View {
-        if let loadError, projectRepo == nil {
+        if let loadError = repositoryStatus.loadError, projectWorkspace.repository == nil {
             ProjectLoadErrorView(
                 message: loadError,
                 onRetry: {
-                    guard let projectPath else {
+                    guard let projectPath = projectWorkspace.path else {
                         showOpenPanel()
                         return
                     }
@@ -4166,15 +3824,15 @@ struct ContentView: View {
                 },
                 onOpen: showOpenPanel
             )
-        } else if projectRepo == nil {
+        } else if projectWorkspace.repository == nil {
             ProjectEmptyStateView(
                 recentPaths: loadRecentPaths(),
                 onOpen: showOpenPanel,
                 onInit: showInitializePanel,
-                onClone: { showCloneDialog = true },
+                onClone: { cloneWorkspace.showDialog = true },
                 onSelect: requestOpenProject
             )
-        } else if toolWindowMode == .log {
+        } else if projectWorkspace.toolWindowMode == .log {
             // Git Log is an editor workspace. A stale file selection (most
             // commonly a conflicted path left by the Commit tool window) must
             // never replace the graph/details workspace with Merge Revisions.
@@ -4189,60 +3847,60 @@ struct ContentView: View {
                     .foregroundStyle(.orange)
                 Text("冲突文件已进入 Merge Revisions")
                     .foregroundStyle(.secondary)
-                Button("打开 Merge Revisions…") { showMergeRevisionsDialog = true }
+                Button("打开 Merge Revisions…") { operationRecovery.showConflictResolver = true }
                     .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let fileTreeDiffRequest,
-                  selection == nil,
-                  selectionModePath == nil,
-                  fileSelection == nil {
+        } else if let fileTreeDiffRequest = fileWorkspace.treeDiffRequest,
+                  fileWorkspace.selection == nil,
+                  fileWorkspace.selectionModePath == nil,
+                  fileWorkspace.fileSelection == nil {
             DiffDetailView(
                 repo: fileTreeDiffRequest.repo,
                 entry: fileTreeDiffRequest.entry,
                 onChanged: { },
                 selectionModePath: nil,
                 initialMode: fileTreeDiffRequest.initialMode,
-                refreshToken: fileContentRefreshToken
+                refreshToken: fileWorkspace.refreshToken
             )
-        } else if selection != nil || selectionModePath != nil {
+        } else if fileWorkspace.selection != nil || fileWorkspace.selectionModePath != nil {
             DiffDetailView(
                 repo: repo,
                 entry: selectedEntry,
                 onChanged: refreshAll,
-                selectionModePath: selectionModePath,
-                refreshToken: fileContentRefreshToken
+                selectionModePath: fileWorkspace.selectionModePath,
+                refreshToken: fileWorkspace.refreshToken
             )
-        } else if let fileSelection {
+        } else if let fileSelection = fileWorkspace.fileSelection {
             let versionOptions = fileContentVersionOptions
             let effectiveVersion = resolvedFileContentVersion(
-                current: fileSelectionVersion,
+                current: fileWorkspace.version,
                 available: versionOptions
-            ) ?? fileSelectionVersion
+            ) ?? fileWorkspace.version
             FileContentView(
                 repo: repo,
                 path: fileSelection,
                 version: effectiveVersion,
                 availableVersions: versionOptions,
-                onVersionChange: { fileSelectionVersion = $0 },
+                onVersionChange: { fileWorkspace.version = $0 },
                 onShowFileHistory: { path in
                     showFileHistory(path, rootPath: repo?.workdir())
                 },
-                blameRequestID: fileContentBlameRequestID,
-                refreshToken: fileContentRefreshToken
+                blameRequestID: fileWorkspace.blameRequestID,
+                refreshToken: fileWorkspace.refreshToken
             )
             .onAppear {
-                if effectiveVersion != fileSelectionVersion {
-                    fileSelectionVersion = effectiveVersion
+                if effectiveVersion != fileWorkspace.version {
+                    fileWorkspace.version = effectiveVersion
                 }
             }
             .onChange(of: versionOptions) { _, updatedOptions in
                 guard let resolved = resolvedFileContentVersion(
-                    current: fileSelectionVersion,
+                    current: fileWorkspace.version,
                     available: updatedOptions
                 ) else { return }
-                if resolved != fileSelectionVersion {
-                    fileSelectionVersion = resolved
+                if resolved != fileWorkspace.version {
+                    fileWorkspace.version = resolved
                 }
             }
         } else {
@@ -4263,7 +3921,7 @@ struct ContentView: View {
             Menu {
                 Button("打开项目…", action: showOpenPanel)
                 Button("初始化 Git 仓库…", action: showInitializePanel)
-                Button("克隆 Git 仓库…") { showCloneDialog = true }
+                Button("克隆 Git 仓库…") { cloneWorkspace.showDialog = true }
                 let recent = loadRecentPaths()
                 if !recent.isEmpty {
                     Divider()
@@ -4281,7 +3939,7 @@ struct ContentView: View {
             Button(action: refreshAll) {
                 Label("刷新", systemImage: "arrow.clockwise")
             }
-            .disabled(repo == nil || isLoading)
+            .disabled(repo == nil || repositoryStatus.isLoading)
             .help("刷新状态")
         }
         ToolbarItem(placement: .principal) {
@@ -4304,7 +3962,7 @@ struct ContentView: View {
             }
             .help("Update options")
             Button("提交", systemImage: "checkmark.circle") {
-                toolWindowMode = .commit
+                projectWorkspace.toolWindowMode = .commit
                 toolWindowExpanded = true
             }
             .keyboardShortcut("k", modifiers: [.command])
@@ -4314,12 +3972,12 @@ struct ContentView: View {
                 beginPushDialog()
             }
             .keyboardShortcut("k", modifiers: [.command, .shift])
-            .disabled(repo == nil || remotes.isEmpty)
+            .disabled(repo == nil || remoteWorkspace.remotes.isEmpty)
             .help("Push (⌘⇧K)")
             Button("Fetch", systemImage: "arrow.triangle.2.circlepath") {
                 doFetch(nil)
             }
-            .disabled(repo == nil || remotes.isEmpty)
+            .disabled(repo == nil || remoteWorkspace.remotes.isEmpty)
             .help("Fetch")
         }
     }
@@ -4329,12 +3987,12 @@ struct ContentView: View {
     }
 
     private var hasAnyMultiRootCommitChanges: Bool {
-        multiRootChangeGroups.contains { !$0.changedEntries.isEmpty }
+        multiRootWorkspace.changeGroups.contains { !$0.changedEntries.isEmpty }
     }
 
     private func openCommitWorkspaceFromBranchPopup() {
         branchWorkspace.showPopover = false
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
         projectPanelExpanded = false
     }
@@ -4343,16 +4001,16 @@ struct ContentView: View {
     /// operations once the project has more than one discovered repository.
     /// A single-root window keeps the existing stash conflict surface.
     var useRootScopedUnstashActions: Bool {
-        multiRoots.count > 1
+        multiRootWorkspace.roots.count > 1
     }
 
     var rebaseRepositories: [GitRootInfo] {
-        multiRoots.count > 1 ? multiRoots : []
+        multiRootWorkspace.roots.count > 1 ? multiRootWorkspace.roots : []
     }
 
     var rebaseBranchOptions: [BranchInfo] {
-        guard let snapshot = multiRootBranchSnapshots.first(where: {
-            $0.rootPath == rebaseRootPath
+        guard let snapshot = multiRootWorkspace.branchSnapshots.first(where: {
+            $0.rootPath == rebaseWorkspace.rootPath
         }) else {
             return branchWorkspace.branches
         }
@@ -4363,7 +4021,7 @@ struct ContentView: View {
     private var branchPopup: some View {
         Button {
             loadRepoData()
-            if multiRoots.count > 1 {
+            if multiRootWorkspace.roots.count > 1 {
                 // The Branches Popup action group needs a current project-wide
                 // status snapshot to update Commit Changes enablement. Do not
                 // leave a stale empty multi-root snapshot looking clean.
@@ -4408,20 +4066,20 @@ struct ContentView: View {
         .disabled(repo == nil)
         .help("Branches: checkout / pull / push / fetch / merge / rebase / stash")
         .popover(isPresented: $branchWorkspace.showPopover, arrowEdge: .bottom) {
-            if multiRoots.count > 1 && !multiRootBranchSnapshots.isEmpty {
+            if multiRootWorkspace.roots.count > 1 && !multiRootWorkspace.branchSnapshots.isEmpty {
                 MultiRootBranchesPopover(
-                    projectPath: projectPath,
+                    projectPath: projectWorkspace.path,
                     protectedBranchPatterns: effectiveProtectedBranchPatterns,
-                    snapshots: multiRootBranchSnapshots,
-                    incomingBranches: autoFetchIncomingBranches,
-                    operationContexts: multiRoots.compactMap { root in
+                    snapshots: multiRootWorkspace.branchSnapshots,
+                    incomingBranches: gitSettings.autoFetchIncomingBranches,
+                    operationContexts: multiRootWorkspace.roots.compactMap { root in
                         guard let kind = root.operation else { return nil }
                         return BranchPopupOperationContext(
                             rootPath: root.path,
                             displayName: root.displayName,
                             relativePath: root.relativePath,
                             kind: kind,
-                            hasConflicts: multiRootConflictGroups.contains {
+                            hasConflicts: operationRecovery.multiRootConflictGroups.contains {
                                 $0.rootPath == root.path && !$0.paths.isEmpty
                             }
                         )
@@ -4430,7 +4088,7 @@ struct ContentView: View {
                         handleVCSActionRequest(
                             ArborVCSActionRequest(
                                 kind: .operationRecovery,
-                                projectPath: projectPath,
+                                projectPath: projectWorkspace.path,
                                 rootPath: rootPath,
                                 shelfName: "",
                                 operationRecoveryAction: action.recoveryAction
@@ -4675,26 +4333,26 @@ struct ContentView: View {
                     },
                     onProjectGitSettings: {
                         branchWorkspace.showPopover = false
-                        showProjectGitSettings = true
+                        gitSettings.showProjectGitSettings = true
                     },
                     onCancel: { branchWorkspace.showPopover = false }
                 )
             } else {
                 RebasedBranchesPopover(
-                projectPath: projectPath,
+                projectPath: projectWorkspace.path,
                 branches: branchWorkspace.branches,
                 remoteBranches: branchWorkspace.remoteBranches,
                 recentBranches: branchWorkspace.recentBranches,
                 tags: tagWorkspace.tags,
                 comparisons: branchWorkspace.comparisons,
                 syncStatuses: branchWorkspace.syncStatuses,
-                incomingBranches: autoFetchIncomingBranches,
+                incomingBranches: gitSettings.autoFetchIncomingBranches,
                 stashes: stashUI.stashes,
-                worktrees: worktrees,
-                hasRemote: !remotes.isEmpty,
+                worktrees: worktreeWorkspace.worktrees,
+                hasRemote: !remoteWorkspace.remotes.isEmpty,
                 protectedBranchPatterns: effectiveProtectedBranchPatterns,
-                isShallow: isShallowRepository,
-                hasHeadCommit: headId != nil,
+                isShallow: repositoryStatus.isShallowRepository,
+                hasHeadCommit: repositoryStatus.headId != nil,
                 hasCommitChanges: vcsActionContext.hasLocalChanges,
                 onCheckout: switchBranch,
                 onRenameBranch: renameBranchFromPopup,
@@ -4718,7 +4376,7 @@ struct ContentView: View {
                     }
                 },
                 onPushTag: { tag in tagPushToRemote(tag) },
-                tagPushRemotes: remotes.map(\.name),
+                tagPushRemotes: remoteWorkspace.remotes.map(\.name),
                 onPushTagToRemote: { tag, remote in
                     tagPushToRemote(tag, remote: remote)
                 },
@@ -4780,7 +4438,7 @@ struct ContentView: View {
                 onConfigureRemotes: beginConfigureRemotes,
                 onProjectGitSettings: {
                     branchWorkspace.showPopover = false
-                    showProjectGitSettings = true
+                    gitSettings.showProjectGitSettings = true
                 },
                 onFetchAll: { doFetchAll() },
                 onFetchPrune: doFetchPrune,
@@ -4790,7 +4448,7 @@ struct ContentView: View {
                     branchWorkspace.showUpstreamDialog = true
                 },
                 onUnsetUpstream: unsetBranchUpstream,
-                operationState: operationState,
+                operationState: operationRecovery.operation,
                 onOperationContinue: {
                     doOperationContinue()
                     branchWorkspace.showPopover = false
@@ -4812,18 +4470,18 @@ struct ContentView: View {
         Group {
             if repo != nil {
                 RemoteConfigDialogView(
-                    remotes: remotes,
-                    name: $remoteName,
-                    url: $remoteUrl,
-                    pushUrl: $remotePushUrl,
-                    fetchRefspec: $remoteFetchRefspec,
-                    pushRefspec: $remotePushRefspec,
+                    remotes: remoteWorkspace.remotes,
+                    name: $remoteWorkspace.name,
+                    url: $remoteWorkspace.url,
+                    pushUrl: $remoteWorkspace.pushUrl,
+                    fetchRefspec: $remoteWorkspace.fetchRefspec,
+                    pushRefspec: $remoteWorkspace.pushRefspec,
                     initialSelectedName: nil,
                     onAdd: remoteAdd,
                     onRemove: remoteRemove,
                     onRename: remoteRename,
                     onSave: saveRemoteConfig,
-                    onCancel: { showRemoteConfigDialog = false },
+                    onCancel: { remoteWorkspace.showConfigDialog = false },
                     onRefresh: loadRemotes
                 )
             }
@@ -4841,13 +4499,13 @@ struct ContentView: View {
             if let repo {
                 RebaseTodoEditorView(
                     repo: repo,
-                    onto: rebaseTodoOnto,
-                    items: $rebaseTodoItems,
-                    preserveMerges: rebaseTodoPreserveMerges,
-                    root: rebaseTodoRoot,
+                    onto: rebaseWorkspace.todoOnto,
+                    items: $rebaseWorkspace.todoItems,
+                    preserveMerges: rebaseWorkspace.todoPreserveMerges,
+                    root: rebaseWorkspace.todoRoot,
                     onStart: startTodoRebase,
                     onOpenRawTodo: prepareRawRebaseTodoEditor,
-                    onCancel: { showRebaseTodoEditor = false }
+                    onCancel: { rebaseWorkspace.showTodoEditor = false }
                 )
             }
         }
@@ -4855,44 +4513,44 @@ struct ContentView: View {
 
     private var rebaseRawTodoSheet: some View {
         RawRebaseTodoEditorView(
-            onto: rebaseTodoOnto,
-            text: $rebaseRawTodoText,
-            preserveMerges: rebaseTodoPreserveMerges,
-            root: rebaseTodoRoot,
+            onto: rebaseWorkspace.todoOnto,
+            text: $rebaseWorkspace.rawTodoText,
+            preserveMerges: rebaseWorkspace.todoPreserveMerges,
+            root: rebaseWorkspace.todoRoot,
             onStart: startRawTodoRebase,
             onCancel: {
-                showRawRebaseTodoEditor = false
-                rebaseRawTodoText = ""
+                rebaseWorkspace.showRawTodoEditor = false
+                rebaseWorkspace.rawTodoText = ""
             }
         )
     }
 
     /// IDX-001 二进制文件路径集合（staging model 提供）。
     private var stagingBinaryPaths: Set<String> {
-        Set((stagingModel?.entries ?? []).filter { $0.binary }.map { $0.path })
+        Set((repositoryStatus.stagingModel?.entries ?? []).filter { $0.binary }.map { $0.path })
     }
 
     /// IDX-001: expose exact HEAD/index/worktree presence to Changes actions;
     /// status kinds alone cannot distinguish an empty file from a missing side.
     private var stagingPresenceByPath: [String: StagingVersionPresence] {
         Dictionary(
-            uniqueKeysWithValues: (stagingModel?.entries ?? []).map { entry in
+            uniqueKeysWithValues: (repositoryStatus.stagingModel?.entries ?? []).map { entry in
                 (entry.path, stagingVersionPresence(for: entry))
             }
         )
     }
 
     private var fileContentVersionOptions: [FileContentVersion] {
-        guard let path = fileSelection,
-              let entry = entries.first(where: { $0.path == path }) else {
-            return [fileSelectionVersion]
+        guard let path = fileWorkspace.fileSelection,
+              let entry = repositoryStatus.entries.first(where: { $0.path == path }) else {
+            return [fileWorkspace.version]
         }
         return fileContentVersions(
             for: stagingVersionActions(
                 for: entry,
                 presence: stagingPresenceByPath[path]
             ),
-            current: fileSelectionVersion
+            current: fileWorkspace.version
         )
     }
 
@@ -4907,7 +4565,7 @@ struct ContentView: View {
             }
             return .shelveRestore(isPop: shelfWorkspace.conflictIsPop)
         }
-        switch operationState?.kind {
+        switch operationRecovery.operation?.kind {
         case .rebase: return .rebase
         case .cherryPick: return .cherryPick
         case .revert: return .revert
@@ -4924,7 +4582,7 @@ struct ContentView: View {
         }
         return {
             doOperationAbort()
-            showMergeRevisionsDialog = false
+            operationRecovery.showConflictResolver = false
         }
     }
 
@@ -4936,10 +4594,10 @@ struct ContentView: View {
     /// presentation here.
     @ViewBuilder
     private var conflictResolverOverlays: some View {
-        if showMergeRevisionsDialog {
+        if operationRecovery.showConflictResolver {
             singleRootConflictResolverPanel
         }
-        if showMultiRootConflictResolver {
+        if operationRecovery.showMultiRootConflictResolver {
             multiRootConflictResolverPanel
         }
     }
@@ -4958,7 +4616,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Close") {
-                        showMergeRevisionsDialog = false
+                        operationRecovery.showConflictResolver = false
                     }
                     .controlSize(.small)
                 }
@@ -4967,8 +4625,8 @@ struct ContentView: View {
                 Divider()
                 MergeRevisionsDialogView(
                     repo: repo,
-                    entries: $entries,
-                    initialPath: mergeInitialPath ?? selection,
+                    entries: $repositoryStatus.entries,
+                    initialPath: operationRecovery.initialPath ?? fileWorkspace.selection,
                     mode: mergeRevisionsMode,
                     directPatchText: shelfWorkspace.conflictIsDirectPatch ? shelfWorkspace.pendingConflictPatch : nil,
                     directPatchRestoreName: shelfWorkspace.conflictIsDirectPatch ? shelfWorkspace.pendingConflictName : nil,
@@ -4984,8 +4642,8 @@ struct ContentView: View {
                             finishShelveConflict()
                         } else {
                             doOperationContinue()
-                            showMergeRevisionsDialog = false
-                            mergeInitialPath = nil
+                            operationRecovery.showConflictResolver = false
+                            operationRecovery.initialPath = nil
                         }
                     },
                     onAbort: mergeRevisionsAbortAction,
@@ -5024,14 +4682,14 @@ struct ContentView: View {
             .padding(.vertical, 9)
             Divider()
             MultiRootConflictResolverView(
-                roots: multiRootResolverRoots,
-                activeRootPath: multiRootResolverActiveRootPath,
-                activeRepo: multiRootResolverActiveRepo,
-                entries: $multiRootResolverActiveEntries,
-                initialPath: multiRootResolverActiveInitialPath,
-                activeKind: multiRootResolverActiveKind,
-                isWorking: multiRootResolverWorking,
-                error: multiRootResolverError,
+                roots: operationRecovery.multiRootResolverRoots,
+                activeRootPath: operationRecovery.multiRootResolverActiveRootPath,
+                activeRepo: operationRecovery.multiRootResolverActiveRepo,
+                entries: $operationRecovery.multiRootResolverActiveEntries,
+                initialPath: operationRecovery.multiRootResolverActiveInitialPath,
+                activeKind: operationRecovery.multiRootResolverActiveKind,
+                isWorking: operationRecovery.multiRootResolverWorking,
+                error: operationRecovery.multiRootResolverError,
                 onSelectRoot: selectMultiRootResolverRoot,
                 onChanged: refreshMultiRootResolverActiveRoot,
                 onComplete: completeMultiRootResolverRoot,
@@ -5056,100 +4714,100 @@ struct ContentView: View {
     }
 
     func openMergeDialog(_ branch: String?) {
-        guard operationState?.kind == nil,
+        guard operationRecovery.operation?.kind == nil,
               isArborVCSActionVisible(.merge, in: vcsActionContext),
               isArborVCSActionEnabled(.merge, in: vcsActionContext) else { return }
-        loadMergeDialogSettings(for: projectPath)
-        if let branch { mergeBranch = branch }
-        mergeDialogGeneration &+= 1
-        let generation = mergeDialogGeneration
-        mergeMergedBranches = []
-        showMergeActionDialog = true
+        loadMergeDialogSettings(for: projectWorkspace.path)
+        if let branch { mergeWorkspace.branch = branch }
+        mergeWorkspace.dialogGeneration &+= 1
+        let generation = mergeWorkspace.dialogGeneration
+        mergeWorkspace.mergedBranches = []
+        mergeWorkspace.showActionDialog = true
         guard let repo else { return }
         Task.detached(priority: .userInitiated) {
             let mergedBranches = (try? repo.branchListMerged().map(\.name)) ?? []
             await MainActor.run {
-                guard generation == self.mergeDialogGeneration else { return }
-                self.mergeMergedBranches = Set(mergedBranches)
+                guard generation == self.mergeWorkspace.dialogGeneration else { return }
+                self.mergeWorkspace.mergedBranches = Set(mergedBranches)
             }
         }
     }
 
     func loadMergeDialogSettings(for projectPath: String?) {
         let settings = GitMergeDialogSettingsStore.load(for: projectPath)
-        mergeBranch = settings.branch
-        mergeStrategyRaw = settings.strategyRaw
-        mergeUseCustomCommitMessage = settings.useCustomCommitMessage
-        mergeNoCommit = settings.noCommit
-        mergeNoVerify = settings.noVerify
-        mergeAllowUnrelatedHistories = settings.allowUnrelatedHistories
-        if !mergeUseCustomCommitMessage {
-            mergeCommitMessage = ""
+        mergeWorkspace.branch = settings.branch
+        mergeWorkspace.strategyRaw = settings.strategyRaw
+        mergeWorkspace.useCustomCommitMessage = settings.useCustomCommitMessage
+        mergeWorkspace.noCommit = settings.noCommit
+        mergeWorkspace.noVerify = settings.noVerify
+        mergeWorkspace.allowUnrelatedHistories = settings.allowUnrelatedHistories
+        if !mergeWorkspace.useCustomCommitMessage {
+            mergeWorkspace.commitMessage = ""
         }
     }
 
     func saveMergeDialogSettings() {
         GitMergeDialogSettingsStore.save(
             GitMergeDialogSettings(
-                branch: mergeBranch,
-                strategyRaw: mergeStrategyRaw,
-                useCustomCommitMessage: mergeUseCustomCommitMessage,
-                noCommit: mergeNoCommit,
-                noVerify: mergeNoVerify,
-                allowUnrelatedHistories: mergeAllowUnrelatedHistories
+                branch: mergeWorkspace.branch,
+                strategyRaw: mergeWorkspace.strategyRaw,
+                useCustomCommitMessage: mergeWorkspace.useCustomCommitMessage,
+                noCommit: mergeWorkspace.noCommit,
+                noVerify: mergeWorkspace.noVerify,
+                allowUnrelatedHistories: mergeWorkspace.allowUnrelatedHistories
             ),
-            for: projectPath
+            for: projectWorkspace.path
         )
     }
 
     func loadRebaseDialogSettings(for projectPath: String?) {
         let settings = GitRebaseDialogSettingsStore.load(for: projectPath)
-        rebaseOnto = settings.onto
-        rebaseInteractive = settings.interactive
-        rebasePreserveMerges = settings.preserveMerges
-        rebaseAutoSquash = settings.autoSquash
-        rebaseKeepEmpty = settings.keepEmpty
-        rebaseUpdateRefs = settings.updateRefs
-        rebaseRoot = settings.root
+        rebaseWorkspace.onto = settings.onto
+        rebaseWorkspace.interactive = settings.interactive
+        rebaseWorkspace.preserveMerges = settings.preserveMerges
+        rebaseWorkspace.autoSquash = settings.autoSquash
+        rebaseWorkspace.keepEmpty = settings.keepEmpty
+        rebaseWorkspace.updateRefs = settings.updateRefs
+        rebaseWorkspace.root = settings.root
     }
 
     func saveRebaseDialogSettings() {
         GitRebaseDialogSettingsStore.save(
             GitRebaseDialogSettings(
-                onto: rebaseOnto,
-                interactive: rebaseInteractive,
-                preserveMerges: rebasePreserveMerges,
-                autoSquash: rebaseAutoSquash,
-                keepEmpty: rebaseKeepEmpty,
-                updateRefs: rebaseUpdateRefs,
-                root: rebaseRoot
+                onto: rebaseWorkspace.onto,
+                interactive: rebaseWorkspace.interactive,
+                preserveMerges: rebaseWorkspace.preserveMerges,
+                autoSquash: rebaseWorkspace.autoSquash,
+                keepEmpty: rebaseWorkspace.keepEmpty,
+                updateRefs: rebaseWorkspace.updateRefs,
+                root: rebaseWorkspace.root
             ),
-            for: projectPath
+            for: projectWorkspace.path
         )
     }
 
     func openRebaseDialog(_ branch: String?) {
-        guard operationState?.kind == nil,
+        guard operationRecovery.operation?.kind == nil,
               isArborVCSActionVisible(.rebase, in: vcsActionContext),
               isArborVCSActionEnabled(.rebase, in: vcsActionContext) else { return }
-        loadRebaseDialogSettings(for: projectPath)
-        if let branch { rebaseOnto = branch }
-        rebaseRootPath = repo?.workdir() ?? multiRoots.first?.path ?? ""
-        rebaseBranch = rebaseBranchOptions.first(where: { $0.isCurrent })?.name
+        loadRebaseDialogSettings(for: projectWorkspace.path)
+        if let branch { rebaseWorkspace.onto = branch }
+        rebaseWorkspace.rootPath = repo?.workdir() ?? multiRootWorkspace.roots.first?.path ?? ""
+        rebaseWorkspace.branch = rebaseBranchOptions.first(where: { $0.isCurrent })?.name
             ?? rebaseBranchOptions.first?.name
             ?? ""
-        rebaseApplyToAllRoots = false
-        rebaseRange = []
-        rebaseActions = []
-        rebaseFeedback = nil
-        showRebaseActionDialog = true
+        rebaseWorkspace.applyToAllRoots = false
+        rebaseWorkspace.range = []
+        rebaseWorkspace.actions = []
+        rebaseWorkspace.feedback = nil
+        rebaseWorkspace.showActionDialog = true
     }
 
     private func selectRebaseRepository() {
-        let snapshot = multiRootBranchSnapshots.first(where: {
-            $0.rootPath == rebaseRootPath
+        let snapshot = multiRootWorkspace.branchSnapshots.first(where: {
+            $0.rootPath == rebaseWorkspace.rootPath
         })
-        rebaseBranch = snapshot?.headBranch
+        rebaseWorkspace.branch = snapshot?.headBranch
             ?? snapshot?.branches.first(where: { $0.isCurrent })?.name
             ?? snapshot?.branches.first?.name
             ?? ""
@@ -5157,7 +4815,7 @@ struct ContentView: View {
     }
 
     private func compareBranchFromPopup(_ branch: String) {
-        toolWindowMode = .log
+        projectWorkspace.toolWindowMode = .log
         toolWindowExpanded = true
         projectPanelExpanded = false
         compareLogBranch(rootPath: nil, branch: branch)

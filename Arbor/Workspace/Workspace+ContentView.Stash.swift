@@ -5,9 +5,9 @@ import UniformTypeIdentifiers
 extension ContentView {
 func completeMultiRootResolverStash(_ root: MultiRootConflictResolverRoot) {
     guard case let .stash(stashID, _, isPop) = root.kind,
-          let rootRepo = multiRootResolverActiveRepo else { return }
-    multiRootResolverWorking = true
-    multiRootResolverError = nil
+          let rootRepo = operationRecovery.multiRootResolverActiveRepo else { return }
+    operationRecovery.multiRootResolverWorking = true
+    operationRecovery.multiRootResolverError = nil
     Task.detached(priority: .userInitiated) {
         do {
             let conflicts = try rootRepo.status().filter {
@@ -44,7 +44,7 @@ func completeMultiRootResolverStash(_ root: MultiRootConflictResolverRoot) {
                     }
                     self.stashRecovery.multiRootUpdateStashedRoots.remove(root.rootPath)
                 }
-                self.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverWorking = false
                 self.feedbackCenter.success(
                     isPop ? "Stash pop completed" : "Stash apply completed",
                     detail: root.rootPath
@@ -53,8 +53,8 @@ func completeMultiRootResolverStash(_ root: MultiRootConflictResolverRoot) {
             }
         } catch {
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
                 self.refreshMultiRootResolverActiveRoot()
             }
         }
@@ -279,7 +279,7 @@ func stashBranchNotificationComponent(_ value: String) -> String {
 }
 
 func stashBranchNotificationID(rootPath: String, branch: String) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     return [
         "git.stash.branch",
         stashBranchNotificationComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
@@ -294,7 +294,7 @@ func stashBranchRetryRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .retryStashBranch,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         stashBranchRetry: retry
@@ -551,7 +551,7 @@ func stashClearAll() {
 }
 
 func presentStashDialog() {
-    guard let rootPath = repo?.workdir() ?? multiRoots.first?.path else { return }
+    guard let rootPath = repo?.workdir() ?? multiRootWorkspace.roots.first?.path else { return }
     // 对话框的初始状态收敛在 StashWorkspaceState，不再逐字段重置。
     stashUI.beginCreate(rootPath: rootPath, currentBranch: currentBranchName)
     selectStashRoot(rootPath)
@@ -563,7 +563,7 @@ func presentStashDialog() {
 /// secondary root can never fall back to the primary repository.
 func selectStashRoot(_ rootPath: String) {
     stashUI.rootPath = rootPath
-    stashUI.currentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
+    stashUI.currentBranch = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
     stashUI.rootLoading = true
     Task.detached(priority: .userInitiated) {
         do {
@@ -611,12 +611,12 @@ func stashSave(rootPath requestedRootPath: String? = nil) {
             await MainActor.run {
                 if currentRootPath == targetRootKey {
                     self.stashUI.stashes = ss
-                    self.entries = st
+                    self.repositoryStatus.entries = st
                     self.stashUI.previewStashID = nil
                     self.stashUI.previewText = nil
                     self.stashUI.showPreview = false
-                    self.stagingModel = staging
-                    self.lastIndexRevision = staging?.indexRevision
+                    self.repositoryStatus.stagingModel = staging
+                    self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 }
                 self.stashUI.message = ""
                 self.stashUI.keepIndex = false
@@ -671,7 +671,7 @@ func presentUnstashDialog() {
 func selectUnstashRoot(_ rootPath: String) {
     stashUI.unstashRootPath = rootPath
     stashUI.unstashStashes = []
-    stashUI.unstashCurrentBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
+    stashUI.unstashCurrentBranch = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch ?? ""
     stashUI.unstashRootLoading = true
     Task.detached(priority: .userInitiated) {
         do {
@@ -720,9 +720,9 @@ func stashSelectedFiles(_ paths: [String]) {
             let staging = try? repo.stagingModel()
             await MainActor.run {
                 self.stashUI.stashes = ss
-                self.entries = st
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.entries = st
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.stashUI.filesMessage = ""
                 self.stashUI.filesInitialPaths = []
                 self.feedbackCenter.success("Selected files stashed")
@@ -755,9 +755,9 @@ func stashSilently() {
             let staging = try? repo.stagingModel()
             await MainActor.run {
                 self.stashUI.stashes = ss
-                self.entries = st
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.entries = st
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Changes stashed")
                 self.loadRepoData(includeComparisons: false)
             }
@@ -771,7 +771,7 @@ func stashSilently() {
 
 func stashPop(stashID: String, restoreIndex: Bool = false) {
     guard let repo else { return }
-    let rootPath = repo.workdir() ?? projectPath ?? ""
+    let rootPath = repo.workdir() ?? projectWorkspace.path ?? ""
     beginFeedbackOperation("Pop stash")
     Task.detached(priority: .userInitiated) {
         do {
@@ -781,7 +781,7 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
             let st = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.stashUI.stashes = ss; self.entries = st
+                self.stashUI.stashes = ss; self.repositoryStatus.entries = st
                 self.clearStashDiffIfMatching(rootPath: rootPath, stashID: stashID)
                 // Pop removes the selected stash. Close the split preview
                 // rather than leaving it bound to the next row at the same
@@ -789,8 +789,8 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
                 self.stashUI.previewStashID = nil
                 self.stashUI.previewText = nil
                 self.stashUI.showPreview = false
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Stash popped")
                 self.loadRepoData(includeComparisons: false)
             }
@@ -805,17 +805,17 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
                     ) ?? 0
                     self.stashRecovery.pendingPopID = conflictStashID ?? stashID
                     self.stashRecovery.pendingPullStashPop = false
-                    self.mergeInProgress = true
-                    self.mergeInitialPath = paths.first
-                    if self.toolWindowMode != .log {
-                        self.selection = paths.first
+                    self.mergeWorkspace.inProgress = true
+                    self.operationRecovery.initialPath = paths.first
+                    if self.projectWorkspace.toolWindowMode != .log {
+                        self.fileWorkspace.selection = paths.first
                     }
-                    self.fileSelection = nil
-                    self.selectionModePath = nil
-                    self.commitPreviewPath = nil
-                    self.commitPreviewVisible = false
-                    self.showMergeRevisionsDialog = true
-                    self.mergeFeedback = "Stash pop 冲突：\(paths.joined(separator: ", "))"
+                    self.fileWorkspace.fileSelection = nil
+                    self.fileWorkspace.selectionModePath = nil
+                    self.fileWorkspace.previewPath = nil
+                    self.fileWorkspace.previewVisible = false
+                    self.operationRecovery.showConflictResolver = true
+                    self.mergeWorkspace.feedback = "Stash pop 冲突：\(paths.joined(separator: ", "))"
                     self.feedbackCenter.error(
                         "Stash pop paused",
                         detail: paths.joined(separator: ", "),
@@ -824,7 +824,7 @@ func stashPop(stashID: String, restoreIndex: Bool = false) {
                     self.refreshAll(showFeedback: false)
                 }
             } else {
-                await MainActor.run { self.loadError = errorMessage(error) }
+                await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) }
             }
         }
     }
@@ -840,9 +840,9 @@ func stashApply(stashID: String, restoreIndex: Bool = false) {
             let st = try repo.status()
             let staging = try? repo.stagingModel()
             await MainActor.run {
-                self.entries = st
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.entries = st
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.feedbackCenter.success("Stash applied; stash kept")
                 self.loadRepoData(includeComparisons: false)
             }
@@ -855,17 +855,17 @@ func stashApply(stashID: String, restoreIndex: Bool = false) {
                     self.stashRecovery.pendingPopIndex = nil
                     self.stashRecovery.pendingPopID = conflictStashID ?? stashID
                     self.stashRecovery.pendingPullStashPop = false
-                    self.mergeInProgress = true
-                    self.mergeInitialPath = paths.first
-                    if self.toolWindowMode != .log {
-                        self.selection = paths.first
+                    self.mergeWorkspace.inProgress = true
+                    self.operationRecovery.initialPath = paths.first
+                    if self.projectWorkspace.toolWindowMode != .log {
+                        self.fileWorkspace.selection = paths.first
                     }
-                    self.fileSelection = nil
-                    self.selectionModePath = nil
-                    self.commitPreviewPath = nil
-                    self.commitPreviewVisible = false
-                    self.showMergeRevisionsDialog = true
-                    self.mergeFeedback = "Stash apply 冲突：\(paths.joined(separator: ", "))"
+                    self.fileWorkspace.fileSelection = nil
+                    self.fileWorkspace.selectionModePath = nil
+                    self.fileWorkspace.previewPath = nil
+                    self.fileWorkspace.previewVisible = false
+                    self.operationRecovery.showConflictResolver = true
+                    self.mergeWorkspace.feedback = "Stash apply 冲突：\(paths.joined(separator: ", "))"
                     self.feedbackCenter.error(
                         "Stash apply paused",
                         detail: paths.joined(separator: ", "),
@@ -874,7 +874,7 @@ func stashApply(stashID: String, restoreIndex: Bool = false) {
                     self.refreshAll(showFeedback: false)
                 }
             } else {
-                await MainActor.run { self.loadError = errorMessage(error) }
+                await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) }
             }
         }
     }
@@ -882,7 +882,7 @@ func stashApply(stashID: String, restoreIndex: Bool = false) {
 
 func stashDrop(stashID: String) {
     guard let repo else { return }
-    let rootPath = repo.workdir() ?? projectPath ?? ""
+    let rootPath = repo.workdir() ?? projectWorkspace.path ?? ""
     beginFeedbackOperation("Drop stash")
     Task.detached(priority: .userInitiated) {
         do {
@@ -900,7 +900,7 @@ func stashDrop(stashID: String) {
                 self.feedbackCenter.success("Stash dropped")
                 self.loadRepoData(includeComparisons: false)
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -921,7 +921,7 @@ func stashBranch(stashID: String) {
 
 func stashBranch(stashID: String, branch: String) {
     guard let repo else { return }
-    let rootPath = repo.workdir() ?? projectPath ?? ""
+    let rootPath = repo.workdir() ?? projectWorkspace.path ?? ""
     let notificationID = stashBranchNotificationID(rootPath: rootPath, branch: branch)
     beginFeedbackOperation("Create branch from stash", notificationID: notificationID)
     Task.detached(priority: .userInitiated) {
@@ -982,7 +982,7 @@ func stashBranch(stashID: String, branch: String) {
 
 func showStashDiffFor(stashID: String) {
     guard let repo else { return }
-    let rootPath = repo.workdir() ?? projectPath ?? ""
+    let rootPath = repo.workdir() ?? projectWorkspace.path ?? ""
     stashUI.diffStashID = stashID
     stashUI.diffRootPath = rootPath
     stashUI.diffText = nil
@@ -1083,7 +1083,7 @@ func stashAndPull(
 ) {
     guard let repo else { return }
     beginFeedbackOperation(rebase ? "Preserve and pull with rebase" : "Preserve and pull")
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let preservation = try Self.saveLocalChangesBeforePull(
@@ -1122,7 +1122,7 @@ func stashAndPull(
                     self.stashRecovery.pendingPullShelfName = nil
                     self.presentShelveConflict(name: name, paths: paths, isPop: true)
                 }
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 self.feedbackCenter.error("Pull failed before preserving local changes", detail: detail, nextStep: "Check the local worktree and retry.")
             }
         }
@@ -1135,7 +1135,7 @@ func popPendingPullStash() {
     let shelfName = stashRecovery.pendingPullShelfName
     let stashID = stashRecovery.pendingPullStashID
     let stashMessage = stashRecovery.pendingPullStashMessage
-    let pullRebaseSeed = rebaseUndoSeed
+    let pullRebaseSeed = rebaseWorkspace.undoSeed
     let restoreCancel = GitCancelHandle()
     beginFeedbackOperation(
         shelfName == nil ? "Restore pull stash" : "Restore pull Shelf",
@@ -1190,7 +1190,7 @@ func popPendingPullStash() {
                         target: completedPullRebaseUndoTarget
                     )
                 }
-                self.mergeFeedback = "已恢复 pull 前的本地变更"
+                self.mergeWorkspace.feedback = "已恢复 pull 前的本地变更"
                 if let completedPullRebaseUndoTarget {
                     self.feedbackCenter.success(
                         "Pull changes restored",
@@ -1220,10 +1220,10 @@ func popPendingPullStash() {
                         return nil
                     }()
                     let savedKind = shelfName == nil ? "Stash" : "Shelf"
-                    self.mergeFeedback = "已取消恢复 pull 前的本地变更，保存的\(savedKind) 已保留"
+                    self.mergeWorkspace.feedback = "已取消恢复 pull 前的本地变更，保存的\(savedKind) 已保留"
                     self.feedbackCenter.warning(
                         "Restore pull changes cancelled",
-                        detail: self.mergeFeedback ?? "保存的\(savedKind) 已保留",
+                        detail: self.mergeWorkspace.feedback ?? "保存的\(savedKind) 已保留",
                         nextStep: "Retry restoring the saved \(savedKind) when ready.",
                         additionalActions: action.map { [$0] } ?? []
                     )
@@ -1238,7 +1238,7 @@ func popPendingPullStash() {
                     self.presentShelveConflict(name: name, paths: paths, isPop: true)
                 default:
                     let detail = errorMessage(error)
-                    self.mergeFeedback = detail
+                    self.mergeWorkspace.feedback = detail
                     self.feedbackCenter.error(
                         "Restore pull changes failed",
                         detail: detail,
@@ -1249,7 +1249,7 @@ func popPendingPullStash() {
         } catch {
             await MainActor.run {
                 let detail = errorMessage(error)
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 self.feedbackCenter.error("Restore pull changes failed", detail: detail, nextStep: "Resolve the local conflict before retrying.")
             }
         }

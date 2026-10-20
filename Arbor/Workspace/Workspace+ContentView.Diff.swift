@@ -22,7 +22,7 @@ func compareLogBranch(rootPath: String?, branch: String) {
             return
         }
         comparisonRepo = rootRepo
-        rootHeadBranch = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch
+        rootHeadBranch = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath })?.headBranch
             ?? (try? rootRepo.branchList().first(where: { $0.isCurrent })?.name)
     } else {
         comparisonRepo = repo
@@ -46,7 +46,7 @@ func compareLogBranch(rootPath: String?, branch: String) {
 /// still be in flight when the user opens the context menu, so refresh the
 /// candidate list on demand if the cached multi-root list is empty.
 func openFileReferenceComparison(path: String, isDirectory: Bool) {
-    fileTreeDiffRequest = nil
+    fileWorkspace.treeDiffRequest = nil
     guard let primaryRepo = repo,
           let primaryRootPath = primaryRepo.workdir(),
           normalizedRepositoryRelativePath(path) != nil else {
@@ -58,7 +58,7 @@ func openFileReferenceComparison(path: String, isDirectory: Bool) {
         return
     }
 
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     Task.detached(priority: .userInitiated) {
         let roots = cachedRoots.isEmpty
             ? ((try? discoverGitRoots(scanRoot: primaryRootPath, maxDepth: nil)) ?? [])
@@ -86,7 +86,7 @@ func openFileReferenceComparison(path: String, isDirectory: Bool) {
                 targetRepo = try openRepository(path: target.rootPath)
             }
             await MainActor.run {
-                self.fileReferenceComparisonRequest = FileReferenceComparisonRequest(
+                self.fileWorkspace.referenceComparisonRequest = FileReferenceComparisonRequest(
                     repo: targetRepo,
                     path: target.relativePath,
                     isDirectory: isDirectory,
@@ -110,7 +110,7 @@ func openFileReferenceComparison(path: String, isDirectory: Bool) {
 /// The owning Git root is resolved before presenting the picker so nested
 /// repositories cannot leak the parent repository's history.
 func openFileSelectedRevisionComparison(path: String, isDirectory: Bool) {
-    fileTreeDiffRequest = nil
+    fileWorkspace.treeDiffRequest = nil
     guard let primaryRepo = repo,
           let primaryRootPath = primaryRepo.workdir(),
           normalizedRepositoryRelativePath(path) != nil else {
@@ -122,7 +122,7 @@ func openFileSelectedRevisionComparison(path: String, isDirectory: Bool) {
         return
     }
 
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     Task.detached(priority: .userInitiated) {
         let roots = cachedRoots.isEmpty
             ? ((try? discoverGitRoots(scanRoot: primaryRootPath, maxDepth: nil)) ?? [])
@@ -150,7 +150,7 @@ func openFileSelectedRevisionComparison(path: String, isDirectory: Bool) {
                 targetRepo = try openRepository(path: target.rootPath)
             }
             await MainActor.run {
-                self.fileReferenceComparisonRequest = FileReferenceComparisonRequest(
+                self.fileWorkspace.referenceComparisonRequest = FileReferenceComparisonRequest(
                     repo: targetRepo,
                     path: target.relativePath,
                     isDirectory: isDirectory,
@@ -184,7 +184,7 @@ func openFileSameVersionComparison(path: String) {
         return
     }
 
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     Task.detached(priority: .userInitiated) {
         let roots = cachedRoots.isEmpty
             ? ((try? discoverGitRoots(scanRoot: primaryRootPath, maxDepth: nil)) ?? [])
@@ -225,13 +225,13 @@ func openFileSameVersionComparison(path: String) {
                 unstaged: .modified
             )
             await MainActor.run {
-                self.toolWindowMode = .commit
-                self.selection = nil
-                self.fileSelection = nil
-                self.selectionModePath = nil
-                self.commitPreviewPath = nil
-                self.commitPreviewVisible = false
-                self.fileTreeDiffRequest = FileTreeDiffRequest(
+                self.projectWorkspace.toolWindowMode = .commit
+                self.fileWorkspace.selection = nil
+                self.fileWorkspace.fileSelection = nil
+                self.fileWorkspace.selectionModePath = nil
+                self.fileWorkspace.previewPath = nil
+                self.fileWorkspace.previewVisible = false
+                self.fileWorkspace.treeDiffRequest = FileTreeDiffRequest(
                     repo: targetRepo,
                     entry: entry,
                     initialMode: .worktreeToHead
@@ -255,13 +255,13 @@ func openFileSameVersionComparison(path: String) {
 /// of IntelliJ's Changes Browser Create Patch action.
 func createPatchFromCompare() {
     let selectedChanges = orderedCompareSelection(
-        changes: treeChanges,
-        selectedPaths: compareSelectedPaths
+        changes: comparisonWorkspace.treeChanges,
+        selectedPaths: comparisonWorkspace.selectedPaths
     )
-    guard let comparisonRepo = activeCompareRepo ?? repo,
+    guard let comparisonRepo = comparisonWorkspace.repository ?? repo,
           !selectedChanges.isEmpty,
-          !compareRev1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          compareWithWorkingTree || !compareRev2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          !comparisonWorkspace.revision1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          comparisonWorkspace.withWorkingTree || !comparisonWorkspace.revision2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         return
     }
 
@@ -275,9 +275,9 @@ func createPatchFromCompare() {
     }
     guard !paths.isEmpty else { return }
 
-    let expectedRev1 = compareRev1
-    let expectedRev2 = compareRev2
-    let expectedWorkingTree = compareWithWorkingTree
+    let expectedRev1 = comparisonWorkspace.revision1
+    let expectedRev2 = comparisonWorkspace.revision2
+    let expectedWorkingTree = comparisonWorkspace.withWorkingTree
     guard let comparisonRootPath = comparisonRepo.workdir(), !comparisonRootPath.isEmpty else { return }
     presentPatchExportDialog(
         title: "Create Compare Patch",
@@ -399,7 +399,7 @@ func openTreeComparisonTab(
         rootPath: rootPath,
         comparesWithWorkingTree: comparesWithWorkingTree
     )
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
     branchWorkspace.showPopover = false
@@ -433,7 +433,7 @@ func openBranchComparisonTab(rootPath: String, first: String, second: String) {
         second: second,
         rootPath: rootPath
     )
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
     branchWorkspace.showPopover = false
@@ -510,8 +510,8 @@ func cancelBranchComparisonTask(_ side: BranchComparisonSide) {
 
 func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
     guard logList.viewMode == .compareBranches else { return }
-    let first = compareRev1.trimmingCharacters(in: .whitespacesAndNewlines)
-    let second = compareRev2.trimmingCharacters(in: .whitespacesAndNewlines)
+    let first = comparisonWorkspace.revision1.trimmingCharacters(in: .whitespacesAndNewlines)
+    let second = comparisonWorkspace.revision2.trimmingCharacters(in: .whitespacesAndNewlines)
     let filter = branchComparisonFilter(side)
     let requestGeneration: Int
     switch side {
@@ -535,11 +535,11 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
         )
         return
     }
-    let comparisonRepo = activeCompareRepo
-        ?? compareRepositoryPath.flatMap { path in
+    let comparisonRepo = comparisonWorkspace.repository
+        ?? comparisonWorkspace.repositoryPath.flatMap { path in
             repo?.workdir() == path ? repo : nil
         }
-        ?? compareRepositoryPath.flatMap({ try? openRepository(path: $0) })
+        ?? comparisonWorkspace.repositoryPath.flatMap({ try? openRepository(path: $0) })
         ?? repo
     guard let comparisonRepo else {
         finishBranchComparisonLoad(
@@ -606,11 +606,11 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
                       self.branchComparison.generation == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
                       self.logList.viewMode == .compareBranches,
-                      self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
-                      self.compareRev2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
+                      self.comparisonWorkspace.revision1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
+                      self.comparisonWorkspace.revision2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
                       self.branchComparisonFilter(side) == filterSnapshot,
-                      self.activeCompareRepo === comparisonRepo
-                        || (self.activeCompareRepo == nil && self.projectRepo === comparisonRepo) else { return }
+                      self.comparisonWorkspace.repository === comparisonRepo
+                        || (self.comparisonWorkspace.repository == nil && self.projectWorkspace.repository === comparisonRepo) else { return }
                 if reset {
                     self.setBranchComparisonEntries(filtered, side: side)
                 } else {
@@ -634,11 +634,11 @@ func startBranchComparisonLoad(_ side: BranchComparisonSide, reset: Bool) {
                       self.branchComparison.generation == contextGeneration,
                       self.branchComparisonRequestGeneration(side) == requestGeneration,
                       self.logList.viewMode == .compareBranches,
-                      self.compareRev1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
-                      self.compareRev2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
+                      self.comparisonWorkspace.revision1.trimmingCharacters(in: .whitespacesAndNewlines) == first,
+                      self.comparisonWorkspace.revision2.trimmingCharacters(in: .whitespacesAndNewlines) == second,
                       self.branchComparisonFilter(side) == filterSnapshot,
-                      self.activeCompareRepo === comparisonRepo
-                        || (self.activeCompareRepo == nil && self.projectRepo === comparisonRepo) else { return }
+                      self.comparisonWorkspace.repository === comparisonRepo
+                        || (self.comparisonWorkspace.repository == nil && self.projectWorkspace.repository === comparisonRepo) else { return }
                 self.finishBranchComparisonLoad(
                     side,
                     requestGeneration: requestGeneration,
@@ -745,8 +745,8 @@ func repairBranchComparisonSelection() {
 }
 
 func activateComparisonRepository(_ rootRepo: Repository, rootPath: String) {
-    activeCompareRepo = rootRepo
-    compareRepositoryPath = rootPath
+    comparisonWorkspace.repository = rootRepo
+    comparisonWorkspace.repositoryPath = rootPath
     logList.activeRootPath = rootPath
     logList.activeRepo = rootRepo
     logRuntime.activeBranches = (try? rootRepo.branchList()) ?? []

@@ -145,7 +145,7 @@ func restoreSelectedFile() {
     // The Commit workspace keeps its selected row in `commitPreviewPath` so the
     // main Log selection can remain independent.  Fall back to the older
     // selection channels for Project/Conflict workspaces.
-    guard let path = commitPreviewPath ?? selection ?? fileSelection else { return }
+    guard let path = fileWorkspace.previewPath ?? fileWorkspace.selection ?? fileWorkspace.fileSelection else { return }
     restoreFileFromHead(path)
 }
 
@@ -173,8 +173,8 @@ func restoreFileFromHead(
             try repo.restoreFile(path: path, revision: nil)
             await MainActor.run {
                 self.feedbackCenter.success(feedbackTitle, detail: path)
-                self.selection = nil
-                self.commitPreviewPath = nil
+                self.fileWorkspace.selection = nil
+                self.fileWorkspace.previewPath = nil
                 self.refreshAll(showFeedback: false)
             }
         } catch {
@@ -200,7 +200,7 @@ func restoreProjectTreePath(_ path: String) {
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     beginFeedbackOperation("Revert file")
     Task.detached(priority: .userInitiated) {
         do {
@@ -265,7 +265,7 @@ func publishShelfSnapshot(
         self.shelfWorkspace.shelves = shelves
         self.shelfWorkspace.deletedShelves = deletedShelves
         if let changeLists {
-            self.changeLists = changeLists
+            self.repositoryStatus.changeLists = changeLists
         }
     } else if activeShelfRootPath == normalizedRootPath {
         let previousChangeLists = shelfWorkspace.rootSnapshots[normalizedRootPath]?.changeLists ?? []
@@ -310,7 +310,7 @@ func setShelfRoot(_ rootPath: String) {
     shelfWorkspace.rootRepository = nil
     shelfWorkspace.rootLoading = true
     if shelfWorkspace.rootSnapshots[normalizedPath] == nil,
-       let snapshot = multiRootBranchSnapshots.first(where: {
+       let snapshot = multiRootWorkspace.branchSnapshots.first(where: {
            canonicalExternalLogPath($0.rootPath) == normalizedPath
        }) {
         shelfWorkspace.rootSnapshots[normalizedPath] = ShelfRootSnapshot(
@@ -449,7 +449,7 @@ func setShelfLocation(
 /// original `--update-refs` policy. Do not synthesize a seed for an operation
 /// created outside Arbor: without those facts, offering Undo would be unsafe.
 func restorePersistedSingleRootRebaseState(for repositoryPath: String) {
-    guard multiRootRebaseSession == nil,
+    guard rebaseWorkspace.multiRootSession == nil,
           let seed = loadRebaseUndoSeed(repositoryPath: repositoryPath) else { return }
     Task.detached(priority: .utility) {
         do {
@@ -461,21 +461,21 @@ func restorePersistedSingleRootRebaseState(for repositoryPath: String) {
             let status = try rootRepo.status()
             let pauseReason: RebasePauseReason = state.conflictedFiles.isEmpty ? .edit : .conflict
             await MainActor.run {
-                guard self.multiRootRebaseSession == nil else { return }
+                guard self.rebaseWorkspace.multiRootSession == nil else { return }
                 let isCurrentRoot = self.repo?.workdir().map({
                     URL(fileURLWithPath: $0).standardizedFileURL.path
                 }) == URL(fileURLWithPath: repositoryPath).standardizedFileURL.path
                 if isCurrentRoot {
-                    self.rebaseUndoSeed = seed
-                    self.rebaseRootPath = repositoryPath
-                    self.rebaseBranch = seed.branch
-                    self.rebasePaused = true
-                    self.rebasePauseReason = pauseReason
-                    self.rebaseConflicts = state.conflictedFiles
-                    self.operationState = state
-                    self.entries = status
+                    self.rebaseWorkspace.undoSeed = seed
+                    self.rebaseWorkspace.rootPath = repositoryPath
+                    self.rebaseWorkspace.branch = seed.branch
+                    self.rebaseWorkspace.paused = true
+                    self.rebaseWorkspace.pauseReason = pauseReason
+                    self.rebaseWorkspace.conflicts = state.conflictedFiles
+                    self.operationRecovery.operation = state
+                    self.repositoryStatus.entries = status
                     if pauseReason == .conflict {
-                        self.showMergeRevisionsDialog = true
+                        self.operationRecovery.showConflictResolver = true
                     }
                 }
                 let request = ArborVCSActionRequest(
@@ -540,7 +540,7 @@ func restorePersistedPullPreservation(for repositoryPath: String) {
             }
             let state = try? rootRepo.operationState()
             await MainActor.run {
-                guard self.projectRepo?.workdir().map({
+                guard self.projectWorkspace.repository?.workdir().map({
                     URL(fileURLWithPath: $0).standardizedFileURL.path
                 }) == URL(fileURLWithPath: repositoryPath).standardizedFileURL.path else {
                     return
@@ -571,11 +571,11 @@ func finishPendingPullRebaseRestore(
     target: RebaseUndoTarget?
 ) {
     guard let seed else { return }
-    rebasePaused = false
-    rebasePauseReason = nil
-    rebaseConflicts = []
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = target
+    rebaseWorkspace.paused = false
+    rebaseWorkspace.pauseReason = nil
+    rebaseWorkspace.conflicts = []
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = target
     clearRebaseUndoSeed(repositoryPath: seed.repositoryPath)
 }
 
@@ -584,7 +584,7 @@ func finishPendingPullRebaseRestore(
 /// so a process crash must leave an actionable path back to the same saved
 /// stash or Shelf instead of silently looking like an ordinary dirty repository.
 func scanPendingApplyRestores() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     Task.detached(priority: .utility) {
         do {
             let roots = try discoverGitRoots(scanRoot: projectPath, maxDepth: nil)
@@ -629,7 +629,7 @@ func scanPendingApplyRestores() {
             }
             let pendingItems = pending
             await MainActor.run {
-                guard self.projectPath == projectPath else { return }
+                guard self.projectWorkspace.path == projectPath else { return }
                 for item in pendingItems {
                     guard let savedChangesKind = ArborVCSActionRequest.SavedChangesKind(rawValue: item.kind) else {
                         continue
@@ -993,7 +993,7 @@ func branchDeleteRestoreRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .restoreDeletedBranches,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: targets.count == 1 ? targets[0].rootPath : nil,
         shelfName: "",
         branchDeleteRecoveryTargets: targets
@@ -1027,13 +1027,13 @@ func completeMultiRootResolverShelf(
     name: String
 ) {
     guard case let .shelve(_, isPop) = root.kind,
-          let rootRepo = multiRootResolverActiveRepo else { return }
+          let rootRepo = operationRecovery.multiRootResolverActiveRepo else { return }
     let batchRebaseSessionID = isPop
-        && multiRootRebaseSession?.roots.contains(where: { $0.rootPath == root.rootPath }) == true
-        ? multiRootRebaseSession?.id
+        && rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == root.rootPath }) == true
+        ? rebaseWorkspace.multiRootSession?.id
         : nil
-    multiRootResolverWorking = true
-    multiRootResolverError = nil
+    operationRecovery.multiRootResolverWorking = true
+    operationRecovery.multiRootResolverError = nil
     Task.detached(priority: .userInitiated) {
         do {
             let conflicts = try rootRepo.status().filter {
@@ -1063,8 +1063,8 @@ func completeMultiRootResolverShelf(
                 try rootRepo.shelveCompleteRestore(name: name)
             }
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = nil
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = nil
                 if let batchRebaseSessionID {
                     self.closeMultiRootResolver()
                     self.handleMultiRootRebaseRecovery(
@@ -1083,8 +1083,8 @@ func completeMultiRootResolverShelf(
             }
         } catch {
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
                 self.refreshMultiRootResolverActiveRoot()
             }
         }
@@ -1095,18 +1095,18 @@ func abortMultiRootResolverShelf(
     _ root: MultiRootConflictResolverRoot,
     name: String
 ) {
-    guard let rootRepo = multiRootResolverActiveRepo else { return }
-    let batchRebaseSessionID = multiRootRebaseSession?.roots.contains(where: { $0.rootPath == root.rootPath }) == true
-        ? multiRootRebaseSession?.id
+    guard let rootRepo = operationRecovery.multiRootResolverActiveRepo else { return }
+    let batchRebaseSessionID = rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == root.rootPath }) == true
+        ? rebaseWorkspace.multiRootSession?.id
         : nil
-    multiRootResolverWorking = true
-    multiRootResolverError = nil
+    operationRecovery.multiRootResolverWorking = true
+    operationRecovery.multiRootResolverError = nil
     Task.detached(priority: .userInitiated) {
         do {
             try rootRepo.shelveAbortRestore(name: name)
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = nil
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = nil
                 if let batchRebaseSessionID {
                     self.closeMultiRootResolver()
                     self.handleMultiRootRebaseRecovery(
@@ -1125,8 +1125,8 @@ func abortMultiRootResolverShelf(
             }
         } catch {
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = "\(root.rootPath): \(errorMessage(error))"
                 self.refreshMultiRootResolverActiveRoot()
             }
         }
@@ -1342,7 +1342,7 @@ func restoreDeletedBranch(_ context: BranchDeleteRecoveryContext) {
                     } else {
                         self.feedbackCenter.success("Branch restored", detail: context.preview.branchName)
                     }
-                    if self.toolWindowMode == .log { self.loadLog() }
+                    if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
                 }
             }
         } catch {
@@ -1377,17 +1377,17 @@ func showStashRestoreConflict(
     stashRecovery.pendingPullStashPop = false
     stashRecovery.pendingPullStashID = nil
     stashRecovery.pendingPullStashMessage = nil
-    mergeInProgress = true
-    mergeInitialPath = paths.first
-    if toolWindowMode != .log {
-        selection = paths.first
+    mergeWorkspace.inProgress = true
+    operationRecovery.initialPath = paths.first
+    if projectWorkspace.toolWindowMode != .log {
+        fileWorkspace.selection = paths.first
     }
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
-    showMergeRevisionsDialog = true
-    mergeFeedback = "\(operationName) 冲突：\(paths.joined(separator: ", "))"
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
+    operationRecovery.showConflictResolver = true
+    mergeWorkspace.feedback = "\(operationName) 冲突：\(paths.joined(separator: ", "))"
     feedbackCenter.error(
         "\(operationName) paused",
         detail: paths.joined(separator: ", "),
@@ -1479,11 +1479,11 @@ func refreshAfterShelfMutation(
     // operations are internal writes, so they do not enter the external VCS
     // action queue, but their file events still need the same acknowledge
     // boundary as watcher-delivered changes.
-    repositoryDirtyFileManager.mark(
+    repositoryStatus.dirtyFileManager.mark(
         repositoryPath: workdir,
         dirtyPaths: dirtyPaths
     )
-    _ = repositoryDirtyScopeManager.mark(
+    _ = repositoryStatus.dirtyScopeManager.mark(
         repositoryPath: workdir,
         scope: scope,
         changeScope: changeScope,
@@ -2002,7 +2002,7 @@ func moveShelfPaths(
 
 func openApplyLocalChangesRestore(_ request: ArborVCSActionRequest) {
     guard let rootPath = request.rootPath else { return }
-    toolWindowMode = .commit
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     openMultiRootConflictResolver(preferredRootPath: rootPath)
 }
@@ -2022,7 +2022,7 @@ func showSavedChanges(_ request: ArborVCSActionRequest) {
         return
     }
 
-    toolWindowMode = .commit
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     Task.detached(priority: .userInitiated) {
         do {
@@ -2085,7 +2085,7 @@ func shelfActionRequest(
     guard let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     return ArborVCSActionRequest(
         kind: kind,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: name,
         shelfPaths: paths,
@@ -2178,7 +2178,7 @@ func shelfBatchRetryFeedbackAction(
           let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .retryShelfBatch,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         shelfNames: normalizedNames,
@@ -2202,7 +2202,7 @@ func shelfMemberBatchRetryFeedbackAction(
           let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .retryShelfMemberBatch,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         shelfMemberGroups: normalizedGroups.map {
@@ -2224,7 +2224,7 @@ func shelfDeletePlanRetryFeedbackAction(
           let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .retryShelfDeletePlan,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         shelfDeletePlan: PersistedShelfDeletePlan(plan)
@@ -2246,7 +2246,7 @@ func shelfLifecycleRetryFeedbackAction(
           let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .retryShelfLifecycleBatch,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         shelfNames: normalizedNames,
@@ -2265,7 +2265,7 @@ func savedChangesFeedbackAction(
     guard let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .showSavedChanges,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         savedChangesKind: kind,
@@ -2341,7 +2341,7 @@ func shelfUndoDeletionsFeedbackAction(
           let resolvedRootPath = rootPath ?? repo?.workdir() else { return nil }
     let request = ArborVCSActionRequest(
         kind: .undoShelfDeletions,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: resolvedRootPath,
         shelfName: "",
         shelfRestoreTimestamps: Dictionary(
@@ -2787,7 +2787,7 @@ func submoduleUpdateRestoreAction(
     }
     let request = ArborVCSActionRequest(
         kind: .restoreApplyLocalChanges,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         savedChangesKind: savedChangesKind,
@@ -2848,14 +2848,14 @@ nonisolated static func restoreLocalChangesAfterPull(
 /// Restore the persisted batch spec after project reopen. An active Git
 /// operation is never replayed; it is handed to the project-level resolver.
 func restorePersistedMultiRootRebaseSession(for projectPath: String) {
-    guard multiRootRebaseSession == nil,
+    guard rebaseWorkspace.multiRootSession == nil,
           let session = loadMultiRootRebaseSession(projectPath: projectPath),
           session.projectPath == projectPath else { return }
     guard session.roots.contains(where: { $0.state != .completed && $0.state != .aborted }) else {
         clearMultiRootRebaseSession(session)
         return
     }
-    multiRootRebaseSession = session
+    rebaseWorkspace.multiRootSession = session
     let sessionID = session.id
     Task.detached(priority: .utility) {
         let activeRoot = session.roots.compactMap { root -> String? in
@@ -2864,7 +2864,7 @@ func restorePersistedMultiRootRebaseSession(for projectPath: String) {
             return root.rootPath
         }.first
         await MainActor.run {
-            guard self.multiRootRebaseSession?.id == sessionID else { return }
+            guard self.rebaseWorkspace.multiRootSession?.id == sessionID else { return }
             if let activeRoot {
                 self.feedbackCenter.warning(
                     "Multi-root rebase paused",

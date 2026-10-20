@@ -73,7 +73,7 @@ func performLogReferenceAction(
 
 func externalLogTabIsAlive(_ tabID: UUID) -> Bool {
     guard externalLogWindow else { return true }
-    guard !externalLogSessionDisposed else { return false }
+    guard !logRuntime.externalSessionDisposed else { return false }
     return externalLogUIManager?.isUIAlive(tabID) == true
 }
 
@@ -98,9 +98,9 @@ func persistExternalLogTabs() {
 /// pending loads and release those repositories instead of leaving a watcher
 /// or stale result alive after the window is gone.
 func disposeExternalLogSession() {
-    guard externalLogWindow, !externalLogSessionDisposed else { return }
+    guard externalLogWindow, !logRuntime.externalSessionDisposed else { return }
     persistExternalLogTabs()
-    externalLogSessionDisposed = true
+    logRuntime.externalSessionDisposed = true
     if let externalLogUIManager {
         externalLogUIManager.dispose()
     } else {
@@ -122,22 +122,22 @@ func disposeExternalLogSession() {
     reflog.loadTask = nil
     reflog.loadMoreTask?.cancel()
     reflog.loadMoreTask = nil
-    compareLoadTask?.cancel()
-    compareLoadTask = nil
+    comparisonWorkspace.loadTask?.cancel()
+    comparisonWorkspace.loadTask = nil
     cancelBranchComparisonTasks()
     logBranchesPanel.showMyTask?.cancel()
     logBranchesPanel.showMyTask = nil
-    repositoryChangeDeliveryTask?.cancel()
-    repositoryChangeDeliveryTask = nil
-    repositoryChangeBatch.removeAll()
-    repositoryExternalVCSActionManager.removeAll()
-    repositoryDirtyScopeManager.removeAll()
-    repositoryDirtyFileManager.removeAll()
-    multiRootLoadTask?.cancel()
-    multiRootLoadTask = nil
-    multiRootLoadGeneration &+= 1
-    multiRootLoadNeedsRefresh = false
-    multiRootLoadCompletion = nil
+    repositoryStatus.changeDeliveryTask?.cancel()
+    repositoryStatus.changeDeliveryTask = nil
+    repositoryStatus.changeBatch.removeAll()
+    repositoryStatus.externalVCSActionManager.removeAll()
+    repositoryStatus.dirtyScopeManager.removeAll()
+    repositoryStatus.dirtyFileManager.removeAll()
+    multiRootWorkspace.loadTask?.cancel()
+    multiRootWorkspace.loadTask = nil
+    multiRootWorkspace.loadGeneration &+= 1
+    multiRootWorkspace.loadNeedsRefresh = false
+    multiRootWorkspace.loadCompletion = nil
     logList.generation &+= 1
     logRuntime.signatureGeneration &+= 1
     logRuntime.commandGeneration &+= 1
@@ -145,11 +145,11 @@ func disposeExternalLogSession() {
     logRuntime.aggregateRepositories.removeAll()
     logList.activeRepo = nil
     reflog.rootRepo = nil
-    activeCompareRepo = nil
-    projectRepo = nil
-    multiRoots = []
-    multiRootBranchSnapshots = []
-    multiRootConflictGroups = []
+    comparisonWorkspace.repository = nil
+    projectWorkspace.repository = nil
+    multiRootWorkspace.roots = []
+    multiRootWorkspace.branchSnapshots = []
+    operationRecovery.multiRootConflictGroups = []
 }
 
 var currentLogTabID: UUID {
@@ -197,7 +197,7 @@ func setLogStartRevisionSelected(_ revision: String, selected: Bool) {
 /// gets a dedicated Update Info Log tab so the user's ordinary Log stays
 /// intact; every result keeps its owning repository identity.
 func showLogRevisionRanges(_ persistedRanges: [PersistedLogRevisionRange]) {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     let projectRoot = URL(fileURLWithPath: projectPath).standardizedFileURL.path
     var seen = Set<LogRootRevisionRange>()
     let ranges = persistedRanges.compactMap { persisted -> LogRootRevisionRange? in
@@ -244,7 +244,7 @@ func showLogRevisionRanges(_ persistedRanges: [PersistedLogRevisionRange]) {
         logSelectionState.activeTabID = existing.id
         applyLogTab(existing)
         persistExternalLogTabs()
-        toolWindowMode = .log
+        projectWorkspace.toolWindowMode = .log
         toolWindowExpanded = true
         loadActiveLogTab(existing)
         return
@@ -259,7 +259,7 @@ func showLogRevisionRanges(_ persistedRanges: [PersistedLogRevisionRange]) {
     filteredTab.pathSelections = updateInfoSelections
     filteredTab.pathFilter = logPathFilterEditorText(updateInfoSelections)
     appendLogTabAndLoad(filteredTab)
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
 }
 
@@ -334,10 +334,10 @@ func currentLogTabSnapshot() -> LogTabDescriptor {
         commandFilter: logRuntime.commandFilter,
         follow: logList.follow,
         graphSortModeRaw: logRuntime.sortModeRaw,
-        compareRevision1: compareRev1,
-        compareRevision2: compareRev2,
-        compareRepositoryPath: compareRepositoryPath,
-        compareWithWorkingTree: compareWithWorkingTree,
+        compareRevision1: comparisonWorkspace.revision1,
+        compareRevision2: comparisonWorkspace.revision2,
+        compareRepositoryPath: comparisonWorkspace.repositoryPath,
+        compareWithWorkingTree: comparisonWorkspace.withWorkingTree,
         compareFirstFilter: logList.viewMode == .compareBranches
             ? branchComparison.firstFilter
             : nil,
@@ -479,7 +479,7 @@ func runLogCommand(reset: Bool = true) {
             + logRuntime.aggregateRevisionRanges.map(\.rootPath)
             + Array(logRuntime.aggregateRootPaths)
     )
-    let discoveredRootPaths = normalizedLogRootPaths(multiRoots.map(\.path))
+    let discoveredRootPaths = normalizedLogRootPaths(multiRootWorkspace.roots.map(\.path))
     let hasStoredAggregateLog = !logRuntime.aggregateBranchFilters.isEmpty
         || !logRuntime.aggregateRevisionRanges.isEmpty
         || !logRuntime.aggregateRootPaths.isEmpty
@@ -575,7 +575,7 @@ func runLogCommand(reset: Bool = true) {
                       self.logRuntime.aggregateRevisionRanges == requestedAggregateRanges,
                       self.logRuntime.aggregateRootPaths == requestedAggregateRootPaths,
                       self.logList.visibleRootPathsRaw == requestedVisibleRootPathsRaw,
-                      normalizedLogRootPaths(self.multiRoots.map(\.path))
+                      normalizedLogRootPaths(self.multiRootWorkspace.roots.map(\.path))
                           == requestedDiscoveredRootPaths else { return }
                 self.logRuntime.isLoadingCommand = false
                 self.logRuntime.commandEntries = entries
@@ -593,7 +593,7 @@ func runLogCommand(reset: Bool = true) {
                       self.logRuntime.aggregateRevisionRanges == requestedAggregateRanges,
                       self.logRuntime.aggregateRootPaths == requestedAggregateRootPaths,
                       self.logList.visibleRootPathsRaw == requestedVisibleRootPathsRaw,
-                      normalizedLogRootPaths(self.multiRoots.map(\.path))
+                      normalizedLogRootPaths(self.multiRootWorkspace.roots.map(\.path))
                           == requestedDiscoveredRootPaths else { return }
                 self.logRuntime.isLoadingCommand = false
                 self.logRuntime.commandError = errorMessage(error)
@@ -879,7 +879,7 @@ func setLogPathFilterSelections(
     remember: Bool = true
 ) {
     let normalized = normalizedLogPathFilterSelections(selections)
-    if let projectPath,
+    if let projectPath = projectWorkspace.path,
        logSelectionState.tabs.first(where: { $0.id == currentLogTabID })?.updateInfoRanges != nil {
         GitUpdateInfoPathFilterSettings.save(
             logPathFilterEditorText(normalized),
@@ -1658,7 +1658,7 @@ func loadAggregatedLog(reset: Bool) {
                 await MainActor.run {
                     guard generation == self.logList.generation,
                           self.externalLogTabIsAlive(tabID),
-                          !(self.externalLogWindow && self.externalLogSessionDisposed),
+                          !(self.externalLogWindow && self.logRuntime.externalSessionDisposed),
                           self.logRuntime.aggregateBranchFilters == filters,
                           self.logRuntime.aggregateRevisionRanges == revisionRanges,
                           self.logRuntime.aggregateRootPaths == aggregateRootPaths,
@@ -1738,7 +1738,7 @@ func loadAggregatedLog(reset: Bool) {
                 guard !Task.isCancelled,
                       generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
-                      !(self.externalLogWindow && self.externalLogSessionDisposed),
+                      !(self.externalLogWindow && self.logRuntime.externalSessionDisposed),
                       self.logRuntime.aggregateBranchFilters == filters,
                       self.logRuntime.aggregateRevisionRanges == revisionRanges,
                       self.logRuntime.aggregateRootPaths == aggregateRootPaths,
@@ -1859,7 +1859,7 @@ func loadAggregatedLog(reset: Bool) {
                 guard !Task.isCancelled,
                       generation == self.logList.generation,
                       self.externalLogTabIsAlive(tabID),
-                      !(self.externalLogWindow && self.externalLogSessionDisposed),
+                      !(self.externalLogWindow && self.logRuntime.externalSessionDisposed),
                       self.logRuntime.aggregateBranchFilters == filters,
                       self.logRuntime.aggregateRevisionRanges == revisionRanges,
                       self.logRuntime.aggregateRootPaths == aggregateRootPaths,
@@ -1880,7 +1880,7 @@ func isActiveLogRepository(_ candidate: Repository) -> Bool {
     if let activeRepo = logList.activeRepo {
         return logList.activeRepo === candidate
     }
-    return projectRepo === candidate
+    return projectWorkspace.repository === candidate
 }
 
 /// Aggregate VCS Log rows carry their owning Git root. A secondary root is
@@ -2025,7 +2025,7 @@ func showCurrentRevision(path: String) {
         return
     }
 
-    let cachedRoots = multiRoots
+    let cachedRoots = multiRootWorkspace.roots
     Task.detached(priority: .userInitiated) {
         let roots = cachedRoots.isEmpty
             ? ((try? discoverGitRoots(scanRoot: primaryRootPath, maxDepth: nil)) ?? [])
@@ -2077,7 +2077,7 @@ func showCurrentRevision(path: String) {
                           == canonicalExternalLogPath(primaryRootPath) else {
                     return
                 }
-                self.currentRevisionRequest = CurrentRevisionRequest(
+                self.fileWorkspace.currentRevisionRequest = CurrentRevisionRequest(
                     repo: targetRepo,
                     path: target.relativePath,
                     commit: commit
@@ -2113,9 +2113,9 @@ func browseRevisionFromLog(_ commit: CommitInfo) {
         )
         return
     }
-    revisionBrowserPath = nil
-    revisionBrowserCommit = commit
-    showRevisionBrowser = true
+    fileWorkspace.revisionBrowserPath = nil
+    fileWorkspace.revisionBrowserCommit = commit
+    fileWorkspace.showRevisionBrowser = true
 }
 
 /// Open the selected file directly in the read-only revision browser.
@@ -2128,9 +2128,9 @@ func browseFileRevisionFromLog(_ commit: CommitInfo, path: String) {
         )
         return
     }
-    revisionBrowserPath = path
-    revisionBrowserCommit = commit
-    showRevisionBrowser = true
+    fileWorkspace.revisionBrowserPath = path
+    fileWorkspace.revisionBrowserCommit = commit
+    fileWorkspace.showRevisionBrowser = true
 }
 
 /// Map IntelliJ's `Vcs.EditSource` to the macOS default application for the
@@ -2367,7 +2367,7 @@ func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                 expectedHead: outcome.headId
             )
             await MainActor.run {
-                self.commitFeedback = "已从 \(commit.shortId) 丢弃 \(paths.count) 个文件变更"
+                self.commitWorkspace.feedback = "已从 \(commit.shortId) 丢弃 \(paths.count) 个文件变更"
                 self.feedbackCenter.success(
                     "Drop Selected Changes",
                     detail: commit.shortId,
@@ -2454,7 +2454,7 @@ func extractSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                 expectedHead: outcome.headId
             )
             await MainActor.run {
-                self.commitFeedback = "已将 \(paths.count) 个文件变更抽取为新提交"
+                self.commitWorkspace.feedback = "已将 \(paths.count) 个文件变更抽取为新提交"
                 self.feedbackCenter.success(
                     "Extract Selected Changes",
                     detail: message,
@@ -2512,10 +2512,10 @@ func resetFromLog(_ commits: [CommitInfo]) {
         return
     }
     guard let first = commits.first else { return }
-    resetTargetCommits = commits
-    resetTargetCommit = first
-    resetMode = GitResetModeSettings.mode(for: projectPath).engineValue
-    showResetDialog = true
+    resetWorkspace.targetCommits = commits
+    resetWorkspace.targetCommit = first
+    resetWorkspace.mode = GitResetModeSettings.mode(for: projectWorkspace.path).engineValue
+    resetWorkspace.showDialog = true
 }
 
 /// Reword the current HEAD without changing its tree or consuming staged files.
@@ -2534,7 +2534,7 @@ func submitLogHeadReword() {
         logRewrite.showRewordDialog = false
         let cancel = GitCancelHandle()
         beginFeedbackOperation("Reword Root History", cancelHandle: cancel)
-        let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+        let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
         Task.detached(priority: .userInitiated) {
             do {
                 guard let rootPath = repo.workdir(),
@@ -2609,10 +2609,10 @@ func submitLogHeadReword() {
                 if case .Cancelled = error as? EngineError {
                     await MainActor.run {
                         self.logRewrite.showRewordDialog = true
-                        self.operationFeedback = "Root reword cancelled; saved local changes were restored"
+                        self.operationRecovery.feedback = "Root reword cancelled; saved local changes were restored"
                         self.feedbackCenter.warning(
                             "Root reword cancelled",
-                            detail: self.operationFeedback ?? "Saved local changes were restored",
+                            detail: self.operationRecovery.feedback ?? "Saved local changes were restored",
                             nextStep: "Review Saved Changes or Stash, then retry the root reword."
                         )
                     }
@@ -2705,7 +2705,7 @@ func logSelectedChangesUndoRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .undoLogSelectedChanges,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: target.repositoryPath,
         shelfName: "",
         logSelectedChangesUndoInitialHead: target.initialHead,
@@ -2723,7 +2723,7 @@ func undoLogSelectedChanges(_ target: LogSelectedChangesUndoTarget) {
         expectedHead: target.expectedHead
     )
     let protectedPatterns = effectiveProtectedBranchPatterns
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Undo Selected Changes", notificationID: notificationID)
     Task.detached(priority: .userInitiated) {
         do {
@@ -2840,17 +2840,17 @@ func showFileHistory(_ path: String, rootPath: String? = nil) {
     logRuntime.aggregateRootPaths = []
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
     // File History is a Log editor hand-off. The left workspace must return
     // to Commit/Stash immediately instead of leaving the Project tool window
     // expanded over the staging surface.
     projectPanelExpanded = false
-    selection = nil
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
     openFileHistoryTab(path: normalizedPath, startRevision: "HEAD", rootPath: historyRootPath)
 }
 
@@ -2867,14 +2867,14 @@ func showFileHistoryForRevision(_ commit: CommitInfo, _ path: String) {
     logRuntime.aggregateRootPaths = []
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
-    selection = nil
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
     openFileHistoryTab(
         path: normalizedPath,
         startRevision: commit.id,
@@ -2899,13 +2899,13 @@ func setExternalLogRootSelection(_ rootPath: String, selected: Bool) {
 }
 
 func selectAllExternalLogRoots() {
-    applyExternalLogRootSelection(Set(multiRoots.map(\.path)))
+    applyExternalLogRootSelection(Set(multiRootWorkspace.roots.map(\.path)))
 }
 
 func selectPrimaryExternalLogRoot() {
-    guard let primaryPath = repo?.workdir() ?? projectPath else { return }
+    guard let primaryPath = repo?.workdir() ?? projectWorkspace.path else { return }
     let normalizedPrimaryPath = canonicalExternalLogPath(primaryPath)
-    guard multiRoots.contains(where: {
+    guard multiRootWorkspace.roots.contains(where: {
         canonicalExternalLogPath($0.path) == normalizedPrimaryPath
     }) else { return }
     applyExternalLogRootSelection([normalizedPrimaryPath])
@@ -3000,18 +3000,18 @@ func beginHeadResetDialog() {
     let roots = resetHeadRootOptions
     guard !roots.isEmpty else { return }
     let defaultRootPath = repo?.workdir() ?? roots[0].path
-    headResetRootPath = roots.first(where: {
+    resetWorkspace.headRootPath = roots.first(where: {
         canonicalExternalLogPath($0.path) == canonicalExternalLogPath(defaultRootPath)
     })?.path ?? roots[0].path
-    headResetTarget = "HEAD"
-    let savedMode = GitResetModeSettings.mode(for: projectPath).engineValue
-    headResetMode = savedMode == .keep ? .mixed : savedMode
-    showHeadResetDialog = true
+    resetWorkspace.headTarget = "HEAD"
+    let savedMode = GitResetModeSettings.mode(for: projectWorkspace.path).engineValue
+    resetWorkspace.headMode = savedMode == .keep ? .mixed : savedMode
+    resetWorkspace.showHeadDialog = true
 }
 
 func smartCheckoutRevisionInRoot(rootPath: String, revision: String) {
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Smart Checkout", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {

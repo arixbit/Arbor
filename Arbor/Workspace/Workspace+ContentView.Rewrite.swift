@@ -61,7 +61,7 @@ func resetRecoveryRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .rollbackResetRecovery,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         resetRecoveryTargets: targets
@@ -86,7 +86,7 @@ func resetRecoveryKeepRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .keepResetRecovery,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         resetRecoveryTargets: targets
@@ -129,7 +129,7 @@ func rollbackResetRecovery(
                 targets: targets.map { $0.makeLiveTarget() }
             )
             await MainActor.run {
-                self.multiRootResults = results
+                self.multiRootWorkspace.results = results
                 self.loadMultiRoots()
                 self.refreshAll(showFeedback: false)
                 let failures = results.filter { !$0.success }
@@ -200,7 +200,7 @@ func keepResetRecovery(
                 targets: targets.map { $0.makeLiveTarget() }
             )
             await MainActor.run {
-                self.multiRootResults = results
+                self.multiRootWorkspace.results = results
                 self.loadMultiRoots()
                 self.refreshAll(showFeedback: false)
                 let failures = results.filter { !$0.success }

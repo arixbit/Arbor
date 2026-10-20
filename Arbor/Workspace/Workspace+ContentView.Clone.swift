@@ -10,17 +10,17 @@ func chooseCloneParentDirectory() {
     panel.allowsMultipleSelection = false
     panel.canCreateDirectories = false
     panel.prompt = "选择父目录"
-    panel.directoryURL = URL(fileURLWithPath: cloneParentDirectory)
+    panel.directoryURL = URL(fileURLWithPath: cloneWorkspace.parentDirectory)
     if panel.runModal() == .OK, let url = panel.url {
-        cloneParentDirectory = url.standardizedFileURL.path
+        cloneWorkspace.parentDirectory = url.standardizedFileURL.path
     }
 }
 
 func cloneRepositoryFromDialog() {
-    guard !cloneInProgress else { return }
-    let url = cloneURL.trimmingCharacters(in: .whitespacesAndNewlines)
-    let parent = cloneParentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
-    var directoryName = cloneDirectoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cloneWorkspace.inProgress else { return }
+    let url = cloneWorkspace.url.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parent = cloneWorkspace.parentDirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+    var directoryName = cloneWorkspace.directoryName.trimmingCharacters(in: .whitespacesAndNewlines)
     if directoryName.isEmpty {
         let lastComponent = url
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -33,8 +33,8 @@ func cloneRepositoryFromDialog() {
     }
     guard !url.isEmpty, !parent.isEmpty, !directoryName.isEmpty else { return }
     let requestedDepth: UInt32?
-    if cloneShallow {
-        guard let parsedDepth = UInt32(cloneDepth.trimmingCharacters(in: .whitespacesAndNewlines)),
+    if cloneWorkspace.shallow {
+        guard let parsedDepth = UInt32(cloneWorkspace.depth.trimmingCharacters(in: .whitespacesAndNewlines)),
               parsedDepth > 0 else {
             feedbackCenter.error("Clone Git repository failed", detail: "Shallow clone depth must be a positive integer.", nextStep: "Enter a depth greater than zero and retry.")
             return
@@ -47,11 +47,11 @@ func cloneRepositoryFromDialog() {
     let recursive = cloneRecursiveSubmodules
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    cloneRequestGeneration &+= 1
-    let generation = cloneRequestGeneration
-    cloneInProgress = true
-    cloneCancelling = false
-    cloneCancelHandle = cancel
+    cloneWorkspace.requestGeneration &+= 1
+    let generation = cloneWorkspace.requestGeneration
+    cloneWorkspace.inProgress = true
+    cloneWorkspace.cancelling = false
+    cloneWorkspace.cancelHandle = cancel
     beginFeedbackOperation("Clone Git repository")
     Task.detached(priority: .userInitiated) {
         do {
@@ -64,25 +64,25 @@ func cloneRepositoryFromDialog() {
                 cancel: cancel
             )
             await MainActor.run {
-                guard self.cloneRequestGeneration == generation else { return }
-                self.cloneInProgress = false
-                self.cloneCancelling = false
-                self.cloneCancelHandle = nil
-                self.showCloneDialog = false
-                self.cloneURL = ""
-                self.cloneDirectoryName = ""
-                self.cloneShallow = false
-                self.cloneDepth = "1"
+                guard self.cloneWorkspace.requestGeneration == generation else { return }
+                self.cloneWorkspace.inProgress = false
+                self.cloneWorkspace.cancelling = false
+                self.cloneWorkspace.cancelHandle = nil
+                self.cloneWorkspace.showDialog = false
+                self.cloneWorkspace.url = ""
+                self.cloneWorkspace.directoryName = ""
+                self.cloneWorkspace.shallow = false
+                self.cloneWorkspace.depth = "1"
                 self.feedbackCenter.success("Git repository cloned", detail: clonedPath)
-                self.path = clonedPath
+                self.projectWorkspace.inputPath = clonedPath
             }
             await MainActor.run { self.requestOpenProject(clonedPath) }
         } catch {
             await MainActor.run {
-                guard self.cloneRequestGeneration == generation else { return }
-                self.cloneInProgress = false
-                self.cloneCancelling = false
-                self.cloneCancelHandle = nil
+                guard self.cloneWorkspace.requestGeneration == generation else { return }
+                self.cloneWorkspace.inProgress = false
+                self.cloneWorkspace.cancelling = false
+                self.cloneWorkspace.cancelHandle = nil
                 if cancel.isCancelled() {
                     self.feedbackCenter.warning(
                         "Clone cancelled",
@@ -91,7 +91,7 @@ func cloneRepositoryFromDialog() {
                     )
                     return
                 }
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Clone Git repository failed", detail: friendlyRemoteError(error), nextStep: "Check the URL, destination, and authentication, then retry.")
             }
         }
@@ -99,13 +99,13 @@ func cloneRepositoryFromDialog() {
 }
 
 func cancelCloneRepositoryFromDialog() {
-    guard cloneInProgress else {
-        showCloneDialog = false
+    guard cloneWorkspace.inProgress else {
+        cloneWorkspace.showDialog = false
         return
     }
-    guard !cloneCancelling else { return }
-    cloneCancelling = true
-    cloneCancelHandle?.cancel()
+    guard !cloneWorkspace.cancelling else { return }
+    cloneWorkspace.cancelling = true
+    cloneWorkspace.cancelHandle?.cancel()
 }
 
 }

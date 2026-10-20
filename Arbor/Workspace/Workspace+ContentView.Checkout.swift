@@ -17,14 +17,14 @@ func checkoutFromLog(_ commit: CommitInfo) {
         do {
             try repo.checkoutDetached(commitId: id)
             await MainActor.run {
-                self.commitFeedback = "已 checkout \(String(id.prefix(7)))"
+                self.commitWorkspace.feedback = "已 checkout \(String(id.prefix(7)))"
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
             }
         } catch {
             let detail = errorMessage(error)
             await MainActor.run {
-                self.commitFeedback = detail
+                self.commitWorkspace.feedback = detail
                 self.presentCheckoutRecovery(
                     repo: repo,
                     name: id,
@@ -131,14 +131,14 @@ func performMultiRootCheckout(
     mode: MultiRootCheckoutMode,
     offerRecovery: Bool
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    guard let projectPath, !reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    guard let projectPath = projectWorkspace.path, !reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         feedbackCenter.warning("Checkout cancelled", detail: "A branch, tag, or revision is required.")
         return
     }
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
     beginFeedbackOperation(mode == .normal ? "Multi-root checkout" : "Multi-root \(mode == .smart ? "Smart" : "Force") Checkout")
     Task.detached(priority: .userInitiated) {
@@ -164,8 +164,8 @@ func performMultiRootCheckout(
                 )
                 : (stashes: [:], shelves: [:])
             await MainActor.run {
-                self.multiRootResults = results
-                self.multiRootRunning = false
+                self.multiRootWorkspace.results = results
+                self.multiRootWorkspace.running = false
                 let failures = results.filter { !$0.success }
                 let initialRootsByPath = Dictionary(uniqueKeysWithValues: initialRoots.map { ($0.path, $0) })
                 let initialSnapshotsByPath = Dictionary(uniqueKeysWithValues: initialSnapshots.map { ($0.rootPath, $0) })
@@ -246,7 +246,7 @@ func performMultiRootCheckout(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     "Multi-root checkout failed",
                     detail: errorMessage(error),
@@ -305,12 +305,12 @@ func presentMultiRootCheckoutPartialResult(
     failures: [RootOperationResult],
     successfulTargets: [MultiRootBranchTarget]
 ) {
-    operationsViewMode = .roots
-    toolWindowMode = .operations
+    operationRecovery.viewMode = .roots
+    projectWorkspace.toolWindowMode = .operations
     toolWindowExpanded = true
     let rollbackRequest = ArborVCSActionRequest(
         kind: .rollbackMultiRootCheckout,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         checkoutReference: reference,
@@ -334,7 +334,7 @@ func presentMultiRootCheckoutPartialResult(
 }
 
 func multiRootCheckoutRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -358,7 +358,7 @@ func makeMultiRootCheckoutUpdateRetryRequest(
     }
     return ArborVCSActionRequest(
         kind: .retryMultiRootOperation,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         checkoutReference: reference,
@@ -378,7 +378,7 @@ func rollbackMultiRootCheckout(
     let notificationID = multiRootCheckoutRollbackNotificationID()
     let fullRetryRequest = ArborVCSActionRequest(
         kind: .rollbackMultiRootCheckout,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         checkoutReference: reference,
@@ -392,7 +392,7 @@ func rollbackMultiRootCheckout(
         do {
             let results = try Arbor.restoreMultiRootCheckout(targets: targets)
             await MainActor.run {
-                self.multiRootResults = results
+                self.multiRootWorkspace.results = results
                 self.loadMultiRoots()
                 let failures = results.filter { !$0.success }
                 if failures.isEmpty {
@@ -407,7 +407,7 @@ func rollbackMultiRootCheckout(
                     let remainingTargets = targets.filter { failedRootPaths.contains($0.rootPath) }
                     let retryRequest = ArborVCSActionRequest(
                         kind: .rollbackMultiRootCheckout,
-                        projectPath: projectPath,
+                        projectPath: projectWorkspace.path,
                         rootPath: nil,
                         shelfName: "",
                         checkoutReference: reference,
@@ -477,16 +477,16 @@ func performMultiRootCheckoutAndUpdate(
     offerRecovery: Bool,
     mergeResults: Bool = false
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    guard let projectPath, !reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    guard let projectPath = projectWorkspace.path, !reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         feedbackCenter.warning("Checkout cancelled", detail: "A branch, tag, or revision is required.")
         return
     }
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let modeLabel = mode == .smart ? "Smart" : "Force"
     beginFeedbackOperation(
         mode == .normal
@@ -531,11 +531,11 @@ func performMultiRootCheckoutAndUpdate(
             await MainActor.run {
                 if mergeResults {
                     let retryByRoot = Dictionary(uniqueKeysWithValues: results.map { ($0.rootPath, $0) })
-                    self.multiRootResults = self.multiRootResults.map { retryByRoot[$0.rootPath] ?? $0 }
+                    self.multiRootWorkspace.results = self.multiRootWorkspace.results.map { retryByRoot[$0.rootPath] ?? $0 }
                 } else {
-                    self.multiRootResults = results
+                    self.multiRootWorkspace.results = results
                 }
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 let failures = results.filter { !$0.success }
                 let successfulRollbackTargets: [MultiRootBranchTarget] = (!mergeResults && mode != .force)
                     ? results
@@ -561,11 +561,11 @@ func performMultiRootCheckoutAndUpdate(
                         }
                     : []
                 if failures.isEmpty {
-                    self.multiRootCheckoutUpdateRetryAvailable = false
-                    self.multiRootCheckoutUpdateRetryContext = nil
+                    self.multiRootWorkspace.checkoutUpdateRetryAvailable = false
+                    self.multiRootWorkspace.checkoutUpdateRetryContext = nil
                 } else {
-                    self.multiRootCheckoutUpdateRetryAvailable = true
-                    self.multiRootCheckoutUpdateRetryContext = MultiRootCheckoutUpdateRetryContext(
+                    self.multiRootWorkspace.checkoutUpdateRetryAvailable = true
+                    self.multiRootWorkspace.checkoutUpdateRetryContext = MultiRootCheckoutUpdateRetryContext(
                         reference: reference,
                         selectedRootPaths: failures.map(\.rootPath),
                         detach: detach,
@@ -590,8 +590,8 @@ func performMultiRootCheckoutAndUpdate(
                         failures: failures
                     )
                 } else {
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     let retryRequest = self.makeMultiRootCheckoutUpdateRetryRequest(
                         reference: reference,
@@ -659,7 +659,7 @@ func performMultiRootCheckoutAndUpdate(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     rebase ? "Checkout with Rebase failed" : "Checkout and Update failed",
                     detail: errorMessage(error),
@@ -680,8 +680,8 @@ func retryMultiRootCheckoutAndUpdateFailedRoots(
     rebase: Bool? = nil,
     checkoutMode: ArborVCSActionRequest.CheckoutUpdateMode? = nil
 ) {
-    guard !multiRootRunning else { return }
-    let context = multiRootCheckoutUpdateRetryContext
+    guard !multiRootWorkspace.running else { return }
+    let context = multiRootWorkspace.checkoutUpdateRetryContext
     guard let reference = reference ?? context?.reference,
           let requestedRootPaths = selectedRootPaths ?? context?.selectedRootPaths,
           let detach = detach ?? context?.detach,
@@ -696,11 +696,11 @@ func retryMultiRootCheckoutAndUpdateFailedRoots(
     }
     let retryableRootPaths: Set<String>
     if selectedRootPaths == nil {
-        retryableRootPaths = Set(multiRootResults.compactMap { result -> String? in
+        retryableRootPaths = Set(multiRootWorkspace.results.compactMap { result -> String? in
             guard !result.success,
                   requestedRootPaths.contains(result.rootPath),
                   !stashRecovery.multiRootUpdateStashedRoots.contains(result.rootPath),
-                  multiRoots.first(where: { $0.path == result.rootPath })?.operation == nil else {
+                  multiRootWorkspace.roots.first(where: { $0.path == result.rootPath })?.operation == nil else {
                 return nil
             }
             return result.rootPath
@@ -708,7 +708,7 @@ func retryMultiRootCheckoutAndUpdateFailedRoots(
     } else {
         retryableRootPaths = Set(requestedRootPaths.filter { rootPath in
             !stashRecovery.multiRootUpdateStashedRoots.contains(rootPath)
-                && multiRoots.first(where: { $0.path == rootPath })?.operation == nil
+                && multiRootWorkspace.roots.first(where: { $0.path == rootPath })?.operation == nil
         })
     }
     let selectedRootPaths = requestedRootPaths.filter(retryableRootPaths.contains)
@@ -944,7 +944,7 @@ func presentCheckoutRecovery(
     onForce: @escaping () -> Void
 ) {
     if (try? repo.operationState()) != nil {
-        loadError = detail
+        repositoryStatus.loadError = detail
         feedbackCenter.error(
             "Checkout unavailable",
             detail: detail,
@@ -957,7 +957,7 @@ func presentCheckoutRecovery(
             || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
     }.map(\.path) ?? []
     guard !paths.isEmpty else {
-        loadError = detail
+        repositoryStatus.loadError = detail
         feedbackCenter.error("Checkout failed", detail: detail, nextStep: "Check the branch name and repository state.")
         return
     }
@@ -984,7 +984,7 @@ func smartCheckoutDetached(
     onSuccess: @escaping () -> Void = {}
 ) {
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Smart Checkout", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -994,7 +994,7 @@ func smartCheckoutDetached(
                 cancel: cancel
             )
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Smart Checkout completed", detail: revision)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -1040,7 +1040,7 @@ func smartCheckoutDetached(
                 }
             } else {
                 await MainActor.run {
-                    self.loadError = errorMessage(error)
+                    self.repositoryStatus.loadError = errorMessage(error)
                     self.feedbackCenter.error(
                         "Smart Checkout failed",
                         detail: errorMessage(error),
@@ -1062,7 +1062,7 @@ func forceCheckoutDetached(
         do {
             try repo.forceCheckoutDetached(commitId: revision)
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Force Checkout completed", detail: revision)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -1070,7 +1070,7 @@ func forceCheckoutDetached(
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Force Checkout failed", detail: errorMessage(error))
             }
         }

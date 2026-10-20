@@ -6,7 +6,7 @@ extension ContentView {
 func startNextExternalVCSAction(repo: Repository) {
     guard let rawWorkdir = repo.workdir() else { return }
     let workdir = URL(fileURLWithPath: rawWorkdir).standardizedFileURL.path
-    guard let ticket = repositoryExternalVCSActionManager.begin(
+    guard let ticket = repositoryStatus.externalVCSActionManager.begin(
         repositoryPath: workdir
     ) else { return }
     let event = ticket.event
@@ -96,7 +96,7 @@ func finishExternalVCSAction(
     _ ticket: RepositoryExternalVCSActionTicket,
     repo: Repository
 ) {
-    guard repositoryExternalVCSActionManager.finish(ticket) else { return }
+    guard repositoryStatus.externalVCSActionManager.finish(ticket) else { return }
     startNextExternalVCSAction(repo: repo)
 }
 
@@ -276,7 +276,7 @@ func externalVCSRetryFeedbackAction(
     ) -> FeedbackAction {
         let request = ArborVCSActionRequest(
             kind: .retryExternalVCSAction,
-            projectPath: projectPath,
+            projectPath: projectWorkspace.path,
             rootPath: rootPath,
             shelfName: "",
             externalVCSAction: action
@@ -526,7 +526,7 @@ func handleArborVCSActionNotification(_ notification: Notification) {
           let action = ArborVCSAction(rawValue: rawValue) else { return }
     switch action {
     case .searchEverywhere:
-        showSearchEverywhere = true
+        projectWorkspace.showSearchEverywhere = true
     case .quickActions:
         presentVCSQuickActionsPanel()
     case .update:
@@ -538,10 +538,10 @@ func handleArborVCSActionNotification(_ notification: Notification) {
     case .resetToRemoteBranch:
         resetCurrentBranchToRemote()
     case .commit:
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
     case .commitAndPush:
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
         beginCommitAndPush()
     case .push:
@@ -553,18 +553,18 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         guard isArborVCSActionEnabled(.fetchAll, in: vcsActionContext) else { return }
         doFetchAll()
     case .retryAutoFetch:
-        autoFetchRunGeneration &+= 1
+        gitSettings.autoFetchRunGeneration &+= 1
     case .enableAutoFetch:
-        if let projectPath {
+        if let projectPath = projectWorkspace.path {
             GitIncomingCheckStrategySettings.saveProjectStrategy(.fetch, for: projectPath)
-            projectIncomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
+            gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
         } else {
             incomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
             gitAutoFetch = true
         }
     case .disableAutoFetchSuggestion:
-        GitIncomingCheckStrategySettings.setSuggestionDisabled(true, for: projectPath)
-        GitIncomingCheckStrategySettings.setSuggestionCount(3, for: projectPath)
+        GitIncomingCheckStrategySettings.setSuggestionDisabled(true, for: projectWorkspace.path)
+        GitIncomingCheckStrategySettings.setSuggestionCount(3, for: projectWorkspace.path)
     case .fetchPrune:
         guard isArborVCSActionEnabled(.fetchPrune, in: vcsActionContext) else { return }
         doFetchPrune()
@@ -579,18 +579,18 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         presentPullDialog(rebase: true)
     case .showStagingArea:
         guard isArborVCSActionEnabled(.showStagingArea, in: vcsActionContext) else { return }
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
         shelfWorkspace.isWorkspaceTabActive = false
     case .showShelf:
         guard isArborVCSActionEnabled(.showShelf, in: vcsActionContext) else { return }
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
         shelfWorkspace.isWorkspaceTabActive = true
         shelfWorkspace.tabRequestID &+= 1
     case .showStash:
         guard isArborVCSActionEnabled(.showStash, in: vcsActionContext) else { return }
-        toolWindowMode = .commit
+        projectWorkspace.toolWindowMode = .commit
         toolWindowExpanded = true
         shelfWorkspace.isWorkspaceTabActive = true
         shelfWorkspace.tabRequestID &+= 1
@@ -631,8 +631,8 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         guard isArborVCSActionEnabled(.configureRemotes, in: vcsActionContext) else { return }
         beginConfigureRemotes()
     case .worktrees:
-        toolWindowMode = .operations
-        operationsViewMode = .worktrees
+        projectWorkspace.toolWindowMode = .operations
+        operationRecovery.viewMode = .worktrees
         toolWindowExpanded = true
         loadWorktrees()
     case .stageTracked:
@@ -680,12 +680,12 @@ func handleArborVCSActionNotification(_ notification: Notification) {
               !file.isDirectory else { return }
         showFileHistory(file.rootRelativePath, rootPath: file.owningRootPath)
     case .showLog:
-        toolWindowMode = .log
+        projectWorkspace.toolWindowMode = .log
         toolWindowExpanded = true
         projectPanelExpanded = false
-        selection = nil
-        fileSelection = nil
-        selectionModePath = nil
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.selectionModePath = nil
         logList.viewMode = .graph
         loadLog()
     case .showExternalLog:
@@ -695,17 +695,17 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         // opening one external window per subscribed ContentView.
         break
     case .showOperations:
-        toolWindowMode = .operations
-        operationsViewMode = .history
+        projectWorkspace.toolWindowMode = .operations
+        operationRecovery.viewMode = .history
         toolWindowExpanded = true
     case .showGitRoots:
-        toolWindowMode = .operations
-        operationsViewMode = .roots
+        projectWorkspace.toolWindowMode = .operations
+        operationRecovery.viewMode = .roots
         toolWindowExpanded = true
         loadMultiRoots()
     case .showGitConsole:
-        toolWindowMode = .operations
-        operationsViewMode = .console
+        projectWorkspace.toolWindowMode = .operations
+        operationRecovery.viewMode = .console
         toolWindowExpanded = true
     case .gitLfs:
         presentLfsPanel()
@@ -725,7 +725,7 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
     }
 
     if let requestedProjectPath = request.projectPath {
-        guard let projectPath, pathsMatch(requestedProjectPath, projectPath) else { return }
+        guard let projectPath = projectWorkspace.path, pathsMatch(requestedProjectPath, projectPath) else { return }
     }
     let requestTargetsSecondaryShelfRoot = request.rootPath.map {
         !shelfRootSelectionIsPrimary(
@@ -822,9 +822,9 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
         showLogApplyAffectedFiles(recovery)
     case .showOperationDetails:
         guard let notificationID = request.operationNotificationID else { return }
-        operationLogFocusNotificationID = notificationID
-        operationsViewMode = .history
-        toolWindowMode = .operations
+        operationRecovery.logFocusNotificationID = notificationID
+        operationRecovery.viewMode = .history
+        projectWorkspace.toolWindowMode = .operations
         toolWindowExpanded = true
     case .showLogRanges:
         guard let ranges = request.logRevisionRanges else { return }
@@ -1007,9 +1007,9 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
               let action = request.externalVCSAction else { return }
         retryExternalVCSAction(rootPath: rootPath, action: action)
     case .openGpgAgentSettings:
-        showGpgAgentSettings = true
+        gitSettings.showGpgAgentSettings = true
     case .openIdentitySettings:
-        showIdentitySettings = true
+        gitSettings.showIdentitySettings = true
     case .rollbackMultiRootCheckout:
         guard let reference = request.checkoutReference,
               let persistedTargets = request.checkoutTargets,
@@ -1108,11 +1108,11 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
         keepResetRecovery(targets)
     case .multiRootRebaseRecovery:
         guard let action = request.multiRootRebaseRecoveryAction else { return }
-        if let projectPath {
+        if let projectPath = projectWorkspace.path {
             restorePersistedMultiRootRebaseSession(for: projectPath)
         }
         if let requestedSessionID = request.multiRootRebaseSessionID {
-            guard multiRootRebaseSession?.id.uuidString == requestedSessionID else { return }
+            guard rebaseWorkspace.multiRootSession?.id.uuidString == requestedSessionID else { return }
         }
         switch action {
         case .resume:
@@ -1159,7 +1159,7 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
             return
         }
         guard let currentState else { return }
-        operationState = currentState
+        operationRecovery.operation = currentState
         switch action {
         case .continueOperation:
             doOperationContinue()
@@ -1176,18 +1176,18 @@ func handleVCSActionRequest(_ request: ArborVCSActionRequest) {
         case .fetchAll:
             doFetchAll(rootPaths: request.autoFetchRootPaths)
         case .retryCheck:
-            autoFetchRunGeneration &+= 1
+            gitSettings.autoFetchRunGeneration &+= 1
         case .enable:
-            if let projectPath {
+            if let projectPath = projectWorkspace.path {
                 GitIncomingCheckStrategySettings.saveProjectStrategy(.fetch, for: projectPath)
-                projectIncomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
+                gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
             } else {
                 incomingCheckStrategyRaw = GitIncomingCheckStrategy.fetch.rawValue
                 gitAutoFetch = true
             }
         case .doNotAskAgain:
-            GitIncomingCheckStrategySettings.setSuggestionDisabled(true, for: projectPath)
-            GitIncomingCheckStrategySettings.setSuggestionCount(3, for: projectPath)
+            GitIncomingCheckStrategySettings.setSuggestionDisabled(true, for: projectWorkspace.path)
+            GitIncomingCheckStrategySettings.setSuggestionCount(3, for: projectWorkspace.path)
         }
     case .retryMultiRootOperation:
         guard let operation = request.multiRootRetryOperation,

@@ -11,6 +11,18 @@ import SwiftUI
 /// 后台任务回调前必须和当前值比对；`aggregate*` 字典按 root path 作 key。
 @MainActor
 final class LogRuntimeState: ObservableObject {
+    // MARK: - 外部日志窗口的生命周期标志。
+
+    /// The Log dashboard may be scoped to a nested Git root without changing
+    /// the project's primary repository context used by Commit/Status panes.
+    /// External Git Log windows can aggregate all or a selected subset of the
+    /// project's discovered Git roots. An empty set means the selector has
+    /// not been initialized yet (or discovery currently has no roots).
+    @Published var externalRootSelectionInitialized = false
+    @Published var externalRootRequestConsumed = false
+    @Published var externalAggregateLoadStarted = false
+    @Published var externalSessionDisposed = false
+
     // MARK: - Git Log Command
 
     @Published var commandEntries: [CommitInfo] = []
@@ -51,9 +63,11 @@ final class LogRuntimeState: ObservableObject {
     /// 构造时注入；普通窗口用默认值即可。
     init(
         aggregateRootPaths: Set<String> = [],
-        aggregateRepositories: [String: Repository] = [:]
+        aggregateRepositories: [String: Repository] = [:],
+        externalRootSelectionInitialized: Bool = false
     ) {
         self.aggregateRootPaths = aggregateRootPaths
         self.aggregateRepositories = aggregateRepositories
+        self.externalRootSelectionInitialized = externalRootSelectionInitialized
     }
 }

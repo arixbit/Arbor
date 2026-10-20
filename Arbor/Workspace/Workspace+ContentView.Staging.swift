@@ -52,8 +52,8 @@ func createChangeList() {
             }
             let lists = try repo.changelistList()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.changeLists = lists
+                guard self.projectWorkspace.repository === repo else { return }
+                self.repositoryStatus.changeLists = lists
                 self.feedbackCenter.success("Changelist created", detail: name)
             }
         } catch {
@@ -84,8 +84,8 @@ func renameChangeList(_ oldName: String) {
             try repo.changelistRename(oldName: oldName, newName: newName)
             let lists = try repo.changelistList()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.changeLists = lists
+                guard self.projectWorkspace.repository === repo else { return }
+                self.repositoryStatus.changeLists = lists
                 self.feedbackCenter.success("Changelist renamed", detail: newName)
             }
         } catch {
@@ -112,8 +112,8 @@ func deleteChangeList(_ name: String) {
             try repo.changelistDelete(name: name)
             let lists = try repo.changelistList()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.changeLists = lists
+                guard self.projectWorkspace.repository === repo else { return }
+                self.repositoryStatus.changeLists = lists
                 self.feedbackCenter.success("Changelist deleted", detail: name)
             }
         } catch {
@@ -131,8 +131,8 @@ func activateChangeList(_ name: String) {
             try repo.changelistActivate(name: name)
             let lists = try repo.changelistList()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.changeLists = lists
+                guard self.projectWorkspace.repository === repo else { return }
+                self.repositoryStatus.changeLists = lists
             }
         } catch {
             await MainActor.run {
@@ -173,8 +173,8 @@ func movePathsToChangeList(_ paths: [String], _ targetName: String) {
             }
             let lists = try repo.changelistList()
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.changeLists = lists
+                guard self.projectWorkspace.repository === repo else { return }
+                self.repositoryStatus.changeLists = lists
                 self.feedbackCenter.success("Changes moved", detail: targetName)
             }
         } catch {

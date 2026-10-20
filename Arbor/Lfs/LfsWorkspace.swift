@@ -4,7 +4,7 @@ import SwiftUI
 /// 再更新面板状态，和其它 Git 操作保持同一套刷新/反馈约定。
 extension ContentView {
     func presentLfsPanel() {
-        showLfsPanel = true
+        lfsWorkspace.showPanel = true
         reloadLfsState()
     }
 
@@ -12,37 +12,37 @@ extension ContentView {
     /// Changes 列表打 LFS 标记。每次状态刷新跑一次 `git check-attr`，不读文件内容。
     func refreshLfsPathMarkers() {
         guard let repo else { return }
-        let paths = entries.map(\.path)
+        let paths = repositoryStatus.entries.map(\.path)
         guard !paths.isEmpty else {
-            lfsTrackedPaths = []
-            lfsPointerPaths = []
+            lfsWorkspace.trackedPaths = []
+            lfsWorkspace.pointerPaths = []
             return
         }
         Task.detached(priority: .utility) {
             let states = (try? repo.lfsPathStates(paths: paths)) ?? []
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.lfsTrackedPaths = Set(states.filter(\.tracked).map(\.path))
-                self.lfsPointerPaths = Set(states.filter(\.pointer).map(\.path))
+                guard self.projectWorkspace.repository === repo else { return }
+                self.lfsWorkspace.trackedPaths = Set(states.filter(\.tracked).map(\.path))
+                self.lfsWorkspace.pointerPaths = Set(states.filter(\.pointer).map(\.path))
             }
         }
     }
 
     func reloadLfsState() {
         guard let repo else { return }
-        let allRevisions = lfsShowAllRevisions
-        lfsBusy = true
+        let allRevisions = lfsWorkspace.showAllRevisions
+        lfsWorkspace.busy = true
         Task.detached(priority: .userInitiated) {
             let capability = repo.lfsCapability()
             let patterns = (try? repo.lfsTrackedPatterns()) ?? []
             let files = (try? repo.lfsFiles(allRevisions: allRevisions)) ?? []
             let hooks = repo.lfsHookState()
             await MainActor.run {
-                self.lfsCapability = capability
-                self.lfsPatterns = patterns
-                self.lfsFiles = files
-                self.lfsHooks = hooks
-                self.lfsBusy = false
+                self.lfsWorkspace.capability = capability
+                self.lfsWorkspace.patterns = patterns
+                self.lfsWorkspace.files = files
+                self.lfsWorkspace.hooks = hooks
+                self.lfsWorkspace.busy = false
             }
         }
     }
@@ -53,27 +53,27 @@ extension ContentView {
         operation: @escaping (Repository, GitCancelHandle) throws -> LfsCommandResult
     ) {
         guard let repo else { return }
-        lfsBusy = true
-        lfsFeedback = nil
+        lfsWorkspace.busy = true
+        lfsWorkspace.feedback = nil
         let handle = GitCancelHandle()
         Task.detached(priority: .userInitiated) {
             do {
                 let result = try operation(repo, handle)
                 await MainActor.run {
-                    self.lfsBusy = false
+                    self.lfsWorkspace.busy = false
                     var detail = successDetail ?? (result.output.isEmpty ? nil : result.output)
                     if result.installedFilters {
                         let note = "该仓库之前没有 filter 配置，已执行 git lfs install --local。"
                         detail = detail.map { "\($0)\n\(note)" } ?? note
                     }
-                    self.lfsFeedback = detail
+                    self.lfsWorkspace.feedback = detail
                     self.feedbackCenter.success(title, detail: detail)
                     self.reloadLfsState()
                 }
             } catch {
                 await MainActor.run {
-                    self.lfsBusy = false
-                    self.lfsFeedback = errorMessage(error)
+                    self.lfsWorkspace.busy = false
+                    self.lfsWorkspace.feedback = errorMessage(error)
                     self.feedbackCenter.error(title, detail: errorMessage(error))
                 }
             }
@@ -81,12 +81,12 @@ extension ContentView {
     }
 
     func lfsTrackCurrentInput() {
-        let pattern = lfsTrackInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = lfsWorkspace.trackInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pattern.isEmpty else { return }
         runLfsAction("Track LFS pattern", successDetail: pattern) { repo, _ in
             try repo.lfsTrack(patterns: [pattern])
         }
-        lfsTrackInput = ""
+        lfsWorkspace.trackInput = ""
     }
 
     func lfsUntrack(_ pattern: String) {
@@ -108,13 +108,13 @@ extension ContentView {
     }
 
     private var lfsRemote: String? {
-        let name = lfsRemoteName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = lfsWorkspace.remoteName.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }
 
     func lfsFetchObjects() {
         let remote = lfsRemote
-        let paths = Array(lfsSelectedPaths)
+        let paths = Array(lfsWorkspace.selectedPaths)
         runLfsAction("Fetch LFS objects") { repo, handle in
             try repo.lfsFetch(remote: remote, allRevisions: false, paths: paths, cancel: handle)
         }
@@ -122,7 +122,7 @@ extension ContentView {
 
     func lfsPullObjects() {
         let remote = lfsRemote
-        let paths = Array(lfsSelectedPaths)
+        let paths = Array(lfsWorkspace.selectedPaths)
         runLfsAction("Pull LFS objects") { repo, handle in
             try repo.lfsPull(remote: remote, paths: paths, cancel: handle)
         }
@@ -143,7 +143,7 @@ extension ContentView {
 
     /// 把未下载的 LFS 文件还原成真实内容。没有显式选区时，整仓库 checkout。
     func lfsCheckoutPointers() {
-        let paths = Array(lfsSelectedPaths)
+        let paths = Array(lfsWorkspace.selectedPaths)
         runLfsAction("Checkout LFS files") { repo, handle in
             try repo.lfsCheckout(paths: paths, cancel: handle)
         }

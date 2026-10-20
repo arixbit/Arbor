@@ -52,7 +52,7 @@ func pullSelectedBranch(_ name: String, rebase: Bool) {
                 ? "\(name) ← \(outcome.upstream) (+\(outcome.updatedCommits) commits)"
                 : "\(name) 已是最新"
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Branch pull completed", detail: detail)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -60,7 +60,7 @@ func pullSelectedBranch(_ name: String, rebase: Bool) {
         } catch {
             await MainActor.run {
                 let detail = errorMessage(error)
-                self.loadError = detail
+                self.repositoryStatus.loadError = detail
                 self.feedbackCenter.error(
                     "Branch pull failed",
                     detail: detail,
@@ -122,7 +122,7 @@ func pullRemoteBranchInRoot(
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
     let tagMode = fetchTagsMode
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation(
         rebase ? "Pull remote branch with rebase" : "Pull remote branch",
         cancelHandle: cancel
@@ -193,7 +193,7 @@ func pullRemoteBranchInRoot(
 }
 
 func presentPullDialog(rebase: Bool?) {
-    guard let projectPath,
+    guard let projectPath = projectWorkspace.path,
           isArborVCSActionEnabled(
         rebase == true ? .pullRebase : .pullMerge,
         in: vcsActionContext
@@ -204,16 +204,16 @@ func presentPullDialog(rebase: Bool?) {
         explicit: rebase,
         savedOptions: GitPullDialogSettingsStore.load(for: projectPath).options
     )
-    pullDialogGeneration &+= 1
-    let generation = pullDialogGeneration
-    pullDialogRebase = defaultRebase
-    pullDialogSnapshots = []
-    showPullDialog = false
+    pullWorkspace.generation &+= 1
+    let generation = pullWorkspace.generation
+    pullWorkspace.rebase = defaultRebase
+    pullWorkspace.snapshots = []
+    pullWorkspace.showDialog = false
     Task.detached(priority: .userInitiated) {
         do {
             let snapshots = try listMultiRootBranches(scanRoot: projectPath)
             await MainActor.run {
-                guard self.pullDialogGeneration == generation else { return }
+                guard self.pullWorkspace.generation == generation else { return }
                 guard !snapshots.isEmpty else {
                     self.feedbackCenter.warning(
                         "Pull unavailable",
@@ -222,12 +222,12 @@ func presentPullDialog(rebase: Bool?) {
                     )
                     return
                 }
-                self.pullDialogSnapshots = snapshots
-                self.showPullDialog = true
+                self.pullWorkspace.snapshots = snapshots
+                self.pullWorkspace.showDialog = true
             }
         } catch {
             await MainActor.run {
-                guard self.pullDialogGeneration == generation else { return }
+                guard self.pullWorkspace.generation == generation else { return }
                 self.feedbackCenter.error(
                     "Pull dialog unavailable",
                     detail: errorMessage(error),
@@ -239,7 +239,7 @@ func presentPullDialog(rebase: Bool?) {
 }
 
 func savePullDialogSettings(_ options: PullDialogOptions) {
-    var selected = GitPullDialogSettingsStore.load(for: projectPath).options
+    var selected = GitPullDialogSettingsStore.load(for: projectWorkspace.path).options
     selected.removeAll()
     if options.rebase { selected.insert(.rebase) }
     switch options.mode {
@@ -252,18 +252,18 @@ func savePullDialogSettings(_ options: PullDialogOptions) {
     if options.noVerify { selected.insert(.noVerify) }
     GitPullDialogSettingsStore.save(
         GitPullDialogSettings(options: selected),
-        for: projectPath
+        for: projectWorkspace.path
     )
 }
 
 func refreshPullDialogSnapshots() {
-    guard let projectPath else { return }
-    let generation = pullDialogGeneration
+    guard let projectPath = projectWorkspace.path else { return }
+    let generation = pullWorkspace.generation
     Task.detached(priority: .utility) {
         guard let snapshots = try? listMultiRootBranches(scanRoot: projectPath) else { return }
         await MainActor.run {
-            guard self.pullDialogGeneration == generation, self.showPullDialog else { return }
-            self.pullDialogSnapshots = snapshots
+            guard self.pullWorkspace.generation == generation, self.pullWorkspace.showDialog else { return }
+            self.pullWorkspace.snapshots = snapshots
         }
     }
 }
@@ -278,10 +278,10 @@ func executePullDialogSelection(_ selection: PullDialogSelection) {
     let selectedRootPath = canonicalExternalLogPath(selection.rootPath)
     let currentRootPath = repo?.workdir().map(canonicalExternalLogPath)
     guard !selection.remoteBranch.isEmpty,
-          !multiRootRunning,
-          operationState == nil,
+          !multiRootWorkspace.running,
+          operationRecovery.operation == nil,
           !feedbackCenter.isRunning,
-          !multiRoots.contains(where: { root in
+          !multiRootWorkspace.roots.contains(where: { root in
               canonicalExternalLogPath(root.path) == selectedRootPath && root.operation != nil
           }),
           isArborVCSActionEnabled(
@@ -335,7 +335,7 @@ func doPull(
     autoOpenUpdateInfo: Bool = false,
     onComplete: (() -> Void)? = nil
 ) {
-    guard repo != nil, !remotes.isEmpty else { return }
+    guard repo != nil, !remoteWorkspace.remotes.isEmpty else { return }
     if hasTrackedChanges || hasUntrackedOrIgnoredFiles {
         // Match Rebased: preserve the complete local workspace automatically.
         // This includes untracked/ignored files so users never need to Add or
@@ -360,7 +360,7 @@ func doPull(
 }
 
 func pullRemoteBranch(_ branch: RemoteBranchInfo, rebase: Bool) {
-    guard repo != nil, !remotes.isEmpty else { return }
+    guard repo != nil, !remoteWorkspace.remotes.isEmpty else { return }
     if hasTrackedChanges || hasUntrackedOrIgnoredFiles {
         stashAndPull(
             remote: nil,
@@ -432,7 +432,7 @@ func runPull(
     let pullRebaseSeed: RebaseUndoSeed? = {
         guard rebase else { return nil }
         if (try? repo.operationState()) != nil {
-            return rebaseUndoSeed
+            return rebaseWorkspace.undoSeed
         }
         guard let branch = (try? repo.branchList())?.first(where: { $0.isCurrent })?.name else {
             return nil
@@ -450,8 +450,8 @@ func runPull(
         )
     }()
     if rebase {
-        rebaseUndoTarget = nil
-        rebaseUndoSeed = pullRebaseSeed
+        rebaseWorkspace.undoTarget = nil
+        rebaseWorkspace.undoSeed = pullRebaseSeed
         if let pullRebaseSeed {
             saveRebaseUndoSeed(pullRebaseSeed)
         }
@@ -612,12 +612,12 @@ func runPull(
                         )
                     }
                     .map { [$0] } ?? []
-                self.entries = st
-                self.toolWindowMode = .commit
+                self.repositoryStatus.entries = st
+                self.projectWorkspace.toolWindowMode = .commit
                 self.toolWindowExpanded = true
-                self.rebasePaused = !mo.conflicts.isEmpty && rebase
-                self.rebasePauseReason = rebase && !mo.conflicts.isEmpty ? .conflict : nil
-                self.rebaseConflicts = rebase ? mo.conflicts : []
+                self.rebaseWorkspace.paused = !mo.conflicts.isEmpty && rebase
+                self.rebaseWorkspace.pauseReason = rebase && !mo.conflicts.isEmpty ? .conflict : nil
+                self.rebaseWorkspace.conflicts = rebase ? mo.conflicts : []
                 let localRestoreCompleted = stashPopConflictPaths == nil
                     && shelfPopConflictsValue == nil
                     && stashPopErrorMessage == nil
@@ -625,19 +625,19 @@ func runPull(
                     && shelfPopErrorMessage == nil
                     && !shelfPopCancelledValue
                 if rebase, !mo.conflicts.isEmpty {
-                    self.rebaseUndoSeed = pullRebaseSeed
+                    self.rebaseWorkspace.undoSeed = pullRebaseSeed
                     if let pullRebaseSeed {
                         saveRebaseUndoSeed(pullRebaseSeed)
                     }
                 } else if rebase, localRestoreCompleted {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = completedRebaseUndoTarget
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = completedRebaseUndoTarget
                     if let pullRebaseSeed {
                         clearRebaseUndoSeed(repositoryPath: pullRebaseSeed.repositoryPath)
                     }
                 } else if rebase {
-                    self.rebaseUndoSeed = pullRebaseSeed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = pullRebaseSeed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let pullRebaseSeed {
                         saveRebaseUndoSeed(pullRebaseSeed)
                     }
@@ -670,37 +670,37 @@ func runPull(
                         isPop: true
                     )
                 }
-                self.mergeInProgress = (!rebase && mo.requiresFinish)
+                self.mergeWorkspace.inProgress = (!rebase && mo.requiresFinish)
                     || stashPopConflictPaths != nil
                     || shelfPopConflictsValue != nil
-                self.selection = shelfPopConflictsValue?.first
+                self.fileWorkspace.selection = shelfPopConflictsValue?.first
                     ?? stashPopConflictPaths?.first
                     ?? mo.conflicts.first
-                self.showMergeRevisionsDialog = !mo.conflicts.isEmpty
+                self.operationRecovery.showConflictResolver = !mo.conflicts.isEmpty
                     || stashPopConflictPaths != nil
                     || shelfPopConflictsValue != nil
                 if let stashPopConflictPaths {
-                    self.mergeFeedback = "pull 完成，但恢复本地变更时发生冲突：\(stashPopConflictPaths.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "pull 完成，但恢复本地变更时发生冲突：\(stashPopConflictPaths.joined(separator: ", "))"
                 } else if let shelfPopConflictsValue {
-                    self.mergeFeedback = "pull 完成，但恢复 Shelf 本地变更时发生冲突：\(shelfPopConflictsValue.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "pull 完成，但恢复 Shelf 本地变更时发生冲突：\(shelfPopConflictsValue.joined(separator: ", "))"
                 } else if !mo.conflicts.isEmpty {
-                    self.mergeFeedback = "pull\(rebase ? " --rebase" : "") 冲突 \(mo.conflicts.count) 个文件"
+                    self.mergeWorkspace.feedback = "pull\(rebase ? " --rebase" : "") 冲突 \(mo.conflicts.count) 个文件"
                 } else if let stashPopErrorMessage {
-                    self.mergeFeedback = "pull 完成，但自动 stash pop 产生冲突：\(stashPopErrorMessage)"
+                    self.mergeWorkspace.feedback = "pull 完成，但自动 stash pop 产生冲突：\(stashPopErrorMessage)"
                 } else if let shelfPopErrorMessage {
-                    self.mergeFeedback = "pull 完成，但自动 Shelf 恢复失败：\(shelfPopErrorMessage)"
+                    self.mergeWorkspace.feedback = "pull 完成，但自动 Shelf 恢复失败：\(shelfPopErrorMessage)"
                 } else if stashPopCancelledValue {
-                    self.mergeFeedback = "pull 完成，但恢复 Stash 本地变更已取消，Stash 已保留"
+                    self.mergeWorkspace.feedback = "pull 完成，但恢复 Stash 本地变更已取消，Stash 已保留"
                 } else if shelfPopCancelledValue {
-                    self.mergeFeedback = "pull 完成，但恢复 Shelf 本地变更已取消，Shelf 已保留"
+                    self.mergeWorkspace.feedback = "pull 完成，但恢复 Shelf 本地变更已取消，Shelf 已保留"
                 } else if mo.updatedCommits > 0, !mo.upstream.isEmpty, !mo.branch.isEmpty {
-                    self.mergeFeedback = "已更新 \(mo.upstream) → \(mo.branch)（+\(mo.updatedCommits) commits）"
+                    self.mergeWorkspace.feedback = "已更新 \(mo.upstream) → \(mo.branch)（+\(mo.updatedCommits) commits）"
                 } else if stashWillBePopped || shelfToRestore != nil {
-                    self.mergeFeedback = "pull 完成，已恢复本地变更"
+                    self.mergeWorkspace.feedback = "pull 完成，已恢复本地变更"
                 } else {
-                    self.mergeFeedback = "pull 完成（已是最新）"
+                    self.mergeWorkspace.feedback = "pull 完成（已是最新）"
                 }
-                let detail = self.mergeFeedback ?? "pull 完成"
+                let detail = self.mergeWorkspace.feedback ?? "pull 完成"
                 let rebaseRecoveryAction = rebase && !mo.conflicts.isEmpty
                     ? pullRebaseSeed.map {
                         self.persistedRebaseRecoveryAction(
@@ -882,20 +882,20 @@ func runPull(
                 }
                 if rebaseStillActive {
                     if let pullRebaseSeed {
-                        self.rebaseUndoSeed = pullRebaseSeed
+                        self.rebaseWorkspace.undoSeed = pullRebaseSeed
                         saveRebaseUndoSeed(pullRebaseSeed)
                     }
-                    self.rebasePaused = true
-                    self.rebasePauseReason = .conflict
-                    self.rebaseConflicts = failedOperationState?.conflictedFiles ?? []
-                    self.operationState = failedOperationState
-                    self.showMergeRevisionsDialog = true
+                    self.rebaseWorkspace.paused = true
+                    self.rebaseWorkspace.pauseReason = .conflict
+                    self.rebaseWorkspace.conflicts = failedOperationState?.conflictedFiles ?? []
+                    self.operationRecovery.operation = failedOperationState
+                    self.operationRecovery.showConflictResolver = true
                 } else if rebase {
-                    self.rebasePaused = false
-                    self.rebasePauseReason = nil
-                    self.rebaseConflicts = []
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.paused = false
+                    self.rebaseWorkspace.pauseReason = nil
+                    self.rebaseWorkspace.conflicts = []
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     if let pullRebaseSeed {
                         clearRebaseUndoSeed(repositoryPath: pullRebaseSeed.repositoryPath)
                     }
@@ -931,19 +931,19 @@ func runPull(
                     return paths
                 }()
                 if let shelfRestoreConflictPathsValue {
-                    self.mergeFeedback = "pull 失败：\(pullError)；恢复 Shelf 本地变更时发生冲突：\(shelfRestoreConflictPathsValue.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "pull 失败：\(pullError)；恢复 Shelf 本地变更时发生冲突：\(shelfRestoreConflictPathsValue.joined(separator: ", "))"
                 } else if let stashRestoreConflictPathsValue {
-                    self.mergeFeedback = "pull 失败：\(pullError)；恢复 stash 本地变更时发生冲突：\(stashRestoreConflictPathsValue.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "pull 失败：\(pullError)；恢复 stash 本地变更时发生冲突：\(stashRestoreConflictPathsValue.joined(separator: ", "))"
                 } else if let restoreErrorMessage {
-                    self.mergeFeedback = "pull 失败：\(pullError)；自动恢复本地变更失败：\(restoreErrorMessage)"
+                    self.mergeWorkspace.feedback = "pull 失败：\(pullError)；自动恢复本地变更失败：\(restoreErrorMessage)"
                 } else if stashWillBePopped || shelfToRestore != nil {
-                    self.mergeFeedback = "pull 失败，已恢复本地变更：\(pullError)"
+                    self.mergeWorkspace.feedback = "pull 失败，已恢复本地变更：\(pullError)"
                 } else if let untrackedPaths {
-                    self.mergeFeedback = "远程更新涉及本地未跟踪文件，正在临时保存后重试：\(untrackedPaths.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "远程更新涉及本地未跟踪文件，正在临时保存后重试：\(untrackedPaths.joined(separator: ", "))"
                 } else {
-                    self.mergeFeedback = pullError
+                    self.mergeWorkspace.feedback = pullError
                 }
-                let detail = self.mergeFeedback ?? pullError
+                let detail = self.mergeWorkspace.feedback ?? pullError
                 let upstreamAction = self.chooseUpstreamFeedbackAction(for: error)
                 let recoveryActions = savedChangesActions
                     + (rebaseRecoveryAction.map { [$0] } ?? [])
@@ -998,7 +998,7 @@ func runPull(
                         additionalActions: recoveryActions,
                         notificationID: self.multiRootUpdateErrorNotificationID()
                     )
-                    if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                    if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
                 }
                 if rebaseStillActive || stashWillBePopped || shelfToRestore != nil {
                     self.refreshAll(showFeedback: false)
@@ -1022,7 +1022,7 @@ func temporarilySaveWorkspaceAndRetryPull(
 ) {
     guard let repo else { return }
     beginFeedbackOperation("Preserve local files and retry pull")
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let preservation = try Self.saveLocalChangesBeforePull(
@@ -1041,7 +1041,7 @@ func temporarilySaveWorkspaceAndRetryPull(
                 self.stashRecovery.pendingPullStashPop = savedStash
                 self.stashRecovery.pendingPullStashID = preservation.stashID
                 self.stashRecovery.pendingPullStashMessage = preservation.stashMessage
-                self.mergeFeedback = "已临时保存本地文件，正在重试 pull：\(paths.joined(separator: ", "))"
+                self.mergeWorkspace.feedback = "已临时保存本地文件，正在重试 pull：\(paths.joined(separator: ", "))"
                 self.runPull(
                         remote: remote,
                         remoteBranch: remoteBranch,
@@ -1058,7 +1058,7 @@ func temporarilySaveWorkspaceAndRetryPull(
         } catch {
             await MainActor.run {
                 let detail = errorMessage(error)
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 self.feedbackCenter.error("Preserve local files failed", detail: detail, nextStep: "Keep the files local and retry after checking the worktree.")
             }
         }

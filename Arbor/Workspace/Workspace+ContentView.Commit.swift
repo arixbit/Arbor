@@ -13,7 +13,7 @@ func commitRewordFeedbackAction(
 ) -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .rewordCommit,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         rewordCommitID: commitID
@@ -59,7 +59,7 @@ func openRewordCommit(rootPath: String, commitID: String) {
     logSelectionState.selection = nil
     logSelectionState.selectedIDs = []
     logList.viewMode = .graph
-    toolWindowMode = .log
+    projectWorkspace.toolWindowMode = .log
     toolWindowExpanded = true
     projectPanelExpanded = false
 
@@ -118,8 +118,8 @@ func openRewordCommit(rootPath: String, commitID: String) {
                     : "\(commit.summary)\n\n\(commit.messageBody)"
                 self.logRewrite.rewordUsesRootRebase = false
                 if commit.parentIds.isEmpty {
-                    self.pendingInitialCommitReword = commit
-                    self.showInitialCommitRewordAlert = true
+                    self.logRewrite.pendingInitialCommitReword = commit
+                    self.logRewrite.showInitialCommitRewordAlert = true
                 } else {
                     self.logRewrite.showRewordDialog = true
                 }
@@ -364,7 +364,7 @@ func revertCommitsFromLog(_ commits: [CommitInfo]) {
 
 func resetCommit(_ commit: CommitInfo, mode: ResetMode) {
     guard let repo = logRepository(for: commit) else { return }
-    GitResetModeSettings.save(GitResetModeChoice(mode), for: projectPath)
+    GitResetModeSettings.save(GitResetModeChoice(mode), for: projectWorkspace.path)
     runResetCommit(repo: repo, id: commit.id, mode: mode, preserveLocalChanges: false)
 }
 
@@ -375,7 +375,7 @@ func runResetCommit(
     preserveLocalChanges: Bool
 ) {
     beginFeedbackOperation("Reset branch")
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let recovery = try repo.resetWithRecovery(
@@ -386,7 +386,7 @@ func runResetCommit(
                 force: false
             )
             await MainActor.run {
-                self.commitFeedback = "已 \(resetModeName(mode)) reset 到 \(String(id.prefix(7)))"
+                self.commitWorkspace.feedback = "已 \(resetModeName(mode)) reset 到 \(String(id.prefix(7)))"
                 let recoveryTarget = recovery.rollbackId.map {
                     PersistedResetRecoveryTarget(
                         rootPath: repo.workdir() ?? "",
@@ -412,7 +412,7 @@ func runResetCommit(
             }
         } catch {
             await MainActor.run {
-                self.commitFeedback = errorMessage(error)
+                self.commitWorkspace.feedback = errorMessage(error)
                 if case let .LocalChangesWouldBeOverwritten(paths) = error as? EngineError {
                     self.feedbackCenter.warning(
                         "Reset needs a decision",
@@ -475,7 +475,7 @@ func runResetCommit(
 
 func forceResetCommit(repo: Repository, id: String) {
     beginFeedbackOperation("Force reset branch")
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let recovery = try repo.resetWithRecovery(
@@ -486,7 +486,7 @@ func forceResetCommit(repo: Repository, id: String) {
                 force: true
             )
             await MainActor.run {
-                self.commitFeedback = "已 hard reset 到 \(String(id.prefix(7)))"
+                self.commitWorkspace.feedback = "已 hard reset 到 \(String(id.prefix(7)))"
                 let recoveryTarget = recovery.rollbackId.map {
                     PersistedResetRecoveryTarget(
                         rootPath: repo.workdir() ?? "",
@@ -526,9 +526,9 @@ func forceResetCommit(repo: Repository, id: String) {
 /// deliberately direct so the engine can return every affected path; only the
 /// explicit Smart/Force choice retries the roots that were actually blocked.
 func resetCommitsAcrossRoots(_ commit: CommitInfo, mode: ResetMode) {
-    guard let projectPath, multiRoots.count > 1 else { return }
+    guard let projectPath = projectWorkspace.path, multiRootWorkspace.roots.count > 1 else { return }
     GitResetModeSettings.save(GitResetModeChoice(mode), for: projectPath)
-    let selectedRootPaths = multiRoots.map(\.path)
+    let selectedRootPaths = multiRootWorkspace.roots.map(\.path)
     runMultiRootResetOperation(
         projectPath: projectPath,
         selectedRootPaths: selectedRootPaths,
@@ -541,7 +541,7 @@ func resetCommitsAcrossRoots(_ commit: CommitInfo, mode: ResetMode) {
 
 /// Reset the Log selection with one target revision per owning Git root.
 func resetCommitsAcrossRoots(_ commits: [CommitInfo], mode: ResetMode) {
-    guard let projectPath, isResetSelectionAvailable(for: commits) else { return }
+    guard let projectPath = projectWorkspace.path, isResetSelectionAvailable(for: commits) else { return }
     GitResetModeSettings.save(GitResetModeChoice(mode), for: projectPath)
     let targets = commits.compactMap { commit -> MultiRootResetTarget? in
         guard let repository = logRepository(for: commit),
@@ -622,7 +622,7 @@ func uncommitFromLog(_ selectedCommit: CommitInfo) {
             let rootChangeLists = try selectedRepo.changelistList()
             let headBranch = (try? selectedRepo.branchList())?.first(where: { $0.isCurrent })?.name
             await MainActor.run {
-                self.uncommitRequest = RebasedUncommitRequest(
+                self.commitWorkspace.uncommitRequest = RebasedUncommitRequest(
                     commit: head,
                     repositoryPath: repositoryPath,
                     changedPaths: changedPaths,
@@ -672,10 +672,10 @@ func performUncommit(_ request: RebasedUncommitRequest, targetName: String) {
             await MainActor.run {
                 // IntelliJ restores the undone commit's full message into the
                 // Changes workflow so the user can recommit without copying it.
-                self.commitMessage = restoredCommitMessage
-                self.commitFeedback = "已撤销最近一次提交，变更仍保留在暂存区"
+                self.commitWorkspace.message = restoredCommitMessage
+                self.commitWorkspace.feedback = "已撤销最近一次提交，变更仍保留在暂存区"
                 if self.repo?.workdir() == request.repositoryPath {
-                    self.changeLists = lists
+                    self.repositoryStatus.changeLists = lists
                     self.refreshAll(showFeedback: false)
                 } else {
                     self.loadMultiRoots {
@@ -730,7 +730,7 @@ func uncommitUndoRequest(
     guard let expectedHead = request.commit.parentIds.first else { return nil }
     return ArborVCSActionRequest(
         kind: .undoUncommit,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: request.repositoryPath,
         shelfName: "",
         uncommitCommitID: request.commit.id,
@@ -892,18 +892,18 @@ func undoRewordCommit(
 /// first changed row in the repository.
 func beginFileCheckin(_ path: String) {
     guard let normalizedPath = normalizedRepositoryRelativePath(path) else { return }
-    toolWindowMode = .commit
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     projectPanelExpanded = false
     shelfWorkspace.isWorkspaceTabActive = false
-    commitPreviewPath = normalizedPath
-    commitPreviewMode = .unstaged
-    commitPreviewComparisonMode = nil
-    commitPreviewThreeVersions = false
-    commitPreviewVisible = true
-    selection = nil
-    fileSelection = nil
-    selectionModePath = nil
+    fileWorkspace.previewPath = normalizedPath
+    fileWorkspace.previewMode = .unstaged
+    fileWorkspace.previewComparisonMode = nil
+    fileWorkspace.previewThreeVersions = false
+    fileWorkspace.previewVisible = true
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
 }
 
 struct BeforeCommitCheckError: Error {
@@ -1054,22 +1054,22 @@ nonisolated func collectMultiRootCommitWarnings(
 }
 
 func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
-    guard let repo, !commitMessage.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-    let isRebaseEditAmend = amendMode && rebaseEditPauseAllowsAmend(operationState)
-    guard operationState == nil || isRebaseEditAmend else { return }
-    beginFeedbackOperation(amendMode ? "Amend commit" : "Commit")
-    let msg = commitMessage
-    let isAmend = amendMode
-    let hooks = GitCommitHooksSettings.effectiveSkipHooks(requested: self.skipHooks)
-    let checks = beforeCommitCommands
-    let authorName = identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let authorEmail = identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerName = identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerEmail = identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let signOff = identitySignOff
-    let coAuthors = parseCoAuthors(identityCoAuthors)
-    let pendingRebase = rebaseAfterCommit ? pendingAutoSquashRebase : nil
-    let operationProjectPath = projectPath
+    guard let repo, !commitWorkspace.message.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    let isRebaseEditAmend = commitWorkspace.amendMode && rebaseEditPauseAllowsAmend(operationRecovery.operation)
+    guard operationRecovery.operation == nil || isRebaseEditAmend else { return }
+    beginFeedbackOperation(commitWorkspace.amendMode ? "Amend commit" : "Commit")
+    let msg = commitWorkspace.message
+    let isAmend = commitWorkspace.amendMode
+    let hooks = GitCommitHooksSettings.effectiveSkipHooks(requested: self.commitWorkspace.skipHooks)
+    let checks = commitWorkspace.beforeCommitCommands
+    let authorName = gitSettings.identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let authorEmail = gitSettings.identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerName = gitSettings.identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerEmail = gitSettings.identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let signOff = gitSettings.identitySignOff
+    let coAuthors = parseCoAuthors(gitSettings.identityCoAuthors)
+    let pendingRebase = rebaseAfterCommit ? rebaseWorkspace.pendingAutoSquash : nil
+    let operationProjectPath = projectWorkspace.path
     let operationRootPath = repo.workdir() ?? ""
     let operationRootLabel = operationRootPath.isEmpty
         ? ""
@@ -1090,7 +1090,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
             let blocking = builtin.filter { $0.blocking }
             if !blocking.isEmpty {
                 await MainActor.run {
-                    self.pendingCommitAndPush = false
+                    self.commitWorkspace.pendingCommitAndPush = false
                     let kinds = blocking.map { $0.kind }.map { kind -> String in
                         switch kind {
                         case .identityMissing: return "Git 身份未配置 (user.name / user.email)"
@@ -1104,8 +1104,8 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                         nextStep: "配置身份或解决冲突后重试。"
                     )
                     if blocking.contains(where: { $0.kind == .identityMissing }) {
-                        self.pendingIdentityCommitRetry = true
-                        self.showIdentitySettings = true
+                        self.gitSettings.pendingIdentityCommitRetry = true
+                        self.gitSettings.showIdentitySettings = true
                     }
                 }
                 return
@@ -1124,8 +1124,8 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                 }
                 guard decision.shouldContinue else {
                     await MainActor.run {
-                        self.pendingCommitAndPush = false
-                        self.commitFeedback = "Commit cancelled"
+                        self.commitWorkspace.pendingCommitAndPush = false
+                        self.commitWorkspace.feedback = "Commit cancelled"
                         self.feedbackCenter.warning(
                             "Commit cancelled",
                             detail: "Review the pre-commit warnings before committing.",
@@ -1172,31 +1172,31 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
             let branchList = (try? repo.branchList()) ?? []
             let syncStatuses = (try? repo.syncStatus()) ?? []
             await MainActor.run {
-                self.entries = st; self.headId = hid
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.entries = st; self.repositoryStatus.headId = hid
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.branchWorkspace.branches = branchList
                 self.branchWorkspace.syncStatuses = syncStatuses
                 self.logSelectionState.detailCommit = nil
-                if self.toolWindowMode == .log {
+                if self.projectWorkspace.toolWindowMode == .log {
                     // The Log workspace stays live beside Commit in Rebased;
                     // committing from the left pane must immediately move
                     // the graph and inspector to the new HEAD.
                     self.loadLog()
                 }
-                self.recentMessages = recent
-                self.commitMessage = ""
+                self.commitWorkspace.recentMessages = recent
+                self.commitWorkspace.message = ""
                 if isRebaseEditAmend {
                     self.refreshAll(showFeedback: false)
                     let recoveryActions = repositoryPath.flatMap { rootPath in
-                        self.operationState.map {
+                        self.operationRecovery.operation.map {
                             self.operationRecoveryFeedbackActions(
                                 state: $0,
                                 rootPath: rootPath
                             )
                         }
                     } ?? []
-                    self.commitFeedback = "已 Amend rebase edit \(String(id.prefix(7)))"
+                    self.commitWorkspace.feedback = "已 Amend rebase edit \(String(id.prefix(7)))"
                     self.feedbackCenter.success(
                         "Rebase commit amended",
                         detail: "\(String(id.prefix(7)))；请从恢复栏 Continue Rebase。",
@@ -1209,10 +1209,10 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                     )
                     return
                 }
-                let shouldOpenPushDialog = self.pendingCommitAndPush
-                self.pendingCommitAndPush = false
-                self.pendingAutoSquashRebase = nil
-                self.commitFeedback = isAmend
+                let shouldOpenPushDialog = self.commitWorkspace.pendingCommitAndPush
+                self.commitWorkspace.pendingCommitAndPush = false
+                self.rebaseWorkspace.pendingAutoSquash = nil
+                self.commitWorkspace.feedback = isAmend
                     ? "已 Amend \(String(id.prefix(7)))"
                     : "已提交 \(String(id.prefix(7)))"
                 let rewordAction = repositoryPath.map {
@@ -1233,7 +1233,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                             || $0.unstaged != .unchanged
                     }
                     if hasResidualChanges {
-                        self.commitFeedback = "已提交；为保护未提交改动，未自动变基"
+                        self.commitWorkspace.feedback = "已提交；为保护未提交改动，未自动变基"
                         self.feedbackCenter.warning(
                             "Commit completed; rebase skipped",
                             detail: "Uncommitted changes remain after the partial commit.",
@@ -1264,13 +1264,13 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                     if alert.runModal() == .alertFirstButtonReturn {
                         self.doCommit(forceChecks: true, rebaseAfterCommit: rebaseAfterCommit)
                     } else {
-                        self.pendingCommitAndPush = false
+                        self.commitWorkspace.pendingCommitAndPush = false
                     }
                     return
                 }
-                self.pendingCommitAndPush = false
-                self.commitFeedback = errorMessage(error)
-                self.loadError = self.commitFeedback
+                self.commitWorkspace.pendingCommitAndPush = false
+                self.commitWorkspace.feedback = errorMessage(error)
+                self.repositoryStatus.loadError = self.commitWorkspace.feedback
                 let detail = errorMessage(error)
                 if gitCommitSigningFailureNeedsGPGConfiguration(detail) {
                     self.feedbackCenter.error(
@@ -1292,8 +1292,8 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
 /// include untracked files.
 func commitAllTrackedChanges() {
     guard let repo,
-          !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          entries.contains(where: {
+          !commitWorkspace.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          repositoryStatus.entries.contains(where: {
               $0.staged != .conflicted
                   && $0.unstaged != .conflicted
                   && $0.unstaged != .unchanged
@@ -1360,8 +1360,8 @@ func rewriteCommitFromLog(
             ? commit.summary
             : "\(commit.summary)\n\n\(commit.messageBody)"
         if commit.parentIds.isEmpty {
-            pendingInitialCommitReword = commit
-            showInitialCommitRewordAlert = true
+            logRewrite.pendingInitialCommitReword = commit
+            logRewrite.showInitialCommitRewordAlert = true
         } else {
             logRewrite.showRewordDialog = true
         }
@@ -1381,11 +1381,11 @@ func rewriteCommitFromLog(
     }
     if action == .drop, commit.parentIds.isEmpty {
         if !initialCommitConfirmed {
-            pendingInitialCommitRewrite = PendingInitialCommitRewrite(
+            logRewrite.pendingInitialCommitRewrite = PendingInitialCommitRewrite(
                 commits: [commit],
                 action: action
             )
-            showInitialCommitRewriteAlert = true
+            logRewrite.showInitialCommitRewriteAlert = true
             return
         }
         dropSelectedCommitsFromLog([commit], repository: repo)
@@ -1455,11 +1455,11 @@ func rewriteCommitFromLog(
             let preparedItems = todo.items
 
             await MainActor.run {
-                self.rebaseTodoOnto = onto
-                self.rebaseTodoItems = preparedItems
-                self.rebaseTodoPreserveMerges = false
-                self.rebaseTodoRoot = false
-                self.showRebaseTodoEditor = true
+                self.rebaseWorkspace.todoOnto = onto
+                self.rebaseWorkspace.todoItems = preparedItems
+                self.rebaseWorkspace.todoPreserveMerges = false
+                self.rebaseWorkspace.todoRoot = false
+                self.rebaseWorkspace.showTodoEditor = true
             }
         } catch {
             await MainActor.run {
@@ -1477,8 +1477,8 @@ func rewriteCommitFromLog(
 /// message editor. The engine still uses `--amend --only`, which also works
 /// for a root HEAD commit without importing staged changes.
 func confirmInitialCommitReword() {
-    guard let commit = pendingInitialCommitReword else { return }
-    pendingInitialCommitReword = nil
+    guard let commit = logRewrite.pendingInitialCommitReword else { return }
+    logRewrite.pendingInitialCommitReword = nil
     logRewrite.rewordUsesRootRebase = false
     logRewrite.rewordCommit = commit
     logRewrite.rewordMessage = commit.messageBody.isEmpty
@@ -1514,9 +1514,9 @@ func dropSelectedCommitsFromLog(_ commits: [CommitInfo], repository repo: Reposi
     let commitSummaries = commits.map { $0.summary }
     let protectedPatterns = effectiveProtectedBranchPatterns
     let remoteBranchesForRewrite = activeLogRemoteBranches
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
-    rebaseUndoSeed = nil
-    rebaseUndoTarget = nil
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
+    rebaseWorkspace.undoSeed = nil
+    rebaseWorkspace.undoTarget = nil
     clearRebaseUndoSeed(repositoryPath: repositoryPath)
     let cancel = GitCancelHandle()
     let useInMemory = shouldUseInMemoryCommitEditing(
@@ -1611,27 +1611,27 @@ func dropSelectedCommitsFromLog(_ commits: [CommitInfo], repository repo: Reposi
             )
 
             await MainActor.run {
-                self.entries = status
-                self.rebaseRange = []
-                self.rebaseActions = []
-                self.rebaseTodoItems = []
-                self.rebaseTodoRoot = false
-                self.showRebaseTodoEditor = false
-                self.rebasePaused = outcome.paused
-                self.rebasePauseReason = outcome.pauseReason
-                self.rebaseConflicts = outcome.conflicts
+                self.repositoryStatus.entries = status
+                self.rebaseWorkspace.range = []
+                self.rebaseWorkspace.actions = []
+                self.rebaseWorkspace.todoItems = []
+                self.rebaseWorkspace.todoRoot = false
+                self.rebaseWorkspace.showTodoEditor = false
+                self.rebaseWorkspace.paused = outcome.paused
+                self.rebaseWorkspace.pauseReason = outcome.pauseReason
+                self.rebaseWorkspace.conflicts = outcome.conflicts
                 if outcome.paused, outcome.pauseReason == .conflict {
                     let names = outcome.conflicts.prefix(3).joined(separator: "、")
                     let suffix = names.isEmpty ? "" : "：\(names)"
-                    self.rebaseFeedback = "Drop Commits 冲突 \(outcome.conflicts.count) 个文件\(suffix)，请解决后「继续」"
-                    self.showMergeRevisionsDialog = true
+                    self.rebaseWorkspace.feedback = "Drop Commits 冲突 \(outcome.conflicts.count) 个文件\(suffix)，请解决后「继续」"
+                    self.operationRecovery.showConflictResolver = true
                 } else if outcome.paused {
-                    self.rebaseFeedback = "Drop Commits 已暂停，可修改文件后「继续」"
+                    self.rebaseWorkspace.feedback = "Drop Commits 已暂停，可修改文件后「继续」"
                 } else {
-                    self.rebaseFeedback = "已删除 \(commitIDs.count) 个提交"
+                    self.rebaseWorkspace.feedback = "已删除 \(commitIDs.count) 个提交"
                 }
-                self.rebaseUndoSeed = outcome.paused ? seed : nil
-                self.rebaseUndoTarget = outcome.paused ? nil : undoTarget
+                self.rebaseWorkspace.undoSeed = outcome.paused ? seed : nil
+                self.rebaseWorkspace.undoTarget = outcome.paused ? nil : undoTarget
                 if outcome.paused {
                     saveRebaseUndoSeed(seed)
                 } else {
@@ -1660,10 +1660,10 @@ func dropSelectedCommitsFromLog(_ commits: [CommitInfo], repository repo: Reposi
         } catch {
             if case .Cancelled = error as? EngineError {
                 await MainActor.run {
-                    self.rebaseFeedback = "Drop Commits 已取消；保存的本地现场未被丢弃"
+                    self.rebaseWorkspace.feedback = "Drop Commits 已取消；保存的本地现场未被丢弃"
                     self.feedbackCenter.warning(
                         "Drop Commits cancelled",
-                        detail: self.rebaseFeedback ?? "保存的本地现场未被丢弃",
+                        detail: self.rebaseWorkspace.feedback ?? "保存的本地现场未被丢弃",
                         nextStep: "Check Saved Changes or Stash, then retry when the repository is ready.",
                         additionalActions: self.pendingSavedChangesFeedbackAction(
                             repo: repo,
@@ -1675,8 +1675,8 @@ func dropSelectedCommitsFromLog(_ commits: [CommitInfo], repository repo: Reposi
             }
             await MainActor.run {
                 if (try? repo.operationState())?.kind != .rebase {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     clearRebaseUndoSeed(repositoryPath: repositoryPath)
                 }
                 self.feedbackCenter.error(
@@ -1745,11 +1745,11 @@ func rewriteSelectedCommitsFromLog(
     }
 
     if selected.contains(where: { $0.parentIds.isEmpty }), !initialCommitConfirmed {
-        pendingInitialCommitRewrite = PendingInitialCommitRewrite(
+        logRewrite.pendingInitialCommitRewrite = PendingInitialCommitRewrite(
             commits: selected,
             action: action
         )
-        showInitialCommitRewriteAlert = true
+        logRewrite.showInitialCommitRewriteAlert = true
         return
     }
 
@@ -1880,10 +1880,10 @@ func rewriteSelectedCommitsFromLog(
             let squashSummaries = squashCommits.map(\.summary)
             let squashMessage = prettySquashMessage(squashCommits)
             await MainActor.run {
-                self.rebaseTodoOnto = onto
-                self.rebaseTodoItems = preparedItems
-                self.rebaseTodoPreserveMerges = false
-                self.rebaseTodoRoot = rootRebase
+                self.rebaseWorkspace.todoOnto = onto
+                self.rebaseWorkspace.todoItems = preparedItems
+                self.rebaseWorkspace.todoPreserveMerges = false
+                self.rebaseWorkspace.todoRoot = rootRebase
                 if action == .squash {
                     self.logRewrite.squashIndexes = preparedSquashIndexes
                     self.logRewrite.squashSummaries = squashSummaries
@@ -1894,7 +1894,7 @@ func rewriteSelectedCommitsFromLog(
                     )
                     self.logRewrite.showSquashDialog = true
                 } else {
-                    self.showRebaseTodoEditor = true
+                    self.rebaseWorkspace.showTodoEditor = true
                 }
             }
         } catch {
@@ -1914,8 +1914,8 @@ func rewriteSelectedCommitsFromLog(
 /// Continue the IntelliJ-style warning shown before a multi-selection that
 /// includes the initial commit enters the root todo editor.
 func confirmInitialCommitRewrite() {
-    guard let pending = pendingInitialCommitRewrite else { return }
-    pendingInitialCommitRewrite = nil
+    guard let pending = logRewrite.pendingInitialCommitRewrite else { return }
+    logRewrite.pendingInitialCommitRewrite = nil
     if pending.commits.count == 1,
        let commit = pending.commits.first,
        pending.action == .drop {
@@ -1932,42 +1932,42 @@ func confirmInitialCommitRewrite() {
 /// Open the project-level Changes Browser without widening the write boundary
 /// of the existing single-root commit workspace.
 func openMultiRootCommitDialog(_ selectedChanges: [MultiRootChangeSelection]? = nil) {
-    multiRootCommitSelectedPaths = selectedChanges
-    multiRootCommitMessage = ""
-    multiRootCommitRecentMessages = []
-    multiRootCommitAmendMode = false
-    multiRootCommitSkipHooks = skipHooks
-    multiRootCommitAuthorName = identityAuthorName
-    multiRootCommitAuthorEmail = identityAuthorEmail
-    multiRootCommitCommitterName = identityCommitterName
-    multiRootCommitCommitterEmail = identityCommitterEmail
-    multiRootCommitSignOff = identitySignOff
-    multiRootCommitCoAuthors = identityCoAuthors
-    showMultiRootCommitDialog = true
+    commitWorkspace.multiRootSelectedPaths = selectedChanges
+    commitWorkspace.multiRootMessage = ""
+    commitWorkspace.multiRootRecentMessages = []
+    commitWorkspace.multiRootAmendMode = false
+    commitWorkspace.multiRootSkipHooks = commitWorkspace.skipHooks
+    commitWorkspace.multiRootAuthorName = gitSettings.identityAuthorName
+    commitWorkspace.multiRootAuthorEmail = gitSettings.identityAuthorEmail
+    commitWorkspace.multiRootCommitterName = gitSettings.identityCommitterName
+    commitWorkspace.multiRootCommitterEmail = gitSettings.identityCommitterEmail
+    commitWorkspace.multiRootSignOff = gitSettings.identitySignOff
+    commitWorkspace.multiRootCoAuthors = gitSettings.identityCoAuthors
+    commitWorkspace.showMultiRootDialog = true
     loadMultiRootChanges()
-    loadMultiRootCommitMetadata(rootPaths: multiRoots.map(\.path))
+    loadMultiRootCommitMetadata(rootPaths: multiRootWorkspace.roots.map(\.path))
 }
 
 func currentMultiRootCommitOptions() -> MultiRootCommitOptions {
     MultiRootCommitOptions(
-        skipHooks: multiRootCommitSkipHooks,
-        authorName: multiRootCommitAuthorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        skipHooks: commitWorkspace.multiRootSkipHooks,
+        authorName: commitWorkspace.multiRootAuthorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? nil
-            : multiRootCommitAuthorName.trimmingCharacters(in: .whitespacesAndNewlines),
-        authorEmail: multiRootCommitAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            : commitWorkspace.multiRootAuthorName.trimmingCharacters(in: .whitespacesAndNewlines),
+        authorEmail: commitWorkspace.multiRootAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? nil
-            : multiRootCommitAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines),
-        committerName: multiRootCommitCommitterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            : commitWorkspace.multiRootAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+        committerName: commitWorkspace.multiRootCommitterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? nil
-            : multiRootCommitCommitterName.trimmingCharacters(in: .whitespacesAndNewlines),
-        committerEmail: multiRootCommitCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            : commitWorkspace.multiRootCommitterName.trimmingCharacters(in: .whitespacesAndNewlines),
+        committerEmail: commitWorkspace.multiRootCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? nil
-            : multiRootCommitCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines),
-        signOff: multiRootCommitSignOff,
-        coAuthors: parseCoAuthors(multiRootCommitCoAuthors),
-        amend: multiRootCommitAmendMode,
+            : commitWorkspace.multiRootCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+        signOff: commitWorkspace.multiRootSignOff,
+        coAuthors: parseCoAuthors(commitWorkspace.multiRootCoAuthors),
+        amend: commitWorkspace.multiRootAmendMode,
         runBeforeCommitChecks: true,
-        beforeCommitCommands: beforeCommitCommands.map {
+        beforeCommitCommands: commitWorkspace.beforeCommitCommands.map {
             MultiRootCommitCheck(command: $0.command, args: $0.args)
         }
     )
@@ -2024,13 +2024,13 @@ func performMultiRootCommit(
     priorPushRootPaths: [String] = [],
     selectedChanges: [MultiRootChangeSelection]? = nil
 ) {
-    guard !rootPaths.isEmpty, !message.isEmpty, let projectPath else { return }
+    guard !rootPaths.isEmpty, !message.isEmpty, let projectPath = projectWorkspace.path else { return }
     var options = requestedOptions
     options.skipHooks = GitCommitHooksSettings.effectiveSkipHooks(
         requested: requestedOptions.skipHooks
     )
-    showMultiRootCommitDialog = false
-    multiRootRunning = true
+    commitWorkspace.showMultiRootDialog = false
+    multiRootWorkspace.running = true
     beginFeedbackOperation(
         "Multi-root commit",
         notificationID: multiRootRetryNotificationID(.commit)
@@ -2058,7 +2058,7 @@ func performMultiRootCommit(
                 }
                 guard decision.shouldContinue else {
                     await MainActor.run {
-                        self.multiRootRunning = false
+                        self.multiRootWorkspace.running = false
                         self.feedbackCenter.warning(
                             "Multi-root Commit cancelled",
                             detail: "Review the pre-commit warnings before committing.",
@@ -2136,8 +2136,8 @@ func performMultiRootCommit(
                         commitID: commitID
                     )
                 }
-                self.multiRootResults = results
-                self.multiRootRunning = false
+                self.multiRootWorkspace.results = results
+                self.multiRootWorkspace.running = false
                 if allowForceRetry && options.runBeforeCommitChecks && !checkFailures.isEmpty {
                     let alert = NSAlert()
                     alert.messageText = "Commit checks failed"
@@ -2237,7 +2237,7 @@ func performMultiRootCommit(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 let retryAction = self.multiRootCommitRetryFeedbackAction(
                     rootPaths: rootPaths,
                     message: message,
@@ -2291,7 +2291,7 @@ func loadMultiRootCommitMetadata(rootPaths: [String]) {
         var seen = Set<String>()
         let unique = messages.filter { seen.insert($0).inserted }
         await MainActor.run {
-            self.multiRootCommitRecentMessages = unique
+            self.commitWorkspace.multiRootRecentMessages = unique
         }
     }
 }
@@ -2315,7 +2315,7 @@ func loadMultiRootCommitTemplate(_ rootPaths: [String]) {
         let selectedTemplate = template
         await MainActor.run {
             if let selectedTemplate {
-                self.multiRootCommitMessage = selectedTemplate
+                self.commitWorkspace.multiRootMessage = selectedTemplate
             } else {
                 self.feedbackCenter.warning(
                     "No commit template configured",
@@ -2402,7 +2402,7 @@ func multiRootUpdateViewCommitsAction(
     guard !ranges.isEmpty else { return nil }
     let request = ArborVCSActionRequest(
         kind: .showLogRanges,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: ranges.count == 1 ? ranges[0].rootPath : nil,
         shelfName: "",
         logRevisionRanges: ranges
@@ -2421,7 +2421,7 @@ func branchDeleteViewCommitsAction(
     }
     let request = ArborVCSActionRequest(
         kind: .viewDeletedBranchCommits,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: targets.count == 1 ? targets[0].rootPath : nil,
         shelfName: "",
         branchDeleteRecoveryTargets: targets
@@ -2496,7 +2496,7 @@ func rememberCommitAuthor(name: String, email: String, projectPath: String?) {
         return
     }
     GitCommitAuthorHistorySettings.save(value, for: projectPath)
-    identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectPath)
+    gitSettings.identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectPath)
 }
 
 }

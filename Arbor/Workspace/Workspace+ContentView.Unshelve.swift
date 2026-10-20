@@ -153,8 +153,8 @@ func doShelveUnshelve(
                     selectedRootPath: resolvedRootPath,
                     primaryRootPath: self.primaryShelfRootPath
                 ) {
-                    self.entries = st
-                    self.changeLists = cls
+                    self.repositoryStatus.entries = st
+                    self.repositoryStatus.changeLists = cls
                 }
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
@@ -470,8 +470,8 @@ func doShelveUnshelvePathGroups(
                 primaryRootPath: self.primaryShelfRootPath
             )
             if isPrimaryRoot {
-                self.entries = finalStatus
-                self.changeLists = nextChangeLists
+                self.repositoryStatus.entries = finalStatus
+                self.repositoryStatus.changeLists = nextChangeLists
             }
             self.publishShelfSnapshot(
                 rootPath: resolvedRootPath,
@@ -753,8 +753,8 @@ func doShelveUnshelvePaths(
                     primaryRootPath: self.primaryShelfRootPath
                 )
                 if isPrimaryRoot {
-                    self.entries = st
-                    self.changeLists = cls
+                    self.repositoryStatus.entries = st
+                    self.repositoryStatus.changeLists = cls
                 }
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
@@ -1152,8 +1152,8 @@ func doShelveUnshelveShelves(
                     primaryRootPath: self.primaryShelfRootPath
                 )
                 if isPrimaryRoot {
-                    self.entries = finalStatus
-                    self.changeLists = nextChangeLists
+                    self.repositoryStatus.entries = finalStatus
+                    self.repositoryStatus.changeLists = nextChangeLists
                 }
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,
@@ -1366,7 +1366,7 @@ func doShelveUnshelveIntoChangeList(
     let selectedPaths = paths?.filter { !$0.isEmpty }
     let selectedSelections = selections?.filter { !$0.path.isEmpty }
     let shouldRemoveApplied = removeApplied
-        ?? ShelfViewSettings.removeAppliedFilesFromShelf(for: projectPath)
+        ?? ShelfViewSettings.removeAppliedFilesFromShelf(for: projectWorkspace.path)
     let scopedDeletedShelves = shelfRootSelectionIsPrimary(
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
@@ -1509,8 +1509,8 @@ func doShelveUnshelveIntoChangeList(
                     primaryRootPath: self.primaryShelfRootPath
                 )
                 if isPrimaryRoot {
-                    self.entries = status
-                    self.changeLists = nextChangeLists
+                    self.repositoryStatus.entries = status
+                    self.repositoryStatus.changeLists = nextChangeLists
                 }
                 self.publishShelfSnapshot(
                     rootPath: resolvedRootPath,

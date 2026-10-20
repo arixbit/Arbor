@@ -4,36 +4,36 @@ import UniformTypeIdentifiers
 
 extension ContentView {
 func currentMergeEngineOptions() -> MergeOptions {
-    let strategy = MergeStrategyChoice(rawValue: mergeStrategyRaw) ?? .automatic
-    let message = mergeCommitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    let strategy = MergeStrategyChoice(rawValue: mergeWorkspace.strategyRaw) ?? .automatic
+    let message = mergeWorkspace.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     return MergeOptions(
         mode: mergeEngineMode(for: strategy),
-        commitMessage: mergeUseCustomCommitMessage && !message.isEmpty ? message : nil,
-        noCommit: mergeNoCommit,
-        noVerify: mergeNoVerify,
-        allowUnrelatedHistories: mergeAllowUnrelatedHistories
+        commitMessage: mergeWorkspace.useCustomCommitMessage && !message.isEmpty ? message : nil,
+        noCommit: mergeWorkspace.noCommit,
+        noVerify: mergeWorkspace.noVerify,
+        allowUnrelatedHistories: mergeWorkspace.allowUnrelatedHistories
     )
 }
 
 func doMerge() {
-    guard operationState?.kind == nil,
+    guard operationRecovery.operation?.kind == nil,
           isArborVCSActionEnabled(.merge, in: vcsActionContext) else { return }
     saveMergeDialogSettings()
     runMerge(preserveLocalChanges: false)
 }
 
 func runMerge(preserveLocalChanges: Bool) {
-    guard let repo, !mergeBranch.isEmpty else { return }
+    guard let repo, !mergeWorkspace.branch.isEmpty else { return }
     beginFeedbackOperation("Merge")
-    pendingMergeDeleteBranch = nil
-    let branch = mergeBranch
+    mergeWorkspace.pendingDeleteBranch = nil
+    let branch = mergeWorkspace.branch
     let initialHead = repo.headCommitId()
-    mergeInitialHead = initialHead
-    let strategy = MergeStrategyChoice(rawValue: mergeStrategyRaw) ?? .automatic
-    let commitMessage = mergeCommitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-    let noCommit = mergeNoCommit
-    let noVerify = mergeNoVerify
-    let allowUnrelatedHistories = mergeAllowUnrelatedHistories
+    mergeWorkspace.initialHead = initialHead
+    let strategy = MergeStrategyChoice(rawValue: mergeWorkspace.strategyRaw) ?? .automatic
+    let commitMessage = mergeWorkspace.commitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+    let noCommit = mergeWorkspace.noCommit
+    let noVerify = mergeWorkspace.noVerify
+    let allowUnrelatedHistories = mergeWorkspace.allowUnrelatedHistories
     let canDeleteMergedBranch = branchWorkspace.branches.contains {
         $0.name == branch && !$0.isCurrent
     } && !GitProtectedBranchRules.matches(
@@ -44,14 +44,14 @@ func runMerge(preserveLocalChanges: Bool) {
         mergeDeleteOnMergeOption,
         canDeleteBranch: canDeleteMergedBranch
     )
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let mergedBranchNames = Set((try? repo.branchListMergedAll().map(\.name)) ?? [])
             if mergeBranchIsAlreadyMerged(branch, mergedBranches: mergedBranchNames) {
                 await MainActor.run {
-                    self.mergeInitialHead = nil
-                    self.mergeFeedback = "分支已合并，无需再次合并：\(branch)"
+                    self.mergeWorkspace.initialHead = nil
+                    self.mergeWorkspace.feedback = "分支已合并，无需再次合并：\(branch)"
                     self.feedbackCenter.warning(
                         "Merge is not needed",
                         detail: "\(branch) is already merged into the current branch.",
@@ -86,17 +86,17 @@ func runMerge(preserveLocalChanges: Bool) {
             let finalHead = repo.headCommitId()
             let st = try repo.status()
             await MainActor.run {
-                self.entries = st
-                self.toolWindowMode = .commit
+                self.repositoryStatus.entries = st
+                self.projectWorkspace.toolWindowMode = .commit
                 self.toolWindowExpanded = true
-                self.mergeInProgress = mo.requiresFinish
-                self.pendingMergeDeleteBranch = mo.requiresFinish ? branch : nil
-                self.selection = mo.conflicts.first
-                self.showMergeRevisionsDialog = !mo.conflicts.isEmpty
+                self.mergeWorkspace.inProgress = mo.requiresFinish
+                self.mergeWorkspace.pendingDeleteBranch = mo.requiresFinish ? branch : nil
+                self.fileWorkspace.selection = mo.conflicts.first
+                self.operationRecovery.showConflictResolver = !mo.conflicts.isEmpty
                 if !mo.conflicts.isEmpty {
-                    self.mergeFeedback = "冲突 \(mo.conflicts.count) 个文件：\(mo.conflicts.joined(separator: ", "))"
+                    self.mergeWorkspace.feedback = "冲突 \(mo.conflicts.count) 个文件：\(mo.conflicts.joined(separator: ", "))"
                 } else if mo.completed {
-                    self.mergeFeedback = "合并成功（已完成）"
+                    self.mergeWorkspace.feedback = "合并成功（已完成）"
                     let viewCommitsAction = repo.workdir().flatMap { rootPath in
                         self.completedMergeViewCommitsAction(
                             rootPath: rootPath,
@@ -131,12 +131,12 @@ func runMerge(preserveLocalChanges: Bool) {
                             notificationGroup: .standard
                         )
                     }
-                    self.mergeInitialHead = nil
+                    self.mergeWorkspace.initialHead = nil
                     self.refreshAll(showFeedback: false)
                 } else if mo.squashed {
-                    self.mergeFeedback = "Squash 合并已应用，点击「完成合并」创建单父提交"
+                    self.mergeWorkspace.feedback = "Squash 合并已应用，点击「完成合并」创建单父提交"
                 } else {
-                    self.mergeFeedback = "合并已应用，点击「完成合并」创建双父提交"
+                    self.mergeWorkspace.feedback = "合并已应用，点击「完成合并」创建双父提交"
                 }
             }
         } catch {
@@ -156,13 +156,13 @@ func runMerge(preserveLocalChanges: Bool) {
                             self.runMerge(preserveLocalChanges: true)
                         }
                     )
-                    self.mergeFeedback = errorMessage(error)
+                    self.mergeWorkspace.feedback = errorMessage(error)
                 }
             } else {
                 await MainActor.run {
-                    self.mergeInitialHead = nil
-                    self.mergeFeedback = friendlyRemoteError(error)
-                    if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                    self.mergeWorkspace.initialHead = nil
+                    self.mergeWorkspace.feedback = friendlyRemoteError(error)
+                    if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
                 }
             }
         }
@@ -174,9 +174,9 @@ func finishMerge() {
         finishStashConflict()
         return
     }
-    guard let repo, mergeInProgress else { return }
-    let sourceBranch = pendingMergeDeleteBranch ?? repo.mergeSourceReference()
-    let initialHead = mergeInitialHead
+    guard let repo, mergeWorkspace.inProgress else { return }
+    let sourceBranch = mergeWorkspace.pendingDeleteBranch ?? repo.mergeSourceReference()
+    let initialHead = mergeWorkspace.initialHead
         ?? (try? repo.revisionCommitId(revision: "ORIG_HEAD"))
     let canProposeDelete = sourceBranch.map {
         canProposeDeleteMergedBranch(
@@ -191,10 +191,10 @@ func finishMerge() {
             let commitID = try repo.finishMerge(message: nil)
             let finalHead = repo.headCommitId()
             await MainActor.run {
-                self.mergeInProgress = false
-                self.pendingMergeDeleteBranch = nil
-                self.mergeFeedback = "已完成合并 \(String(commitID.prefix(7)))"
-                self.showMergeRevisionsDialog = false
+                self.mergeWorkspace.inProgress = false
+                self.mergeWorkspace.pendingDeleteBranch = nil
+                self.mergeWorkspace.feedback = "已完成合并 \(String(commitID.prefix(7)))"
+                self.operationRecovery.showConflictResolver = false
                 let deleteOnMerge = GitDeleteOnMergeOption.effectiveOption(
                     self.mergeDeleteOnMergeOption,
                     canDeleteBranch: canProposeDelete
@@ -207,7 +207,7 @@ func finishMerge() {
                         completed: true
                     )
                 }.map { [$0] } ?? []
-                self.mergeInitialHead = nil
+                self.mergeWorkspace.initialHead = nil
                 if deleteOnMerge == .delete, let sourceBranch {
                     self.feedbackCenter.success(
                         "Merge completed",
@@ -237,7 +237,7 @@ func finishMerge() {
             }
         } catch {
             await MainActor.run {
-                self.mergeFeedback = errorMessage(error)
+                self.mergeWorkspace.feedback = errorMessage(error)
                 if case let .StashApplyConflict(paths, stashID) = error as? EngineError {
                     self.showStashRestoreConflict(
                         paths,
@@ -278,7 +278,7 @@ func finishMerge() {
 /// success notification. This prevents an old toast action from undoing a
 /// later commit or branch switch.
 func rollbackMerge(_ request: MergeRollbackRequest) {
-    guard projectRepo === request.repo else {
+    guard projectWorkspace.repository === request.repo else {
         feedbackCenter.error(
             "Merge rollback unavailable",
             detail: "The repository is no longer the active project.",
@@ -333,7 +333,7 @@ func rollbackMerge(_ request: MergeRollbackRequest) {
 
 func presentMultiRootMergeDialog(name: String) {
     let branchName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    let eligible = multiRootBranchSnapshots.filter { snapshot in
+    let eligible = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.branches.contains { $0.name == branchName }
     }
     guard !branchName.isEmpty, !eligible.isEmpty else {
@@ -343,12 +343,12 @@ func presentMultiRootMergeDialog(name: String) {
         )
         return
     }
-    multiRootMergeBranchName = branchName
-    multiRootMergeSelectedRootPaths = Set(eligible.map(\.rootPath))
-    multiRootMergeMergedBranchesByRoot = [:]
-    multiRootMergeDialogGeneration &+= 1
-    let generation = multiRootMergeDialogGeneration
-    showMultiRootMergeDialog = true
+    mergeWorkspace.multiRootBranchName = branchName
+    mergeWorkspace.multiRootSelectedRootPaths = Set(eligible.map(\.rootPath))
+    mergeWorkspace.multiRootMergedBranchesByRoot = [:]
+    mergeWorkspace.multiRootDialogGeneration &+= 1
+    let generation = mergeWorkspace.multiRootDialogGeneration
+    mergeWorkspace.showMultiRootDialog = true
     let rootPaths = eligible.map(\.rootPath)
     Task.detached(priority: .userInitiated) {
         var mergedBranchesByRoot: [String: Set<String>] = [:]
@@ -361,7 +361,7 @@ func presentMultiRootMergeDialog(name: String) {
         }
         let loadedMergedBranchesByRoot = mergedBranchesByRoot
         await MainActor.run {
-            guard generation == self.multiRootMergeDialogGeneration else { return }
+            guard generation == self.mergeWorkspace.multiRootDialogGeneration else { return }
             let alreadyMergedRootPaths = Set(
                 loadedMergedBranchesByRoot.compactMap { rootPath, mergedBranches in
                     mergeBranchIsAlreadyMerged(branchName, mergedBranches: mergedBranches)
@@ -369,8 +369,8 @@ func presentMultiRootMergeDialog(name: String) {
                         : nil
                 }
             )
-            self.multiRootMergeMergedBranchesByRoot = loadedMergedBranchesByRoot
-            self.multiRootMergeSelectedRootPaths.subtract(alreadyMergedRootPaths)
+            self.mergeWorkspace.multiRootMergedBranchesByRoot = loadedMergedBranchesByRoot
+            self.mergeWorkspace.multiRootSelectedRootPaths.subtract(alreadyMergedRootPaths)
         }
     }
 }
@@ -381,24 +381,24 @@ func presentMultiRootMergeFromPopup(name: String) {
 }
 
 func dismissMultiRootMergeDialog() {
-    multiRootMergeDialogGeneration &+= 1
-    showMultiRootMergeDialog = false
-    multiRootMergeBranchName = ""
-    multiRootMergeSelectedRootPaths = []
-    multiRootMergeMergedBranchesByRoot = [:]
+    mergeWorkspace.multiRootDialogGeneration &+= 1
+    mergeWorkspace.showMultiRootDialog = false
+    mergeWorkspace.multiRootBranchName = ""
+    mergeWorkspace.multiRootSelectedRootPaths = []
+    mergeWorkspace.multiRootMergedBranchesByRoot = [:]
 }
 
 func startMultiRootMergeFromDialog() {
-    let actionableRootPaths = multiRootMergeSelectedRootPaths.filter { rootPath in
-        guard let mergedBranches = multiRootMergeMergedBranchesByRoot[rootPath] else {
+    let actionableRootPaths = mergeWorkspace.multiRootSelectedRootPaths.filter { rootPath in
+        guard let mergedBranches = mergeWorkspace.multiRootMergedBranchesByRoot[rootPath] else {
             return true
         }
         return !mergeBranchIsAlreadyMerged(
-            multiRootMergeBranchName,
+            mergeWorkspace.multiRootBranchName,
             mergedBranches: mergedBranches
         )
     }
-    multiRootMergeSelectedRootPaths = actionableRootPaths
+    mergeWorkspace.multiRootSelectedRootPaths = actionableRootPaths
     guard !actionableRootPaths.isEmpty else {
         feedbackCenter.warning(
             "Merge is not needed",
@@ -408,21 +408,21 @@ func startMultiRootMergeFromDialog() {
     }
     saveMergeDialogSettings()
     mergeMultiRootBranch(
-        name: multiRootMergeBranchName,
+        name: mergeWorkspace.multiRootBranchName,
         selectedRootPaths: actionableRootPaths,
         options: currentMergeEngineOptions()
     )
 }
 
 func dismissMultiRootMergeRollback() {
-    multiRootMergeRollbackContext = nil
+    mergeWorkspace.multiRootRollbackContext = nil
     if let notificationID = multiRootMergeRollbackNotificationID() {
         feedbackCenter.expire(notificationID: notificationID)
     }
 }
 
 func keepMultiRootMergePartial(_ context: MultiRootMergeRollbackContext) {
-    multiRootMergeRollbackContext = nil
+    mergeWorkspace.multiRootRollbackContext = nil
     let pendingRootPath = context.targets.first(where: { $0.operationPending })?.rootPath
         ?? context.pendingRootPath
     feedbackCenter.warning(
@@ -463,15 +463,15 @@ func runMultiRootMergeOperation(
     rootOrder: [String]? = nil,
     preservedResults: [MultiRootMergeResult] = []
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     let branchName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         selectedRootPaths.contains(snapshot.rootPath)
             && snapshot.branches.contains { $0.name == branchName }
     }
-    guard !branchName.isEmpty, !roots.isEmpty, let projectPath else { return }
+    guard !branchName.isEmpty, !roots.isEmpty, let projectPath = projectWorkspace.path else { return }
 
     let canDeleteMergedBranch = roots.allSatisfy { snapshot in
         !snapshot.branches.contains { $0.name == branchName && $0.isCurrent }
@@ -491,7 +491,7 @@ func runMultiRootMergeOperation(
     )
     let allMergeRootPaths = rootOrder ?? mergeRootPaths
     let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation(
         "Multi-root merge",
         notificationID: multiRootMergeNotificationID()
@@ -556,11 +556,11 @@ func runMultiRootMergeOperation(
                 !$0.success && !$0.skipped && $0.requiresFinish
             }?.rootPath
             await MainActor.run {
-                self.multiRootRunning = false
-                self.showMultiRootMergeDialog = false
-                self.multiRootMergeBranchName = ""
-                self.multiRootMergeSelectedRootPaths = []
-                self.multiRootResults = operationResults
+                self.multiRootWorkspace.running = false
+                self.mergeWorkspace.showMultiRootDialog = false
+                self.mergeWorkspace.multiRootBranchName = ""
+                self.mergeWorkspace.multiRootSelectedRootPaths = []
+                self.multiRootWorkspace.results = operationResults
                 self.loadMultiRoots()
                 if preserveLocalChanges {
                     self.presentMultiRootMergeRestoreConflicts(combinedResults)
@@ -602,7 +602,7 @@ func runMultiRootMergeOperation(
                         }
                     )
                 } else if !failures.isEmpty {
-                    self.toolWindowMode = .operations
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     let failureDetails = failures.map {
                         "\($0.displayName): \($0.message.isEmpty ? ($0.skipped ? "skipped" : "failed") : $0.message)"
@@ -625,7 +625,7 @@ func runMultiRootMergeOperation(
                         notificationGroup: rollbackTargets.isEmpty ? .toolWindow : .standard
                     )
                     if !rollbackTargets.isEmpty {
-                        self.multiRootMergeRollbackContext = MultiRootMergeRollbackContext(
+                        self.mergeWorkspace.multiRootRollbackContext = MultiRootMergeRollbackContext(
                             branchName: branchName,
                             targets: rollbackTargets,
                             failures: failureDetails,
@@ -704,7 +704,7 @@ func runMultiRootMergeOperation(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     "Multi-root merge failed",
                     detail: errorMessage(error),
@@ -722,7 +722,7 @@ func multiRootMergeRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .rollbackMultiRootMerge,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootMergeBranchName: branchName,
@@ -743,7 +743,7 @@ func multiRootMergeRollbackAction(
 }
 
 func multiRootMergeRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -754,7 +754,7 @@ func multiRootMergeRollbackNotificationID() -> String? {
 /// and delete-on-merge use separate IDs so their later lifecycle updates do
 /// not erase the original root-qualified result tree.
 func multiRootMergeNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -771,13 +771,13 @@ func rollbackMultiRootMerge(
     priorResultRows: [FeedbackResultRow] = []
 ) {
     guard !targets.isEmpty else { return }
-    let rollbackContext = multiRootMergeRollbackContext
+    let rollbackContext = mergeWorkspace.multiRootRollbackContext
     let rollbackBranchName = branchName
         ?? rollbackContext?.branchName
-        ?? multiRootMergeBranchName
+        ?? mergeWorkspace.multiRootBranchName
     let previousFailures = rollbackContext?.failures ?? []
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
-    multiRootMergeRollbackContext = nil
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
+    mergeWorkspace.multiRootRollbackContext = nil
     let stableNotificationID = multiRootMergeRollbackNotificationID()
     beginFeedbackOperation(
         "Rollback multi-root merge",
@@ -861,7 +861,7 @@ func rollbackMultiRootMerge(
                     notificationID: stableNotificationID
                 )
             } else {
-                self.multiRootMergeRollbackContext = MultiRootMergeRollbackContext(
+                self.mergeWorkspace.multiRootRollbackContext = MultiRootMergeRollbackContext(
                     branchName: rollbackBranchName,
                     targets: remainingTargets,
                     failures: rollbackFailures,
@@ -977,7 +977,7 @@ func handleMergeDeleteNotification(_ notification: Notification) {
     guard let request = notification.object as? MergeDeleteBranchRequest else { return }
     if let rootPath = request.rootPath {
         deleteBranchInRoot(rootPath: rootPath, name: request.branch)
-    } else if projectRepo === request.repo {
+    } else if projectWorkspace.repository === request.repo {
         branchDelete(request.branch)
     } else {
         feedbackCenter.error(
@@ -1019,7 +1019,7 @@ func confirmAndDeleteMultiRootMergedBranch(
         return
     }
 
-    let candidates = multiRootBranchSnapshots.compactMap { snapshot -> MultiRootMergeDeleteCandidate? in
+    let candidates = multiRootWorkspace.branchSnapshots.compactMap { snapshot -> MultiRootMergeDeleteCandidate? in
         guard snapshot.branches.contains(where: {
             $0.name == branchName && !$0.isCurrent
         }) else { return nil }
@@ -1102,7 +1102,7 @@ func multiRootMergeDeleteRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .deleteMultiRootMergeBranch,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootMergeDeleteBranchName: branch,
@@ -1127,7 +1127,7 @@ func multiRootMergeDeleteAction(
 }
 
 func multiRootMergeDeleteNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -1138,9 +1138,9 @@ func multiRootMergeDeleteNotificationID() -> String? {
 /// conflict entry point. The resolver rescans every Git root, so the action
 /// remains valid after another root changed while the notification was open.
 var operationConflictResolverAction: (() -> Void)? {
-    guard let state = operationState,
+    guard let state = operationRecovery.operation,
           !state.conflictedFiles.isEmpty else { return nil }
-    let preferredRootPath = projectPath
+    let preferredRootPath = projectWorkspace.path
     let preferredPath = state.conflictedFiles.first
     return {
         var userInfo: [AnyHashable: Any] = [:]
@@ -1168,19 +1168,19 @@ func openMultiRootConflictResolver(
     preferredRootPath: String? = nil,
     preferredPath: String? = nil
 ) {
-    guard let projectPath else { return }
-    let currentRootPath = preferredRootPath ?? multiRootResolverActiveRootPath
+    guard let projectPath = projectWorkspace.path else { return }
+    let currentRootPath = preferredRootPath ?? operationRecovery.multiRootResolverActiveRootPath
     let pendingStashPaths = stashRecovery.multiRootConflicts
     let pendingStashIndexes = stashRecovery.multiRootConflictIndexes
     let pendingStashIDs = stashRecovery.multiRootConflictIDs
     let pendingStashPopModes = stashRecovery.multiRootConflictPopModes
-    multiRootResolverLoadGeneration += 1
-    let generation = multiRootResolverLoadGeneration
-    multiRootResolverWorking = true
-    multiRootResolverError = nil
-    multiRootResolverActiveRepo = nil
-    multiRootResolverActiveEntries = []
-    multiRootResolverActiveKind = nil
+    operationRecovery.multiRootResolverLoadGeneration += 1
+    let generation = operationRecovery.multiRootResolverLoadGeneration
+    operationRecovery.multiRootResolverWorking = true
+    operationRecovery.multiRootResolverError = nil
+    operationRecovery.multiRootResolverActiveRepo = nil
+    operationRecovery.multiRootResolverActiveEntries = []
+    operationRecovery.multiRootResolverActiveKind = nil
 
     Task.detached(priority: .userInitiated) {
         do {
@@ -1271,25 +1271,25 @@ func openMultiRootConflictResolver(
                 ?? pendingRoots.first
 
             await MainActor.run {
-                guard self.multiRootResolverLoadGeneration == generation else { return }
-                self.multiRootResolverRoots = pendingRoots
-                self.multiRootResolverActiveRootPath = selected?.rootPath
-                self.multiRootResolverActiveInitialPath = selected?.paths.first
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = nil
-                self.showMultiRootConflictResolver = selected != nil
+                guard self.operationRecovery.multiRootResolverLoadGeneration == generation else { return }
+                self.operationRecovery.multiRootResolverRoots = pendingRoots
+                self.operationRecovery.multiRootResolverActiveRootPath = selected?.rootPath
+                self.operationRecovery.multiRootResolverActiveInitialPath = selected?.paths.first
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = nil
+                self.operationRecovery.showMultiRootConflictResolver = selected != nil
                 if let selected {
                     self.selectMultiRootResolverRoot(selected.rootPath)
                     if let preferredPath, selected.paths.contains(preferredPath) {
-                        self.multiRootResolverActiveInitialPath = preferredPath
+                        self.operationRecovery.multiRootResolverActiveInitialPath = preferredPath
                     }
                 }
             }
         } catch {
             await MainActor.run {
-                guard self.multiRootResolverLoadGeneration == generation else { return }
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = errorMessage(error)
+                guard self.operationRecovery.multiRootResolverLoadGeneration == generation else { return }
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = errorMessage(error)
                 self.feedbackCenter.error(
                     "Conflict workbench unavailable",
                     detail: errorMessage(error),
@@ -1309,7 +1309,7 @@ func openMultiRootOperationConflict(rootPath: String, path: String? = nil) {
 /// 项目级冲突树的批量 Accept。按 root 分组打开 Repository，逐文件继续执行，
 /// 因此一个 root 或单个文件失败不会回滚已经成功的其它文件。
 func acceptMultiRootConflicts(_ targets: [MultiRootConflictTarget], pick: FilePick) {
-    guard !targets.isEmpty, !multiRootConflictBatchWorking else { return }
+    guard !targets.isEmpty, !operationRecovery.multiRootConflictBatchWorking else { return }
     var seen = Set<String>()
     let selected = targets
         .filter { seen.insert($0.id).inserted }
@@ -1319,8 +1319,8 @@ func acceptMultiRootConflicts(_ targets: [MultiRootConflictTarget], pick: FilePi
         }
     guard !selected.isEmpty else { return }
 
-    multiRootConflictBatchWorking = true
-    multiRootConflictBatchError = nil
+    operationRecovery.multiRootConflictBatchWorking = true
+    operationRecovery.multiRootConflictBatchError = nil
     Task.detached(priority: .userInitiated) {
         let grouped = Dictionary(grouping: selected, by: \.rootPath)
         var failures: [String] = []
@@ -1345,8 +1345,8 @@ func acceptMultiRootConflicts(_ targets: [MultiRootConflictTarget], pick: FilePi
 
         let failureMessage = failures.isEmpty ? nil : failures.joined(separator: "\n")
         await MainActor.run {
-            self.multiRootConflictBatchWorking = false
-            self.multiRootConflictBatchError = failureMessage
+            self.operationRecovery.multiRootConflictBatchWorking = false
+            self.operationRecovery.multiRootConflictBatchError = failureMessage
             self.loadMultiRoots()
             self.refreshAll(showFeedback: false)
         }
@@ -1360,7 +1360,7 @@ func finishStashConflict() {
     let stashID = stashRecovery.pendingPopID
     let shouldDropStash = stashRecovery.popConflictInProgress
     let repositoryPath = repo.workdir()
-    let pullRebaseSeed = rebaseUndoSeed
+    let pullRebaseSeed = rebaseWorkspace.undoSeed
     let conflictNotificationID = stashRecovery.pendingConflictNotificationID
     beginFeedbackOperation(
         "Complete stash restore",
@@ -1421,12 +1421,12 @@ func finishStashConflict() {
                         target: completedPullRebaseUndoTarget
                     )
                 }
-                self.mergeInProgress = false
-                self.showMergeRevisionsDialog = false
+                self.mergeWorkspace.inProgress = false
+                self.operationRecovery.showConflictResolver = false
                 if shouldDropStash, let repositoryPath, let stashID {
                     self.clearStashDiffIfMatching(rootPath: repositoryPath, stashID: stashID)
                 }
-                self.mergeFeedback = shouldDropStash ? "已完成本地变更恢复" : "已完成 stash 应用"
+                self.mergeWorkspace.feedback = shouldDropStash ? "已完成本地变更恢复" : "已完成 stash 应用"
                 if let completedPullRebaseUndoTarget {
                     self.feedbackCenter.success(
                         "Local changes restored",
@@ -1447,7 +1447,7 @@ func finishStashConflict() {
         } catch {
             await MainActor.run {
                 let detail = errorMessage(error)
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 self.feedbackCenter.error(
                     "Complete stash restore failed",
                     detail: detail,
@@ -1484,7 +1484,7 @@ static func findMergedRootsContainingTarget(
 /// IntelliJ FindMergedLocalBranchesAction 的项目级入口：只读加载所有 Git
 /// root，再由独立 sheet 按目标分支和名称前缀计算结果。
 func beginFindMergedBranches() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     branchCleanup.task?.cancel()
     branchCleanup.task = nil
     let generation = nextFindMergedGeneration()
@@ -1624,14 +1624,14 @@ func calculateFindMergedBranches() {
             let report = findMergedBranchesReportText(
                 summary: summary,
                 roots: rootsToApply,
-                projectName: self.projectPath.map {
+                projectName: self.projectWorkspace.path.map {
                     URL(fileURLWithPath: $0).lastPathComponent
                 } ?? ""
             )
             FindMergedReportStore.save(
                 PersistedFindMergedReport(
                     id: reportID,
-                    projectPath: self.projectPath ?? "",
+                    projectPath: self.projectWorkspace.path ?? "",
                     targetBranch: summary.targetBranch,
                     prefix: summary.prefix,
                     report: report,
@@ -1678,7 +1678,7 @@ func calculateFindMergedBranches() {
 func findMergedReportAction(reportID: String) -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .showFindMergedReport,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         findMergedReportID: reportID
@@ -1693,7 +1693,7 @@ func findMergedReportAction(reportID: String) -> FeedbackAction {
 }
 
 func findMergedNotificationID(targetBranch: String, prefix: String) -> String {
-    let source = [projectPath ?? "", targetBranch, prefix].joined(separator: "\u{1f}")
+    let source = [projectWorkspace.path ?? "", targetBranch, prefix].joined(separator: "\u{1f}")
     let encoded = Data(source.utf8)
         .base64EncodedString()
         .replacingOccurrences(of: "+", with: "-")
@@ -1729,10 +1729,10 @@ func openFindMergedReport() {
     let report = findMergedBranchesReportText(
         summary: summary,
         roots: branchCleanup.roots,
-        projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+        projectName: projectWorkspace.path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
     )
     let reportID = branchCleanup.reportID ?? UUID().uuidString
-    if let projectPath {
+    if let projectPath = projectWorkspace.path {
         FindMergedReportStore.save(
             PersistedFindMergedReport(
                 id: reportID,
@@ -1758,7 +1758,7 @@ func openFindMergedReport(reportID: String) {
         )
         return
     }
-    if let projectPath,
+    if let projectPath = projectWorkspace.path,
        URL(fileURLWithPath: projectPath).standardizedFileURL.path
             != URL(fileURLWithPath: saved.projectPath).standardizedFileURL.path
     {
@@ -1783,7 +1783,7 @@ func copyFindMergedBranches() {
     let report = findMergedBranchesReportText(
         summary: summary,
         roots: branchCleanup.roots,
-        projectName: projectPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+        projectName: projectWorkspace.path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
     )
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(report, forType: .string)
@@ -1967,15 +1967,15 @@ func presentShelveConflict(
     shelfWorkspace.conflictIsDirectPatch = isDirectPatch
     shelfWorkspace.pendingConflictPatch = patchText
     shelfWorkspace.conflictInProgress = true
-    mergeInitialPath = paths.first
-    if toolWindowMode != .log {
-        selection = paths.first
+    operationRecovery.initialPath = paths.first
+    if projectWorkspace.toolWindowMode != .log {
+        fileWorkspace.selection = paths.first
     }
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
-    showMergeRevisionsDialog = true
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
+    operationRecovery.showConflictResolver = true
     if let conflictRepository = shelfWorkspace.pendingConflictRepository {
         if conflictRepository === self.repo {
             refreshAll(showFeedback: false)
@@ -1988,7 +1988,7 @@ func presentShelveConflict(
     let conflictRootDetail = shelfWorkspace.pendingConflictRepository?.workdir()
         .map { " · Git root: \($0)" } ?? ""
     let conflictDetail = paths.joined(separator: ", ") + conflictRootDetail
-    mergeFeedback = if isDirectPatch {
+    mergeWorkspace.feedback = if isDirectPatch {
         "Apply Patch 冲突：\(conflictDetail)"
     } else if isPop {
         "Shelve pop 冲突：\(conflictDetail)"
@@ -2002,7 +2002,7 @@ func presentShelveConflict(
             ? "Resolve every conflicted file, then complete Apply Patch."
             : "Resolve every conflicted file, then complete the shelf operation.",
         actionTitle: "Resolve Conflicts",
-        action: { self.showMergeRevisionsDialog = true },
+        action: { self.operationRecovery.showConflictResolver = true },
         additionalActions: additionalActions,
         notificationID: conflictNotificationID
     )
@@ -2015,9 +2015,9 @@ func refreshShelveConflictStatus(repository: Repository? = nil) {
         let conflictChangeLists = (try? conflictRepository.changelistList()) ?? []
         await MainActor.run {
             guard self.shelfWorkspace.pendingConflictRepository === conflictRepository else { return }
-            self.entries = conflictEntries
-            self.changeLists = conflictChangeLists
-            self.fileContentRefreshToken &+= 1
+            self.repositoryStatus.entries = conflictEntries
+            self.repositoryStatus.changeLists = conflictChangeLists
+            self.fileWorkspace.refreshToken &+= 1
         }
     }
 }
@@ -2031,9 +2031,9 @@ func clearShelveConflictState() {
     shelfWorkspace.pendingConflictChangeList = nil
     shelfWorkspace.pendingConflictPatch = nil
     shelfWorkspace.pendingConflictNotificationID = nil
-    mergeInProgress = false
-    showMergeRevisionsDialog = false
-    mergeInitialPath = nil
+    mergeWorkspace.inProgress = false
+    operationRecovery.showConflictResolver = false
+    operationRecovery.initialPath = nil
 }
 
 /// Conflict resolution is finalized by the engine. For Pop, the shelf is
@@ -2051,7 +2051,7 @@ func finishShelveConflict() {
         selectedRootPath: resolvedRootPath,
         primaryRootPath: primaryShelfRootPath
     )
-    let pullRebaseSeed = rebaseUndoSeed
+    let pullRebaseSeed = rebaseWorkspace.undoSeed
     let restoreInfo = (try? repo.shelveRestoreInfo()) ?? nil
     let targetChangeList = shelfWorkspace.pendingConflictChangeList ?? restoreInfo?.targetChangeList
     let restorePaths: [String] = if let restoreInfo,
@@ -2119,8 +2119,8 @@ func finishShelveConflict() {
                     )
                     if isActiveRoot {
                         if isPrimaryRoot {
-                            self.entries = nextStatus
-                            self.changeLists = lists
+                            self.repositoryStatus.entries = nextStatus
+                            self.repositoryStatus.changeLists = lists
                         }
                         self.publishShelfSnapshot(
                             rootPath: resolvedRootPath,
@@ -2161,8 +2161,8 @@ func finishShelveConflict() {
                 )
                 if isActiveRoot {
                     if isPrimaryRoot {
-                        self.entries = nextStatus
-                        self.changeLists = nextChangeLists
+                        self.repositoryStatus.entries = nextStatus
+                        self.repositoryStatus.changeLists = nextChangeLists
                     }
                     self.publishShelfSnapshot(
                         rootPath: resolvedRootPath,
@@ -2276,8 +2276,8 @@ func abortShelveConflict() {
                 )
                 if isActiveRoot {
                     if isPrimaryRoot {
-                        self.entries = nextStatus
-                        self.changeLists = nextChangeLists
+                        self.repositoryStatus.entries = nextStatus
+                        self.repositoryStatus.changeLists = nextChangeLists
                     }
                     self.publishShelfSnapshot(
                         rootPath: resolvedRootPath,

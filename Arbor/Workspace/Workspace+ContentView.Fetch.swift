@@ -42,7 +42,7 @@ func fetchRemoteBranchInRoot(rootPath: String, branch: String) {
                     nextStep: "Check the remote and credentials, then retry."
                 )
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -79,7 +79,7 @@ func fetchRemoteBranch(_ branch: RemoteBranchInfo) {
                     detail: "\(branch.name): \(detail)",
                     nextStep: "Check the remote and credentials, then retry."
                 )
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }
@@ -149,7 +149,7 @@ func doFetchRemote(_ remote: String) {
             )
             let detail = fo.updated.isEmpty ? "无更新" : fo.updated.joined(separator: ", ")
             await MainActor.run {
-                self.mergeFeedback = "fetch 完成：\(detail)"
+                self.mergeWorkspace.feedback = "fetch 完成：\(detail)"
                 self.publishFetchCompletion(detail: detail)
                 self.loadRepoData()
                 self.synchronizeRemoteProtectedBranchPatterns()
@@ -157,9 +157,9 @@ func doFetchRemote(_ remote: String) {
         } catch {
             await MainActor.run {
                 let detail = friendlyRemoteError(error)
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 self.feedbackCenter.error("Fetch failed", detail: detail, nextStep: "Check the remote and Git identity, then retry.")
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }
@@ -171,7 +171,7 @@ func autoFetchRecoveryRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .autoFetchRecovery,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: repo?.workdir(),
         shelfName: "",
         autoFetchRecoveryAction: action,
@@ -245,8 +245,8 @@ func doFetchAll(rootPaths: [String]? = nil) {
         await MainActor.run {
             self.loadRepoData()
             self.loadMultiRoots()
-            self.autoFetchIncomingFingerprint = nil
-            self.autoFetchFailureFingerprint = nil
+            self.gitSettings.autoFetchIncomingFingerprint = nil
+            self.gitSettings.autoFetchFailureFingerprint = nil
             if result.successfulRemoteCount > 0 {
                 self.synchronizeRemoteProtectedBranchPatternsForAllRoots()
             }
@@ -271,8 +271,8 @@ func doFetchAll(rootPaths: [String]? = nil) {
 }
 
 func publishFetchCompletion(detail: String, title: String = "Fetch completed") {
-    let suggestionCount = GitIncomingCheckStrategySettings.suggestionCount(for: projectPath)
-    let suggestionDisabled = GitIncomingCheckStrategySettings.suggestionDisabled(for: projectPath)
+    let suggestionCount = GitIncomingCheckStrategySettings.suggestionCount(for: projectWorkspace.path)
+    let suggestionDisabled = GitIncomingCheckStrategySettings.suggestionDisabled(for: projectWorkspace.path)
     guard shouldSuggestAutoFetch(
         autoFetchEnabled: incomingCheckStrategy == .fetch,
         suggestionDisabled: suggestionDisabled,
@@ -288,7 +288,7 @@ func publishFetchCompletion(detail: String, title: String = "Fetch completed") {
 
     GitIncomingCheckStrategySettings.setSuggestionCount(
         suggestionCount + 1,
-        for: projectPath
+        for: projectWorkspace.path
     )
     feedbackCenter.success(
         title,
@@ -307,10 +307,10 @@ func doFetchPrune() {
         isRunning: feedbackCenter.isRunning,
         operationName: feedbackCenter.operationName
     ) else { return }
-    guard let repo, !remotes.isEmpty else { return }
+    guard let repo, !remoteWorkspace.remotes.isEmpty else { return }
     let cancel = GitCancelHandle()
     beginFeedbackOperation("Prune remote branches", cancelHandle: cancel)
-    let remoteNames = remotes.map(\.name)
+    let remoteNames = remoteWorkspace.remotes.map(\.name)
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
     Task.detached(priority: .userInitiated) {
@@ -350,20 +350,20 @@ func doFetchUnshallow() {
         isRunning: feedbackCenter.isRunning,
         operationName: feedbackCenter.operationName
     ) else { return }
-    guard let repo, isShallowRepository else { return }
+    guard let repo, repositoryStatus.isShallowRepository else { return }
     let preferredRemote: String? = currentSyncStatus.flatMap { status -> String? in
         let candidate = status.upstream.split(separator: "/", maxSplits: 1).first.map(String.init)
-        guard let candidate, remotes.contains(where: { $0.name == candidate }) else { return nil }
+        guard let candidate, remoteWorkspace.remotes.contains(where: { $0.name == candidate }) else { return nil }
         return candidate
     }
     let remote = defaultFetchRemoteName(
         preferredRemote: preferredRemote,
-        availableRemoteNames: remotes.map(\.name)
+        availableRemoteNames: remoteWorkspace.remotes.map(\.name)
     )
     guard let remote else {
         feedbackCenter.warning(
             "Fetch full history unavailable",
-            detail: remotes.count > 1
+            detail: remoteWorkspace.remotes.count > 1
                 ? "No tracked remote or origin is available; choose a remote configuration before retrying."
                 : "No usable remote is configured for this Git root."
         )

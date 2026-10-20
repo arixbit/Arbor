@@ -51,7 +51,7 @@ func addCommitsToRemoteBranchFromLog(_ commits: [CommitInfo]) {
         )
         return
     }
-    addCommitsToRemoteBranchContext = AddCommitsToRemoteBranchContext(
+    pushWorkspace.addCommitsToRemoteBranchContext = AddCommitsToRemoteBranchContext(
         commits: selected,
         remoteBranches: remoteBranches
     )
@@ -129,12 +129,12 @@ func prepareAddCommitsToRemoteBranch(
                         notificationID: notificationID,
                         notificationGroup: .standard
                     )
-                    self.pushDialogMode = .addCommitsToRemoteBranch
-                    self.pushDialogRemote = remoteBranch.remote
-                    self.pushDialogBranch = branch
-                    self.pushDialogSourceRevision = tip
-                    self.pushDialogRefspec = nil
-                    self.showPushDialog = true
+                    self.pushWorkspace.dialogMode = .addCommitsToRemoteBranch
+                    self.pushWorkspace.dialogRemote = remoteBranch.remote
+                    self.pushWorkspace.dialogBranch = branch
+                    self.pushWorkspace.dialogSourceRevision = tip
+                    self.pushWorkspace.dialogRefspec = nil
+                    self.pushWorkspace.showDialog = true
                 } else {
                     self.feedbackCenter.success(
                         "No commits to add",
@@ -164,7 +164,7 @@ func prepareAddCommitsToRemoteBranch(
                     )
                 }
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -352,7 +352,7 @@ func chooseUpstreamFeedbackAction(for error: Error) -> FeedbackAction? {
 
 func resetCurrentBranchToRemote() {
     guard let repository = repo else { return }
-    guard multiRoots.count == 1,
+    guard multiRootWorkspace.roots.count == 1,
           branchWorkspace.branches.contains(where: { $0.isCurrent }),
           currentSyncStatus?.trackingExists == true,
           !(currentSyncStatus?.upstream.isEmpty ?? true) else {
@@ -385,7 +385,7 @@ func resetCurrentBranchToRemote() {
         return
     }
 
-    let saveChoice = GitLocalChangesSavePolicySettings.choice(for: projectPath)
+    let saveChoice = GitLocalChangesSavePolicySettings.choice(for: projectWorkspace.path)
     let alert = NSAlert()
     alert.messageText = "Reset to Remote Branch?"
     alert.informativeText = [
@@ -401,7 +401,7 @@ func resetCurrentBranchToRemote() {
 
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
-    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let savePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     let cancel = GitCancelHandle()
     beginFeedbackOperation(
         "Reset to Remote Branch",
@@ -498,7 +498,7 @@ func resetCurrentBranchToRemote() {
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -552,7 +552,7 @@ func smartCheckoutRemoteBranch(
     onSuccess: @escaping () -> Void = {}
 ) {
     let cancel = GitCancelHandle()
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Smart Checkout", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -563,7 +563,7 @@ func smartCheckoutRemoteBranch(
                 cancel: cancel
             )
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Smart Checkout completed", detail: remoteBranch)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -609,7 +609,7 @@ func smartCheckoutRemoteBranch(
                 }
             } else {
                 await MainActor.run {
-                    self.loadError = errorMessage(error)
+                    self.repositoryStatus.loadError = errorMessage(error)
                     self.feedbackCenter.error(
                         "Smart Checkout failed",
                         detail: errorMessage(error),
@@ -631,7 +631,7 @@ func forceCheckoutRemoteBranch(
         do {
             try repo.forceCheckoutRemoteBranch(remoteBranch: remoteBranch, localName: nil)
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 self.feedbackCenter.success("Force Checkout completed", detail: remoteBranch)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
@@ -639,7 +639,7 @@ func forceCheckoutRemoteBranch(
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Force Checkout failed", detail: errorMessage(error))
             }
         }
@@ -709,7 +709,7 @@ func deleteRemoteBranchInRoot(rootPath: String, branch: String) {
 }
 
 func presentMultiRootRemoteDeleteDialog(branch: String) {
-    let eligible = multiRootBranchSnapshots.filter { snapshot in
+    let eligible = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.remoteBranches.contains { $0.name == branch }
     }
     guard !eligible.isEmpty else {
@@ -742,24 +742,24 @@ func deleteMultiRootRemoteBranch(
     deleteTracking: Bool,
     selectedRootPaths: Set<String>
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
     let branchName = remoteBranch.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !branchName.isEmpty else { return }
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         selectedRootPaths.contains(snapshot.rootPath)
             && snapshot.remoteBranches.contains { $0.name == branchName }
     }
     guard !roots.isEmpty else { return }
     let commonTrackingBranches = multiRootCommonTrackingBranches(
         remoteBranch: branchName,
-        snapshots: multiRootBranchSnapshots,
+        snapshots: multiRootWorkspace.branchSnapshots,
         selectedRootPaths: selectedRootPaths
     )
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Multi-root remote branch deletion", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -878,9 +878,9 @@ func deleteMultiRootRemoteBranch(
             Set(recoveryContextsToOffer.map(\.preview.branchName))
         ).sorted()
         await MainActor.run {
-            self.multiRootRunning = false
+            self.multiRootWorkspace.running = false
             self.branchWorkspace.showMultiRootRemoteDeleteDialog = false
-            self.multiRootResults = resultsToApply
+            self.multiRootWorkspace.results = resultsToApply
             self.loadMultiRoots()
             if !recoveryContextsToOffer.isEmpty {
                 self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
@@ -905,7 +905,7 @@ func deleteMultiRootRemoteBranch(
                     notificationGroup: recoveryContextsToOffer.isEmpty ? .toolWindow : .standard
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     cancelledToReport
@@ -1088,7 +1088,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
             if $0.rootPath == $1.rootPath { return $0.name < $1.name }
             return $0.rootPath < $1.rootPath
         }
-    guard !selected.isEmpty, !multiRootRunning else { return }
+    guard !selected.isEmpty, !multiRootWorkspace.running else { return }
     guard selected.allSatisfy({ !$0.isProtected }) else {
         feedbackCenter.warning(
             "Delete remote branches unavailable",
@@ -1105,7 +1105,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
                 group.remoteBranch,
                 multiRootCommonTrackingBranches(
                     remoteBranch: group.remoteBranch,
-                    snapshots: multiRootBranchSnapshots,
+                    snapshots: multiRootWorkspace.branchSnapshots,
                     selectedRootPaths: Set(group.rootPaths)
                 )
             )
@@ -1141,10 +1141,10 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
     let deleteTracking = deleteTrackingCheckbox?.state == .on
 
     let displayNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { ($0.rootPath, $0.displayName) }
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { ($0.rootPath, $0.displayName) }
     )
     let localBranchesByRoot = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { snapshot in
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { snapshot in
             (
                 snapshot.rootPath,
                 Set(snapshot.branches.filter { !$0.isCurrent }.map(\.name))
@@ -1153,7 +1153,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
     )
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Delete selected remote branches", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -1289,8 +1289,8 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
         let completedRecoveryContexts = recoveryContexts
         let cancelledToReport = cancelled
         await MainActor.run {
-            self.multiRootRunning = false
-            self.multiRootResults = completedResults
+            self.multiRootWorkspace.running = false
+            self.multiRootWorkspace.results = completedResults
             self.loadMultiRoots()
             if !completedRecoveryContexts.isEmpty {
                 self.branchWorkspace.multiRootDeleteRecovery = MultiRootBranchDeleteRecoveryContext(
@@ -1311,7 +1311,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
                     notificationGroup: completedRecoveryContexts.isEmpty ? .toolWindow : .standard
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     cancelledToReport
@@ -1405,7 +1405,7 @@ func deleteRemoteTagsFromRecovery(_ contexts: [TagDeleteRecoveryContext]) {
                     tagName: contexts.first?.tag.name ?? "",
                     contexts: contexts
                 )
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Multi-root remote tag deletion canceled",
@@ -1417,7 +1417,7 @@ func deleteRemoteTagsFromRecovery(_ contexts: [TagDeleteRecoveryContext]) {
                     tagName: contexts.first?.tag.name ?? "",
                     contexts: contexts
                 )
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Multi-root remote tag deletion partially completed",
@@ -1537,7 +1537,7 @@ func deleteRemoteBranch(_ branch: RemoteBranchInfo) {
             }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 if cancel.isCancelled() {
                     self.feedbackCenter.warning(
                         "Remote branch deletion cancelled",
@@ -1614,7 +1614,7 @@ func deleteRemoteTagFromRecovery(_ context: TagDeleteRecoveryContext) {
                     nextStep: "Retry the recovery action to process the remaining remotes."
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 let missingDetail = missingRemotes.isEmpty
                     ? ""
@@ -1636,8 +1636,8 @@ func loadRemotes() {
         do {
             let rs = try repo.remoteList()
             await MainActor.run {
-                self.remotes = rs
-                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
+                self.remoteWorkspace.remotes = rs
+                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectWorkspace.path)
             }
         } catch {
             await MainActor.run {
@@ -1650,13 +1650,13 @@ func loadRemotes() {
 /// 打开指定 Git root 的 Configure Remotes，而不是复用当前窗口 repository
 /// 的 remote 状态。Push 对话框和 Branches Popup 都通过这个入口进入。
 func beginConfigureRemotes() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     beginFeedbackOperation("Load remotes")
     Task.detached(priority: .userInitiated) {
         do {
             let roots = try loadRemoteConfigRoots(scanRoot: projectPath)
             await MainActor.run {
-                self.multiRootRemoteConfigAggregateContext = MultiRootRemoteConfigAggregateContext(roots: roots)
+                self.remoteWorkspace.multiRootRemoteConfigAggregateContext = MultiRootRemoteConfigAggregateContext(roots: roots)
                 self.feedbackCenter.success("Remotes loaded", detail: "\(roots.count) repositories")
             }
         } catch {
@@ -1672,13 +1672,13 @@ func beginConfigureRemotes() {
 }
 
 func loadMultiRootRemoteConfigAggregate() {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     Task.detached(priority: .userInitiated) {
         do {
             let roots = try loadRemoteConfigRoots(scanRoot: projectPath)
             await MainActor.run {
-                guard self.multiRootRemoteConfigAggregateContext != nil else { return }
-                self.multiRootRemoteConfigAggregateContext = MultiRootRemoteConfigAggregateContext(roots: roots)
+                guard self.remoteWorkspace.multiRootRemoteConfigAggregateContext != nil else { return }
+                self.remoteWorkspace.multiRootRemoteConfigAggregateContext = MultiRootRemoteConfigAggregateContext(roots: roots)
             }
         } catch {
             await MainActor.run {
@@ -1702,12 +1702,12 @@ func beginMultiRootRemoteConfig(rootPath: String, selectedRemote: String? = nil)
                 rootRemotes.first(where: { $0.name == name })
             }
             await MainActor.run {
-                self.multiRootRemoteName = selected?.name ?? ""
-                self.multiRootRemoteURL = selected?.url ?? ""
-                self.multiRootRemotePushURL = selected?.pushUrl ?? ""
-                self.multiRootRemoteFetchRefspec = selected?.fetchRefspec ?? ""
-                self.multiRootRemotePushRefspec = selected?.pushRefspec ?? ""
-                self.multiRootRemoteConfigContext = MultiRootRemoteConfigContext(
+                self.remoteWorkspace.multiRootRemoteName = selected?.name ?? ""
+                self.remoteWorkspace.multiRootRemoteURL = selected?.url ?? ""
+                self.remoteWorkspace.multiRootRemotePushURL = selected?.pushUrl ?? ""
+                self.remoteWorkspace.multiRootRemoteFetchRefspec = selected?.fetchRefspec ?? ""
+                self.remoteWorkspace.multiRootRemotePushRefspec = selected?.pushRefspec ?? ""
+                self.remoteWorkspace.multiRootRemoteConfigContext = MultiRootRemoteConfigContext(
                     rootPath: rootPath,
                     remotes: rootRemotes
                 )
@@ -1730,8 +1730,8 @@ func loadMultiRootRemoteConfig(rootPath: String) {
             let rootRepo = try openRepository(path: rootPath)
             let rootRemotes = try rootRepo.remoteList()
             await MainActor.run {
-                guard self.multiRootRemoteConfigContext?.rootPath == rootPath else { return }
-                self.multiRootRemoteConfigContext = MultiRootRemoteConfigContext(
+                guard self.remoteWorkspace.multiRootRemoteConfigContext?.rootPath == rootPath else { return }
+                self.remoteWorkspace.multiRootRemoteConfigContext = MultiRootRemoteConfigContext(
                     rootPath: rootPath,
                     remotes: rootRemotes
                 )
@@ -1748,12 +1748,12 @@ func loadMultiRootRemoteConfig(rootPath: String) {
 }
 
 func saveRemoteConfigInRoot(rootPath: String) {
-    let name = multiRootRemoteName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let url = multiRootRemoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    let name = remoteWorkspace.multiRootRemoteName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let url = remoteWorkspace.multiRootRemoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, !url.isEmpty else { return }
-    let pushURL = multiRootRemotePushURL.trimmingCharacters(in: .whitespacesAndNewlines)
-    let fetchRefspec = multiRootRemoteFetchRefspec.trimmingCharacters(in: .whitespacesAndNewlines)
-    let pushRefspec = multiRootRemotePushRefspec.trimmingCharacters(in: .whitespacesAndNewlines)
+    let pushURL = remoteWorkspace.multiRootRemotePushURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fetchRefspec = remoteWorkspace.multiRootRemoteFetchRefspec.trimmingCharacters(in: .whitespacesAndNewlines)
+    let pushRefspec = remoteWorkspace.multiRootRemotePushRefspec.trimmingCharacters(in: .whitespacesAndNewlines)
     let broker = credentialAuth.broker
     beginFeedbackOperation("Save root remote")
     Task.detached(priority: .userInitiated) {
@@ -1795,8 +1795,8 @@ func saveRemoteConfigInRoot(rootPath: String) {
 }
 
 func addRemoteInRoot(rootPath: String, fetchAfterAdd: Bool = true) {
-    let name = multiRootRemoteName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let url = multiRootRemoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    let name = remoteWorkspace.multiRootRemoteName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let url = remoteWorkspace.multiRootRemoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, !url.isEmpty else { return }
     addRemoteInRoot(rootPath: rootPath, name: name, url: url, fetchAfterAdd: fetchAfterAdd)
 }
@@ -1832,12 +1832,12 @@ func addRemoteInRoot(
             }
             try rootRepo.remoteAdd(name: name, url: url)
             await MainActor.run {
-                if self.multiRootRemoteConfigContext?.rootPath == rootPath {
-                    self.multiRootRemoteName = ""
-                    self.multiRootRemoteURL = ""
-                    self.multiRootRemotePushURL = ""
-                    self.multiRootRemoteFetchRefspec = ""
-                    self.multiRootRemotePushRefspec = ""
+                if self.remoteWorkspace.multiRootRemoteConfigContext?.rootPath == rootPath {
+                    self.remoteWorkspace.multiRootRemoteName = ""
+                    self.remoteWorkspace.multiRootRemoteURL = ""
+                    self.remoteWorkspace.multiRootRemotePushURL = ""
+                    self.remoteWorkspace.multiRootRemoteFetchRefspec = ""
+                    self.remoteWorkspace.multiRootRemotePushRefspec = ""
                 }
                 self.feedbackCenter.success("Root remote added", detail: "\(name) · \(rootPath)")
                 completion(true)
@@ -1963,7 +1963,7 @@ func removeSelectedRemotesInRoots(_ groups: [BranchDashboardRemoteGroup]) {
         if $0.rootPath == $1.rootPath { return $0.name < $1.name }
         return $0.rootPath < $1.rootPath
     }
-    guard !selected.isEmpty, !multiRootRunning else { return }
+    guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
     alert.messageText = "Remove selected remotes?"
@@ -1977,9 +1977,9 @@ func removeSelectedRemotesInRoots(_ groups: [BranchDashboardRemoteGroup]) {
     guard alert.runModal() == .alertFirstButtonReturn else { return }
 
     let displayNames = Dictionary(
-        uniqueKeysWithValues: multiRootBranchSnapshots.map { ($0.rootPath, $0.displayName) }
+        uniqueKeysWithValues: multiRootWorkspace.branchSnapshots.map { ($0.rootPath, $0.displayName) }
     )
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     beginFeedbackOperation("Remove selected remotes")
     Task.detached(priority: .userInitiated) {
         var results: [RootOperationResult] = []
@@ -2012,8 +2012,8 @@ func removeSelectedRemotesInRoots(_ groups: [BranchDashboardRemoteGroup]) {
         let completedResults = results
         let completedFailures = completedResults.filter { !$0.success }
         await MainActor.run {
-            self.multiRootRunning = false
-            self.multiRootResults = completedResults
+            self.multiRootWorkspace.running = false
+            self.multiRootWorkspace.results = completedResults
             self.loadMultiRootRemoteConfigAggregate()
             self.loadMultiRoots()
             if completedFailures.isEmpty {
@@ -2022,7 +2022,7 @@ func removeSelectedRemotesInRoots(_ groups: [BranchDashboardRemoteGroup]) {
                     detail: "\(selected.count) remotes"
                 )
             } else {
-                self.toolWindowMode = .operations
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
                 self.feedbackCenter.warning(
                     "Selected remote removal partially completed",
@@ -2043,7 +2043,7 @@ func renameRemoteInRoot(rootPath: String, old: String, new: String) {
             let rootRepo = try openRepository(path: rootPath)
             try rootRepo.remoteRename(old: old, new: newName)
             await MainActor.run {
-                self.multiRootRemoteName = newName
+                self.remoteWorkspace.multiRootRemoteName = newName
                 self.feedbackCenter.success("Root remote renamed", detail: "\(old) → \(newName) · \(rootPath)")
                 self.loadMultiRootRemoteConfig(rootPath: rootPath)
                 self.loadMultiRootRemoteConfigAggregate()
@@ -2062,12 +2062,12 @@ func renameRemoteInRoot(rootPath: String, old: String, new: String) {
 
 /// REMOTE-001：保存当前编辑的远程配置（URL/push URL/refspec）。
 func saveRemoteConfig() {
-    guard let repo, !remoteName.isEmpty, !remoteUrl.isEmpty else { return }
-    let name = remoteName.trimmingCharacters(in: .whitespaces)
-    let url = remoteUrl.trimmingCharacters(in: .whitespaces)
-    let pushUrl = remotePushUrl.trimmingCharacters(in: .whitespaces)
-    let fetchRefspec = remoteFetchRefspec.trimmingCharacters(in: .whitespaces)
-    let pushRefspec = remotePushRefspec.trimmingCharacters(in: .whitespaces)
+    guard let repo, !remoteWorkspace.name.isEmpty, !remoteWorkspace.url.isEmpty else { return }
+    let name = remoteWorkspace.name.trimmingCharacters(in: .whitespaces)
+    let url = remoteWorkspace.url.trimmingCharacters(in: .whitespaces)
+    let pushUrl = remoteWorkspace.pushUrl.trimmingCharacters(in: .whitespaces)
+    let fetchRefspec = remoteWorkspace.fetchRefspec.trimmingCharacters(in: .whitespaces)
+    let pushRefspec = remoteWorkspace.pushRefspec.trimmingCharacters(in: .whitespaces)
     let broker = credentialAuth.broker
     beginFeedbackOperation("Save remote")
     Task.detached(priority: .userInitiated) {
@@ -2120,8 +2120,8 @@ func remoteRename(_ old: String, _ new: String) {
 }
 
 func remoteAdd(_ fetchAfterAdd: Bool = true) {
-    guard let repo, !remoteName.isEmpty, !remoteUrl.isEmpty else { return }
-    let name = remoteName, url = remoteUrl
+    guard let repo, !remoteWorkspace.name.isEmpty, !remoteWorkspace.url.isEmpty else { return }
+    let name = remoteWorkspace.name, url = remoteWorkspace.url
     let broker = credentialAuth.broker
     beginFeedbackOperation("Add remote")
     Task.detached(priority: .userInitiated) {
@@ -2139,7 +2139,7 @@ func remoteAdd(_ fetchAfterAdd: Bool = true) {
             try repo.remoteAdd(name: name, url: url)
             let rs = try repo.remoteList()
             await MainActor.run {
-                self.remotes = rs; self.remoteName = ""; self.remoteUrl = ""
+                self.remoteWorkspace.remotes = rs; self.remoteWorkspace.name = ""; self.remoteWorkspace.url = ""
                 self.feedbackCenter.success("Remote added", detail: name)
                 if fetchAfterAdd {
                     self.doFetch(name)
@@ -2166,7 +2166,7 @@ func remoteRemove(_ name: String) {
             try repo.remoteRemove(name: name)
             let rs = try repo.remoteList()
             await MainActor.run {
-                self.remotes = rs
+                self.remoteWorkspace.remotes = rs
                 self.feedbackCenter.success("Remote removed", detail: name)
             }
         } catch {

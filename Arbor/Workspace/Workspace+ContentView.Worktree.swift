@@ -51,28 +51,28 @@ func presentNewWorktreeFromReference(
     }
     let trimmedReference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedReference.isEmpty else { return }
-    newWorktreeRootPath = selectedRootPath
-    newWorktreeReference = trimmedReference
-    newWorktreeIsTag = isTag
-    newWorktreePath = ""
-    newWorktreeBranch = ""
-    showNewWorktreeDialog = true
+    worktreeWorkspace.rootPath = selectedRootPath
+    worktreeWorkspace.reference = trimmedReference
+    worktreeWorkspace.isTag = isTag
+    worktreeWorkspace.path = ""
+    worktreeWorkspace.branch = ""
+    worktreeWorkspace.showCreateDialog = true
 }
 
 func dismissNewWorktreeDialog() {
-    showNewWorktreeDialog = false
-    newWorktreeRootPath = nil
-    newWorktreeReference = ""
-    newWorktreeIsTag = false
-    newWorktreePath = ""
-    newWorktreeBranch = ""
+    worktreeWorkspace.showCreateDialog = false
+    worktreeWorkspace.rootPath = nil
+    worktreeWorkspace.reference = ""
+    worktreeWorkspace.isTag = false
+    worktreeWorkspace.path = ""
+    worktreeWorkspace.branch = ""
 }
 
 func loadWorktrees() {
     guard let repo else { return }
     Task.detached(priority: .userInitiated) {
         let items = (try? repo.worktreeList()) ?? []
-        await MainActor.run { self.worktrees = items }
+        await MainActor.run { self.worktreeWorkspace.worktrees = items }
     }
 }
 
@@ -111,15 +111,15 @@ func createWorktree(
             let items = try targetRepo.worktreeList()
             await MainActor.run {
                 if self.repo?.workdir() == targetRootPath {
-                    self.worktrees = items
+                    self.worktreeWorkspace.worktrees = items
                 }
                 self.loadMultiRoots()
-                self.worktreeFeedback = "已创建 worktree：\(path)"
+                self.worktreeWorkspace.feedback = "已创建 worktree：\(path)"
                 self.feedbackCenter.success("Worktree created", detail: path)
             }
         } catch {
             await MainActor.run {
-                self.worktreeFeedback = errorMessage(error)
+                self.worktreeWorkspace.feedback = errorMessage(error)
                 self.feedbackCenter.error("Create worktree failed", detail: errorMessage(error))
             }
         }
@@ -141,13 +141,13 @@ func removeWorktree(path: String, force: Bool) {
             try repo.worktreeRemove(path: path, force: force)
             let items = try repo.worktreeList()
             await MainActor.run {
-                self.worktrees = items
-                self.worktreeFeedback = "已移除 worktree：\(path)"
+                self.worktreeWorkspace.worktrees = items
+                self.worktreeWorkspace.feedback = "已移除 worktree：\(path)"
                 self.feedbackCenter.success("Worktree removed", detail: path)
             }
         } catch {
             await MainActor.run {
-                self.worktreeFeedback = errorMessage(error)
+                self.worktreeWorkspace.feedback = errorMessage(error)
                 self.feedbackCenter.error("Remove worktree failed", detail: errorMessage(error))
             }
         }
@@ -171,12 +171,12 @@ func updateWorktreeLock(path: String, lock: Bool) {
             else { try repo.worktreeUnlock(path: path) }
             let items = try repo.worktreeList()
             await MainActor.run {
-                self.worktrees = items
+                self.worktreeWorkspace.worktrees = items
                 self.feedbackCenter.success(lock ? "Worktree locked" : "Worktree unlocked", detail: path)
             }
         } catch {
             await MainActor.run {
-                self.worktreeFeedback = errorMessage(error)
+                self.worktreeWorkspace.feedback = errorMessage(error)
                 self.feedbackCenter.error(lock ? "Lock worktree failed" : "Unlock worktree failed", detail: errorMessage(error))
             }
         }
@@ -191,7 +191,7 @@ func pruneWorktrees() {
             try repo.worktreePrune()
             let items = try repo.worktreeList()
             await MainActor.run {
-                self.worktrees = items
+                self.worktreeWorkspace.worktrees = items
                 self.feedbackCenter.success("Worktrees pruned")
             }
         } catch {

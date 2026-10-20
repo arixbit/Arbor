@@ -7,6 +7,15 @@ import SwiftUI
 /// 改写是否需要 --root 变基，撤销动作依赖它。
 @MainActor
 final class LogRewriteState: ObservableObject {
+    // MARK: - 初始提交改写确认与请求。
+
+    /// IntelliJ warns before editing the initial commit instead of silently
+    /// rejecting the action.
+    @Published var showInitialCommitRewordAlert = false
+    @Published var pendingInitialCommitReword: CommitInfo?
+    @Published var showInitialCommitRewriteAlert = false
+    @Published var pendingInitialCommitRewrite: PendingInitialCommitRewrite?
+
     @Published var showRewordDialog = false
     @Published var rewordCommit: CommitInfo?
     @Published var rewordMessage = ""

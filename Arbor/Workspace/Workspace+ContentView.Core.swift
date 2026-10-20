@@ -9,7 +9,7 @@ func rewordUndoRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .undoRewordCommit,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         rewordUndo: context
@@ -19,52 +19,52 @@ func rewordUndoRequest(
 func handleContentViewAppear() {
     DiagnosticsLogger.shared.record(
         operation: "app",
-        repositoryPath: projectPath,
-        code: projectPath == nil ? "launch-no-project" : "launch-with-project"
+        repositoryPath: projectWorkspace.path,
+        code: projectWorkspace.path == nil ? "launch-no-project" : "launch-with-project"
     )
     // Rebased keeps the Log workspace paired directly with Commit/Stash. The
     // Project surface is opened from the activity rail, so it must not steal
     // vertical space from the left Git workspace on launch.
-    if toolWindowMode == .log {
+    if projectWorkspace.toolWindowMode == .log {
         projectPanelExpanded = false
     }
-    beforeCommitCommands = loadBeforeCommitCommands()
-    loadMergeDialogSettings(for: projectPath)
-    loadRebaseDialogSettings(for: projectPath)
-    projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(for: projectPath)
-    projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
-    projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
+    commitWorkspace.beforeCommitCommands = loadBeforeCommitCommands()
+    loadMergeDialogSettings(for: projectWorkspace.path)
+    loadRebaseDialogSettings(for: projectWorkspace.path)
+    gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(for: projectWorkspace.path)
+    gitSettings.projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectWorkspace.path)
+    gitSettings.projectUpdateMethod = GitUpdateMethodSettings.method(for: projectWorkspace.path)
     logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
         GitBranchesPopupSettings.logSelectionActionKey,
-        for: projectPath
+        for: projectWorkspace.path
     )
     logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByDirectoryKey,
-        for: projectPath
+        for: projectWorkspace.path
     )
     logBranchesPanel.groupByRepository = GitBranchesPopupSettings.value(
         GitBranchesPopupSettings.groupByRepositoryKey,
-        for: projectPath
+        for: projectWorkspace.path
     )
-    loadProjectProtectedBranchSettings(for: projectPath)
-    identityAuthorName = UserDefaults.standard.string(forKey: "arbor.identity.authorName") ?? ""
-    identityAuthorEmail = UserDefaults.standard.string(forKey: "arbor.identity.authorEmail") ?? ""
-    identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectPath)
-    identityCommitterName = UserDefaults.standard.string(forKey: "arbor.identity.committerName") ?? ""
-    identityCommitterEmail = UserDefaults.standard.string(forKey: "arbor.identity.committerEmail") ?? ""
-    identitySignOff = GitSignOffCommitSettings.value(for: projectPath)
-    identityCoAuthors = UserDefaults.standard.string(forKey: "arbor.identity.coAuthors") ?? ""
+    loadProjectProtectedBranchSettings(for: projectWorkspace.path)
+    gitSettings.identityAuthorName = UserDefaults.standard.string(forKey: "arbor.identity.authorName") ?? ""
+    gitSettings.identityAuthorEmail = UserDefaults.standard.string(forKey: "arbor.identity.authorEmail") ?? ""
+    gitSettings.identityRecentAuthors = GitCommitAuthorHistorySettings.authors(for: projectWorkspace.path)
+    gitSettings.identityCommitterName = UserDefaults.standard.string(forKey: "arbor.identity.committerName") ?? ""
+    gitSettings.identityCommitterEmail = UserDefaults.standard.string(forKey: "arbor.identity.committerEmail") ?? ""
+    gitSettings.identitySignOff = GitSignOffCommitSettings.value(for: projectWorkspace.path)
+    gitSettings.identityCoAuthors = UserDefaults.standard.string(forKey: "arbor.identity.coAuthors") ?? ""
     // WindowGroup/AppKit restoration can materialize ContentView with its
     // initial @State before the recent-project value has been restored. Do the
     // same recovery at the lifecycle boundary as well, otherwise the shell
     // remains on Arbor's welcome page even though the recent-project list
     // contains a valid repository (the screenshot state that looks unlike
     // rebased's project workspace).
-    if projectRepo == nil {
-        let recoveredPath = projectPath ?? ContentView.recentProjectPath()
-        if projectPath == nil, let recoveredPath {
-            self.projectPath = recoveredPath
-            self.path = recoveredPath
+    if projectWorkspace.repository == nil {
+        let recoveredPath = projectWorkspace.path ?? ContentView.recentProjectPath()
+        if projectWorkspace.path == nil, let recoveredPath {
+            self.projectWorkspace.path = recoveredPath
+            self.projectWorkspace.inputPath = recoveredPath
         }
         guard let recoveredPath else { return }
         DiagnosticsLogger.shared.record(
@@ -78,7 +78,7 @@ func handleContentViewAppear() {
 
 /// 打开当前窗口中的项目。
 func openRepo() {
-    requestOpenProject(path)
+    requestOpenProject(projectWorkspace.inputPath)
 }
 
 /// 文件夹选择器：NSOpenPanel 选目录后填入 path 并打开（C1）。
@@ -90,7 +90,7 @@ func showOpenPanel() {
     panel.canCreateDirectories = false
     panel.prompt = "打开项目"
     // 默认定位到当前项目或用户主目录
-    if let projectPath {
+    if let projectPath = projectWorkspace.path {
         panel.directoryURL = URL(fileURLWithPath: projectPath)
     }
     if panel.runModal() == .OK, let url = panel.url {
@@ -106,7 +106,7 @@ func showInitializePanel() {
     panel.allowsMultipleSelection = false
     panel.canCreateDirectories = false
     panel.prompt = "初始化 Git"
-    if let projectPath {
+    if let projectPath = projectWorkspace.path {
         panel.directoryURL = URL(fileURLWithPath: projectPath)
     }
     guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -148,8 +148,8 @@ func loadGitCredentialHelpers() {
     Task.detached(priority: .userInitiated) {
         let credentialHelpers = (try? repo.credentialHelpers()) ?? []
         await MainActor.run {
-            guard self.projectRepo === repo else { return }
-            self.gitCredentialHelpers = credentialHelpers
+            guard self.projectWorkspace.repository === repo else { return }
+            self.gitSettings.gitCredentialHelpers = credentialHelpers
         }
     }
 }
@@ -158,11 +158,11 @@ func loadGitCredentialHelpers() {
 
 /// 逐行暂存入口：选中文件并让 diff 视图进入选择模式。
 func partialMode(_ p: String) {
-    commitPreviewPath = p
-    selectionModePath = p
-    selection = nil
-    fileSelection = nil
-    commitPreviewVisible = true
+    fileWorkspace.previewPath = p
+    fileWorkspace.selectionModePath = p
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.previewVisible = true
 }
 
 /// 加载提交信息模板（commit.template）填入提交信息框。
@@ -172,9 +172,9 @@ func loadTemplate() {
         let tpl = (try? repo.commitTemplate()) ?? nil
         await MainActor.run {
             if let tpl, !tpl.isEmpty {
-                self.commitMessage = tpl
+                self.commitWorkspace.message = tpl
             } else {
-                self.commitFeedback = "未配置提交模板"
+                self.commitWorkspace.feedback = "未配置提交模板"
             }
         }
     }
@@ -185,7 +185,7 @@ func loadRecentMessages() {
     guard let repo else { return }
     Task.detached(priority: .userInitiated) {
         let msgs = (try? repo.recentCommitMessages(limit: 10)) ?? []
-        await MainActor.run { self.recentMessages = msgs }
+        await MainActor.run { self.commitWorkspace.recentMessages = msgs }
     }
 }
 
@@ -252,7 +252,7 @@ func parseCoAuthors(_ text: String) -> [String] {
 }
 
 func promptReword(index: Int, defaultMessage: String) {
-    guard rebaseActions.indices.contains(index) else { return }
+    guard rebaseWorkspace.actions.indices.contains(index) else { return }
     let alert = NSAlert()
     alert.messageText = "修改提交信息"
     alert.informativeText = "请输入新的提交标题。"
@@ -264,7 +264,7 @@ func promptReword(index: Int, defaultMessage: String) {
     guard alert.runModal() == .alertFirstButtonReturn else { return }
     let message = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !message.isEmpty else { return }
-    rebaseActions[index] = .reword(message: message)
+    rebaseWorkspace.actions[index] = .reword(message: message)
 }
 
 nonisolated func errorMessage(_ error: Error) -> String {

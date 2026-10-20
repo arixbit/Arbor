@@ -4,16 +4,16 @@ import UniformTypeIdentifiers
 
 extension ContentView {
 func beginCommitAndPush() {
-    if multiRoots.count > 1 {
+    if multiRootWorkspace.roots.count > 1 {
         openMultiRootCommitDialog()
         return
     }
     guard hasStaged,
-          !commitMessage.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+          !commitWorkspace.message.trimmingCharacters(in: .whitespaces).isEmpty else { return }
     // Match GitCommitAndPushExecutor: the commit workflow owns the first
     // stage. Push options are shown only after Git has created the commit.
     // This prevents a rejected/failed commit from ever entering transport.
-    pendingCommitAndPush = true
+    commitWorkspace.pendingCommitAndPush = true
     doCommit()
 }
 
@@ -21,7 +21,7 @@ func beginCommitAndPush() {
 /// The default keeps IntelliJ's Push preview, while the project preference can
 /// opt into automatic transport for a root that has a usable remote/branch.
 func beginSingleRootPushAfterCommit(rootPath: String) {
-    let choice = GitPushAfterCommitSettings.choice(for: projectPath)
+    let choice = GitPushAfterCommitSettings.choice(for: projectWorkspace.path)
     let protectedBranchPatterns = effectiveProtectedBranchPatterns
     Task.detached(priority: .userInitiated) {
         let requiresPreview = pushAfterCommitRequiresPreview(
@@ -70,14 +70,14 @@ func beginPushDialog(branch: String? = nil) {
     let configuredTarget = branchWorkspace.syncStatuses
         .first(where: { $0.branch == sourceBranch && $0.trackingExists })
         .flatMap {
-            remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
+            remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remoteWorkspace.remotes)
         }
-    pushDialogRemote = configuredTarget?.remote
-    pushDialogRefspec = nil
-    pushDialogBranch = configuredTarget?.branch ?? sourceBranch
-    pushDialogSourceRevision = sourceBranch
-    pushDialogMode = .push
-    showPushDialog = true
+    pushWorkspace.dialogRemote = configuredTarget?.remote
+    pushWorkspace.dialogRefspec = nil
+    pushWorkspace.dialogBranch = configuredTarget?.branch ?? sourceBranch
+    pushWorkspace.dialogSourceRevision = sourceBranch
+    pushWorkspace.dialogMode = .push
+    pushWorkspace.showDialog = true
 }
 
 /// LOG-003：将 Log 中选中的提交作为 source 推送到目标分支。
@@ -114,12 +114,12 @@ func pushUpToCommitFromLog(_ commit: CommitInfo) {
                     && containingBranches.contains($0.name)
             }
         await MainActor.run {
-            self.pushDialogMode = .pushUpToCommit
-            self.pushDialogRemote = nil
-            self.pushDialogBranch = candidate?.name
-            self.pushDialogSourceRevision = commitID
-            self.pushDialogRefspec = nil
-            self.showPushDialog = true
+            self.pushWorkspace.dialogMode = .pushUpToCommit
+            self.pushWorkspace.dialogRemote = nil
+            self.pushWorkspace.dialogBranch = candidate?.name
+            self.pushWorkspace.dialogSourceRevision = commitID
+            self.pushWorkspace.dialogRefspec = nil
+            self.pushWorkspace.showDialog = true
         }
     }
 }
@@ -149,20 +149,20 @@ func commitAndPush(
     }
     let cancel = GitCancelHandle()
     beginFeedbackOperation("Commit and push", cancelHandle: cancel)
-    let msg = commitMessage
-    let hooks = GitCommitHooksSettings.effectiveSkipHooks(requested: self.skipHooks)
-    let checks = beforeCommitCommands
-    let authorNameOverride = identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let authorEmailOverride = identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerNameOverride = identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let committerEmailOverride = identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-    let signOff = identitySignOff
-    let coAuthors = parseCoAuthors(identityCoAuthors)
+    let msg = commitWorkspace.message
+    let hooks = GitCommitHooksSettings.effectiveSkipHooks(requested: self.commitWorkspace.skipHooks)
+    let checks = commitWorkspace.beforeCommitCommands
+    let authorNameOverride = gitSettings.identityAuthorName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let authorEmailOverride = gitSettings.identityAuthorEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerNameOverride = gitSettings.identityCommitterName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let committerEmailOverride = gitSettings.identityCommitterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let signOff = gitSettings.identitySignOff
+    let coAuthors = parseCoAuthors(gitSettings.identityCoAuthors)
     let broker = credentialAuth.broker
     rememberCommitAuthor(
         name: authorNameOverride,
         email: authorEmailOverride,
-        projectPath: projectPath
+        projectPath: projectWorkspace.path
     )
     Task.detached(priority: .userInitiated) {
         do {
@@ -215,22 +215,22 @@ func commitAndPush(
             let branchList = (try? repo.branchList()) ?? []
             let syncStatuses = (try? repo.syncStatus()) ?? []
             await MainActor.run {
-                self.entries = st
-                self.changeLists = cls
-                self.headId = hid
-                self.stagingModel = staging
-                self.lastIndexRevision = staging?.indexRevision
+                self.repositoryStatus.entries = st
+                self.repositoryStatus.changeLists = cls
+                self.repositoryStatus.headId = hid
+                self.repositoryStatus.stagingModel = staging
+                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.branchWorkspace.branches = branchList
                 self.branchWorkspace.syncStatuses = syncStatuses
-                self.recentMessages = recent
-                if self.toolWindowMode == .log {
+                self.commitWorkspace.recentMessages = recent
+                if self.projectWorkspace.toolWindowMode == .log {
                     self.loadLog()
                 }
-                self.commitMessage = ""
-                self.pushFeedback = outcome.pushed
+                self.commitWorkspace.message = ""
+                self.pushWorkspace.feedback = outcome.pushed
                     ? "已提交并推送 \(String(outcome.commitId.prefix(7)))"
                     : "已提交 \(String(outcome.commitId.prefix(7)))（未推送：没有可用远程或分支）"
-                self.commitFeedback = self.pushFeedback
+                self.commitWorkspace.feedback = self.pushWorkspace.feedback
             }
         } catch {
             await MainActor.run {
@@ -257,8 +257,8 @@ func commitAndPush(
                     }
                     return
                 }
-                self.pushFeedback = friendlyRemoteError(error)
-                self.commitFeedback = self.pushFeedback
+                self.pushWorkspace.feedback = friendlyRemoteError(error)
+                self.commitWorkspace.feedback = self.pushWorkspace.feedback
                 let detail = errorMessage(error)
                 if gitCommitSigningFailureNeedsGPGConfiguration(detail) {
                     self.feedbackCenter.error(
@@ -270,7 +270,7 @@ func commitAndPush(
                     )
                 }
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
                 self.offerPushRecovery(
                     error,
@@ -290,7 +290,7 @@ func pushTag(_ tag: String, remote selectedRemote: String? = nil) {
     guard let repo,
           let remote = resolveSelectedRemoteName(
               selectedRemote: selectedRemote,
-              availableRemoteNames: remotes.map(\.name)
+              availableRemoteNames: remoteWorkspace.remotes.map(\.name)
           ) else {
         feedbackCenter.warning(
             "Choose a remote before pushing the tag",
@@ -313,7 +313,7 @@ func pushTag(_ tag: String, remote selectedRemote: String? = nil) {
         } catch {
             await MainActor.run {
                 self.tagWorkspace.feedback = friendlyRemoteError(error)
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }
@@ -364,9 +364,9 @@ func executeMultiRootPush(
     selectedRootPaths: [String]? = nil,
     fromCommit: Bool = false
 ) {
-    multiRootPushOptionsRootPaths = selectedRootPaths
-    multiRootPushOptionsFromCommit = fromCommit
-    showMultiRootPushOptions = true
+    pushWorkspace.multiRootPushOptionsRootPaths = selectedRootPaths
+    pushWorkspace.multiRootPushOptionsFromCommit = fromCommit
+    pushWorkspace.showMultiRootPushOptions = true
 }
 
 func beginMultiRootCommitPushOptions(rootPaths: [String]) {
@@ -380,7 +380,7 @@ func beginMultiRootCommitPushOptions(rootPaths: [String]) {
 func beginMultiRootCommitPush(rootPaths: [String]) {
     let normalizedPaths = Array(Set(rootPaths)).sorted()
     guard !normalizedPaths.isEmpty else { return }
-    let choice = GitPushAfterCommitSettings.choice(for: projectPath)
+    let choice = GitPushAfterCommitSettings.choice(for: projectWorkspace.path)
     let protectedBranchPatternsByRoot = Dictionary(
         uniqueKeysWithValues: normalizedPaths.map { rootPath in
             (
@@ -430,11 +430,11 @@ func runMultiRootPush(
     priorViewCommitRanges: [PersistedLogRevisionRange] = [],
     priorResultRows: [FeedbackResultRow] = []
 ) {
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    multiRootPushRetryContext = nil
-    guard let projectPath else { return }
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    pushWorkspace.multiRootPushRetryContext = nil
+    guard let projectPath = projectWorkspace.path else { return }
     let observedRootPaths: [String]
     if let selectedRootPaths {
         observedRootPaths = selectedRootPaths
@@ -443,7 +443,7 @@ func runMultiRootPush(
         // not synchronously rescan a large project on the main actor just to
         // enrich the eventual notification; an empty snapshot only loses the
         // optional View Commits action, never the push itself.
-        observedRootPaths = multiRoots.map(\.path)
+        observedRootPaths = multiRootWorkspace.roots.map(\.path)
     }
     let pendingPushRevisionRanges = Self.multiRootPushRevisionRanges(
         for: observedRootPaths
@@ -457,7 +457,7 @@ func runMultiRootPush(
         )
     }
     let notificationID = multiRootRetryNotificationID(.push)
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     // A partial Commit and Push notification may still contain Retry Failed
     // Commits for roots that were not committed. Starting the Push stage must
     // not expire that recovery entry; the Push notification has a different
@@ -534,7 +534,7 @@ func runMultiRootPush(
                     notificationID: notificationID
                 )
             case let .failure(error):
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 let retryAction: FeedbackAction? = observedRootPaths.isEmpty
                     ? nil
                     : {
@@ -573,7 +573,7 @@ func runMultiRootPush(
                     )
                 }
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -594,18 +594,18 @@ func finishMultiRootPush(
     notificationID: String?
 ) {
     if !priorResultRows.isEmpty {
-        let preservedEngineResults = self.multiRootResults.isEmpty
+        let preservedEngineResults = self.multiRootWorkspace.results.isEmpty
             ? rootOperationResults(from: priorResultRows)
-            : self.multiRootResults
-        self.multiRootResults = mergeRootOperationResults(
+            : self.multiRootWorkspace.results
+        self.multiRootWorkspace.results = mergeRootOperationResults(
             preserved: preservedEngineResults,
             retry: results,
             rootOrder: priorResultRows.map(\.rootPath)
         )
     } else {
-        self.multiRootResults = results
+        self.multiRootWorkspace.results = results
     }
-    self.multiRootRunning = false
+    self.multiRootWorkspace.running = false
     self.showHostingAuthPromptIfNeeded(for: results)
     let resultRows = mergeFeedbackResultRows(
         preserved: priorResultRows,
@@ -635,7 +635,7 @@ func finishMultiRootPush(
             results: results
         )
     )
-    self.multiRootPushRetryContext = retryPaths.isEmpty
+    self.pushWorkspace.multiRootPushRetryContext = retryPaths.isEmpty
         ? nil
         : MultiRootPushRetryContext(
             rootPaths: retryPaths,
@@ -669,12 +669,12 @@ func finishMultiRootPush(
     let shouldAutoUpdate = staleLeasePaths.isEmpty
         && !nonFastForwardPaths.isEmpty
         && !hasErrorResults
-        && GitPushAutoUpdateSettings.value(for: self.projectPath)
+        && GitPushAutoUpdateSettings.value(for: self.projectWorkspace.path)
     if shouldAutoUpdate {
         self.recoverMultiRootPushRoots(
             nonFastForwardPaths,
-            rebase: GitUpdateMethodSettings.method(for: self.projectPath) == .rebase,
-            updateRootPaths: self.multiRoots.map(\.path),
+            rebase: GitUpdateMethodSettings.method(for: self.projectWorkspace.path) == .rebase,
+            updateRootPaths: self.multiRootWorkspace.roots.map(\.path),
             tagMode: tagMode,
             skipHooks: skipHooks,
             priorViewCommitRanges: viewCommitRanges,
@@ -690,8 +690,8 @@ func finishMultiRootPush(
         )
         self.publishLfsPushWarnings(lfsWarnings)
     } else {
-        self.operationsViewMode = .roots
-        self.toolWindowMode = .operations
+        self.operationRecovery.viewMode = .roots
+        self.projectWorkspace.toolWindowMode = .operations
         self.toolWindowExpanded = true
         var additionalActions = [FeedbackAction]()
         if let viewCommitsAction {
@@ -718,7 +718,7 @@ func finishMultiRootPush(
             )
         }
         if !shouldAutoUpdate && !nonFastForwardPaths.isEmpty {
-            let updateRootPaths = self.multiRoots.map(\.path)
+            let updateRootPaths = self.multiRootWorkspace.roots.map(\.path)
             let mergeRequest = makeMultiRootRetryRequest(
                 operation: .pushRecovery,
                 rootPaths: nonFastForwardPaths,
@@ -781,8 +781,8 @@ func finishMultiRootPush(
         }
         additionalActions.append(
             FeedbackAction(title: "Git Roots") {
-                self.operationsViewMode = .roots
-                self.toolWindowMode = .operations
+                self.operationRecovery.viewMode = .roots
+                self.projectWorkspace.toolWindowMode = .operations
                 self.toolWindowExpanded = true
             }
         )
@@ -841,10 +841,10 @@ func recoverMultiRootPushRoots(
     priorViewCommitRanges: [PersistedLogRevisionRange] = [],
     priorResultRows: [FeedbackResultRow] = []
 ) {
-    guard !rootPaths.isEmpty, !multiRootRunning, let projectPath else { return }
+    guard !rootPaths.isEmpty, !multiRootWorkspace.running, let projectPath = projectWorkspace.path else { return }
     let broker = credentialAuth.broker
     let cancel = GitCancelHandle()
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let notificationID = multiRootRetryNotificationID(.pushRecovery)
     beginFeedbackOperation(
         rebase ? "Update Push Roots (rebase)" : "Update Push Roots",
@@ -908,18 +908,18 @@ func finishMultiRootPushRecovery(
     switch result {
     case let .success(results):
         if !priorResultRows.isEmpty {
-            let preservedEngineResults = self.multiRootResults.isEmpty
+            let preservedEngineResults = self.multiRootWorkspace.results.isEmpty
                 ? rootOperationResults(from: priorResultRows)
-                : self.multiRootResults
-            self.multiRootResults = mergeRootOperationResults(
+                : self.multiRootWorkspace.results
+            self.multiRootWorkspace.results = mergeRootOperationResults(
                 preserved: preservedEngineResults,
                 retry: results,
                 rootOrder: priorResultRows.map(\.rootPath)
             )
         } else {
-            self.multiRootResults = results
+            self.multiRootWorkspace.results = results
         }
-        self.multiRootRunning = false
+        self.multiRootWorkspace.running = false
         self.showHostingAuthPromptIfNeeded(for: results)
         let resultRows = mergeFeedbackResultRows(
             preserved: priorResultRows,
@@ -939,7 +939,7 @@ func finishMultiRootPushRecovery(
                 results: results
             )
         )
-        self.multiRootPushRetryContext = retryPaths.isEmpty
+        self.pushWorkspace.multiRootPushRetryContext = retryPaths.isEmpty
             ? nil
             : MultiRootPushRetryContext(
                 rootPaths: retryPaths,
@@ -963,8 +963,8 @@ func finishMultiRootPushRecovery(
                 notificationGroup: .standard
             )
         } else {
-            self.operationsViewMode = .roots
-            self.toolWindowMode = .operations
+            self.operationRecovery.viewMode = .roots
+            self.projectWorkspace.toolWindowMode = .operations
             self.toolWindowExpanded = true
             var recoveryActions = [FeedbackAction]()
             if failures.contains(where: {
@@ -979,8 +979,8 @@ func finishMultiRootPushRecovery(
             }
             recoveryActions.append(
                 FeedbackAction(title: "Git Roots") {
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                 }
             )
@@ -1025,7 +1025,7 @@ func finishMultiRootPushRecovery(
         )
         self.refreshAll(showFeedback: false)
     case let .failure(error):
-        self.multiRootRunning = false
+        self.multiRootWorkspace.running = false
         let retryRequest = makeMultiRootRetryRequest(
             operation: .pushRecovery,
             rootPaths: pushRootPaths,
@@ -1059,7 +1059,7 @@ func finishMultiRootPushRecovery(
                 notificationID: multiRootRetryNotificationID(.pushRecovery)
             )
             if self.isAuthenticationFailure(error) {
-                self.showHostingAuthPrompt = true
+                self.hostingWorkspace.showHostingAuthPrompt = true
             }
         }
     }
@@ -1076,8 +1076,8 @@ func retryMultiRootPushFailedRoots(
     priorViewCommitRanges: [PersistedLogRevisionRange]? = nil,
     priorResultRows: [FeedbackResultRow]? = nil
 ) {
-    guard !multiRootRunning else { return }
-    let context = multiRootPushRetryContext
+    guard !multiRootWorkspace.running else { return }
+    let context = pushWorkspace.multiRootPushRetryContext
     let retryPaths = rootPaths ?? context?.rootPaths ?? []
     guard !retryPaths.isEmpty else { return }
     let resolvedRebase = recoveryRebase ?? context?.recoveryRebase
@@ -1284,8 +1284,8 @@ func updateForcePushedBranchInRoot(rootPath: String, branch: String) {
 /// Present one Smart/Force decision for all eligible current roots that share
 /// a branch name, then execute the engine's per-root aggregate operation.
 func updateForcePushedBranchAcrossRoots(_ branch: String) {
-    guard self.projectPath != nil else { return }
-    let roots = multiRootBranchSnapshots.filter { snapshot in
+    guard self.projectWorkspace.path != nil else { return }
+    let roots = multiRootWorkspace.branchSnapshots.filter { snapshot in
         snapshot.branches.contains { $0.name == branch && $0.isCurrent }
             && snapshot.syncStatuses.contains {
                 $0.branch == branch
@@ -1379,7 +1379,7 @@ func runForcePushedBranchUpdate(
 ) {
     let cancel = GitCancelHandle()
     let broker = credentialAuth.broker
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     beginFeedbackOperation("Update force-pushed branch", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
         do {
@@ -1397,7 +1397,7 @@ func runForcePushedBranchUpdate(
                 )
             }
             await MainActor.run {
-                self.loadError = nil
+                self.repositoryStatus.loadError = nil
                 let updateDetail = outcome.usedMergeUpdate
                     ? "\(outcome.branch) ← \(outcome.upstream) · merge update"
                     : "\(outcome.branch) ← \(outcome.upstream) · replayed \(outcome.replayedCommits) local commit(s)"
@@ -1436,7 +1436,7 @@ func runForcePushedBranchUpdate(
                 .map(\.name)
                 .sorted() ?? []
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 let isPrimaryRoot = rootPath == nil || rootPath == repo.workdir()
                 let backupActions = self.forcePushedBackupActions(
                     rootPath: rootPath,
@@ -1496,10 +1496,10 @@ func runMultiRootForcePushedBranchUpdate(
     selectedRootPaths: [String],
     force: Bool
 ) {
-    guard let projectPath else { return }
+    guard let projectPath = projectWorkspace.path else { return }
     let cancel = GitCancelHandle()
     let broker = credentialAuth.broker
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
     beginFeedbackOperation("Multi-root force-pushed branch update", cancelHandle: cancel)
     Task.detached(priority: .userInitiated) {
@@ -1537,8 +1537,8 @@ func runMultiRootForcePushedBranchUpdate(
             }
             let finalizedBackupBranchesByRoot = backupBranchesByRoot
             await MainActor.run {
-                self.multiRootRunning = false
-                self.multiRootResults = operationResults
+                self.multiRootWorkspace.running = false
+                self.multiRootWorkspace.results = operationResults
                 self.loadMultiRoots()
                 let successfulResults = results.filter { $0.success && !$0.skipped }
                 let receivedCommits = successfulResults.reduce(0) { $0 + Int($1.receivedCommitsCount) }
@@ -1599,7 +1599,7 @@ func runMultiRootForcePushedBranchUpdate(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     "Multi-root force-pushed update failed",
                     detail: errorMessage(error),
@@ -1660,7 +1660,7 @@ func forcePushedViewCommitsAction(
     guard !ranges.isEmpty else { return nil }
     let request = ArborVCSActionRequest(
         kind: .showLogRanges,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: ranges.count == 1 ? rootPath : nil,
         shelfName: "",
         logRevisionRanges: ranges
@@ -1740,7 +1740,7 @@ func deleteForcePushedBackupBranch(rootPath: String?, name: String) {
 /// 复用当前窗口绑定的 remote、branch 或 log 列表。
 func beginMultiRootPushDialog(rootPath: String, branch: String) {
     beginFeedbackOperation("Load Push dialog")
-    let defaultPushTagMode = GitPushTagSettings.projectTagMode(for: projectPath)
+    let defaultPushTagMode = GitPushTagSettings.projectTagMode(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         do {
             let rootRepo = try openRepository(path: rootPath)
@@ -1764,7 +1764,7 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
                     remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
                 }
             await MainActor.run {
-                self.multiRootPushContext = MultiRootPushContext(
+                self.pushWorkspace.multiRootPushContext = MultiRootPushContext(
                     rootPath: rootPath,
                     repo: rootRepo,
                     remotes: remotes,
@@ -1810,7 +1810,7 @@ func singleRootPushRecoveryRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .retryPushRecovery,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         pushRecovery: recovery,
@@ -1832,7 +1832,7 @@ func singleRootPushRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .retryPush,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: rootPath,
         shelfName: "",
         pushRecovery: PersistedPushRecovery(
@@ -2199,7 +2199,7 @@ func pushInRoot(
                           !force,
                           refspec == nil {
                     let autoUpdate = gitPushAutoUpdateIsEligible(
-                        enabled: GitPushAutoUpdateSettings.value(for: self.projectPath),
+                        enabled: GitPushAutoUpdateSettings.value(for: self.projectWorkspace.path),
                         force: force,
                         refspec: refspec,
                         currentBranch: currentBranchForPush,
@@ -2217,7 +2217,7 @@ func pushInRoot(
                             refspec: nil,
                             tagMode: tagMode,
                             skipHooks: skipHooks,
-                            rebase: GitUpdateMethodSettings.method(for: self.projectPath) == .rebase,
+                            rebase: GitUpdateMethodSettings.method(for: self.projectWorkspace.path) == .rebase,
                             viewCommitRanges: viewCommitRanges
                         )
                     } else {
@@ -2325,7 +2325,7 @@ func pushInRoot(
                     )
                 }
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -2358,7 +2358,7 @@ func updateRootForPushRecovery(
         notificationID: notificationID
     )
     let fetchTagMode = fetchTagsMode
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     Task.detached(priority: .userInitiated) {
         let previousHeads = Self.headCommitIDs(for: [rootPath])
         do {
@@ -2543,7 +2543,7 @@ func pushTagInRoot(rootPath: String, name: String, remote selectedRemote: String
             await MainActor.run {
                 self.loadMultiRoots()
                 self.feedbackCenter.error("Push tag failed", detail: "\(name) · \(rootPath): \(friendlyRemoteError(error))")
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }
@@ -2605,7 +2605,7 @@ func tagPushToRemote(_ name: String, remote selectedRemote: String? = nil) {
     guard let repo,
           let remote = resolveSelectedRemoteName(
               selectedRemote: selectedRemote,
-              availableRemoteNames: remotes.map(\.name)
+              availableRemoteNames: remoteWorkspace.remotes.map(\.name)
           ) else {
         feedbackCenter.warning(
             "Choose a remote before pushing the tag",
@@ -2628,7 +2628,7 @@ func tagPushToRemote(_ name: String, remote selectedRemote: String? = nil) {
         } catch {
             await MainActor.run {
                 self.feedbackCenter.error("Push tag failed", detail: friendlyRemoteError(error), nextStep: "检查远程与 tag 后重试。")
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }
@@ -2639,7 +2639,7 @@ func pushAllTagsToRemote(remote selectedRemote: String? = nil) {
     guard let repo,
           let remote = resolveSelectedRemoteName(
               selectedRemote: selectedRemote,
-              availableRemoteNames: remotes.map(\.name)
+              availableRemoteNames: remoteWorkspace.remotes.map(\.name)
           ) else {
         feedbackCenter.warning(
             "Choose a remote before pushing all tags",
@@ -2691,18 +2691,18 @@ func doPush(
     guard let repo else { return }
     guard let remote = resolveSelectedRemoteName(
         selectedRemote: name,
-        availableRemoteNames: remotes.map(\.name)
+        availableRemoteNames: remoteWorkspace.remotes.map(\.name)
     ) else {
         feedbackCenter.warning(
             "Choose a remote before pushing",
-            detail: remotes.count > 1
+            detail: remoteWorkspace.remotes.count > 1
                 ? "Multiple remotes are configured for this Git root."
                 : "No usable remote is configured for this Git root."
         )
         return
     }
     let branch = requestedBranch ?? branchWorkspace.branches.first { $0.isCurrent }?.name ?? "main"
-    let force = (requestedForce ?? pushForce) || PushDialogRefspec.requestsForce(refspec)
+    let force = (requestedForce ?? pushWorkspace.force) || PushDialogRefspec.requestsForce(refspec)
     let useForceWithLease = GitPushSettings.useForceWithLease(force: force, requested: requestedForceWithLease)
     let protectedTarget = PushDialogRefspec.targetBranch(refspec) ?? branch
     if force,
@@ -2779,7 +2779,7 @@ func doPush(
             }
             let lfsCoverageWarning = lfsPushCoverageWarning(repo: repo, skipHooks: skipHooks)
             await MainActor.run {
-                self.mergeFeedback = "push 完成"
+                self.mergeWorkspace.feedback = "push 完成"
                 self.feedbackCenter.success(
                     "Push completed",
                     detail: "\(remote)/\(branch)",
@@ -2801,7 +2801,7 @@ func doPush(
         } catch {
             await MainActor.run {
                 let detail = friendlyRemoteError(error)
-                self.mergeFeedback = detail
+                self.mergeWorkspace.feedback = detail
                 if let stale = stalePushRejectionDetails(error) {
                     if let rootPath {
                         let actions = self.directPushRetryActions(
@@ -2859,7 +2859,7 @@ func doPush(
                     }
                 } else {
                     let autoUpdate = gitPushAutoUpdateIsEligible(
-                        enabled: GitPushAutoUpdateSettings.value(for: self.projectPath),
+                        enabled: GitPushAutoUpdateSettings.value(for: self.projectWorkspace.path),
                         force: force,
                         refspec: refspec,
                         currentBranch: currentBranchForPush,
@@ -2877,7 +2877,7 @@ func doPush(
                             refspec: nil,
                             tagMode: tagMode,
                             skipHooks: skipHooks,
-                            rebase: GitUpdateMethodSettings.method(for: self.projectPath) == .rebase,
+                            rebase: GitUpdateMethodSettings.method(for: self.projectWorkspace.path) == .rebase,
                             viewCommitRanges: initialViewCommitRanges
                         )
                     } else {
@@ -2919,7 +2919,7 @@ func doPush(
                         )
                     }
                 }
-                if self.isAuthenticationFailure(error) { self.showHostingAuthPrompt = true }
+                if self.isAuthenticationFailure(error) { self.hostingWorkspace.showHostingAuthPrompt = true }
             }
         }
     }

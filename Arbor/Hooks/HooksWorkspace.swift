@@ -4,26 +4,26 @@ import SwiftUI
 /// 列表与编辑器，和 LFS 面板保持同一套 busy/feedback 约定。
 extension ContentView {
     func presentHooksPanel() {
-        showHooksPanel = true
+        hooksWorkspace.showPanel = true
         reloadGitHooks()
     }
 
     func reloadGitHooks() {
         guard let repo else { return }
-        gitHooksBusy = true
+        hooksWorkspace.busy = true
         Task.detached(priority: .userInitiated) {
             let location = repo.gitHooksLocation()
             let hooks = (try? repo.gitHooks()) ?? []
             await MainActor.run {
-                self.gitHooksLocation = location
-                self.gitHooks = hooks
-                self.gitHooksBusy = false
+                self.hooksWorkspace.location = location
+                self.hooksWorkspace.hooks = hooks
+                self.hooksWorkspace.busy = false
                 // 选中项消失时清空编辑器，避免对已删除的 hook 保存。
-                if let selected = self.selectedGitHook,
+                if let selected = self.hooksWorkspace.selection,
                    !hooks.contains(where: { $0.name == selected }) {
-                    self.selectedGitHook = nil
-                    self.gitHookContents = nil
-                    self.gitHookDraft = ""
+                    self.hooksWorkspace.selection = nil
+                    self.hooksWorkspace.contents = nil
+                    self.hooksWorkspace.draft = ""
                 }
             }
         }
@@ -31,17 +31,17 @@ extension ContentView {
 
     func selectGitHook(_ name: String?) {
         guard let name, let repo else {
-            gitHookContents = nil
-            gitHookDraft = ""
+            hooksWorkspace.contents = nil
+            hooksWorkspace.draft = ""
             return
         }
-        gitHooksBusy = true
+        hooksWorkspace.busy = true
         Task.detached(priority: .userInitiated) {
             let contents = try? repo.gitHookContents(name: name)
             await MainActor.run {
-                self.gitHookContents = contents
-                self.gitHookDraft = contents?.content ?? ""
-                self.gitHooksBusy = false
+                self.hooksWorkspace.contents = contents
+                self.hooksWorkspace.draft = contents?.content ?? ""
+                self.hooksWorkspace.busy = false
             }
         }
     }
@@ -52,23 +52,23 @@ extension ContentView {
         operation: @escaping (Repository) throws -> Void
     ) {
         guard let repo else { return }
-        gitHooksBusy = true
+        hooksWorkspace.busy = true
         Task.detached(priority: .userInitiated) {
             do {
                 try operation(repo)
                 await MainActor.run {
-                    self.gitHooksBusy = false
-                    self.gitHooksFeedback = successDetail
+                    self.hooksWorkspace.busy = false
+                    self.hooksWorkspace.feedback = successDetail
                     self.feedbackCenter.success(title, detail: successDetail)
                     self.reloadGitHooks()
-                    if let selected = self.selectedGitHook {
+                    if let selected = self.hooksWorkspace.selection {
                         self.selectGitHook(selected)
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.gitHooksBusy = false
-                    self.gitHooksFeedback = errorMessage(error)
+                    self.hooksWorkspace.busy = false
+                    self.hooksWorkspace.feedback = errorMessage(error)
                     self.feedbackCenter.error(title, detail: errorMessage(error))
                 }
             }
@@ -76,16 +76,16 @@ extension ContentView {
     }
 
     func saveGitHookDraft() {
-        guard let name = selectedGitHook else { return }
-        let content = gitHookDraft
+        guard let name = hooksWorkspace.selection else { return }
+        let content = hooksWorkspace.draft
         runHookAction("Save git hook", successDetail: name) { repo in
             _ = try repo.saveGitHook(name: name, content: content)
         }
     }
 
     func revertGitHookDraft() {
-        guard let contents = gitHookContents else { return }
-        gitHookDraft = contents.content
+        guard let contents = hooksWorkspace.contents else { return }
+        hooksWorkspace.draft = contents.content
     }
 
     func toggleGitHookEnabled(_ hook: GitHookInfo) {
@@ -108,10 +108,10 @@ extension ContentView {
         runHookAction("Delete git hook", successDetail: name) { repo in
             try repo.deleteGitHook(name: name)
         }
-        if selectedGitHook == name {
-            selectedGitHook = nil
-            gitHookContents = nil
-            gitHookDraft = ""
+        if hooksWorkspace.selection == name {
+            hooksWorkspace.selection = nil
+            hooksWorkspace.contents = nil
+            hooksWorkspace.draft = ""
         }
     }
 }

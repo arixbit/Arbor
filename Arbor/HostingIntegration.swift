@@ -31,9 +31,9 @@ extension ContentView {
         let patterns = hostingRepositories(for: remotes).isEmpty
             ? []
             : GitProtectedBranchRules.loadRemotePatterns(for: projectPath)
-        remoteProtectedBranchPatterns = patterns
+        gitSettings.remoteProtectedBranchPatterns = patterns
         if let projectPath {
-            remoteProtectedBranchPatternsByRoot[canonicalExternalLogPath(projectPath)] = patterns
+            gitSettings.remoteProtectedBranchPatternsByRoot[canonicalExternalLogPath(projectPath)] = patterns
         }
     }
 
@@ -44,10 +44,10 @@ extension ContentView {
         for rootPath: String? = nil,
         remotes suppliedRemotes: [RemoteInfo]? = nil
     ) {
-        guard GitProtectedBranchRules.synchronizeRemotePatterns(for: projectPath),
-              let projectPath else {
+        guard GitProtectedBranchRules.synchronizeRemotePatterns(for: projectWorkspace.path),
+              let projectPath = projectWorkspace.path else {
             if rootPath == nil {
-                remoteProtectedBranchPatterns = []
+                gitSettings.remoteProtectedBranchPatterns = []
             }
             return
         }
@@ -55,19 +55,19 @@ extension ContentView {
         let expectedProjectPath = projectPath
         let expectedRootPath = canonicalExternalLogPath(rootPath ?? projectPath)
         let rootRemotes = suppliedRemotes
-            ?? multiRootBranchSnapshots.first(where: {
+            ?? multiRootWorkspace.branchSnapshots.first(where: {
                 canonicalExternalLogPath($0.rootPath) == expectedRootPath
             })?.remotes
-            ?? remotes
+            ?? remoteWorkspace.remotes
         let repositories = hostingRepositories(for: rootRemotes)
         guard !repositories.isEmpty else {
-            remoteProtectedBranchPatternsByRoot.removeValue(forKey: expectedRootPath)
+            gitSettings.remoteProtectedBranchPatternsByRoot.removeValue(forKey: expectedRootPath)
             if expectedRootPath == canonicalExternalLogPath(expectedProjectPath) {
-                remoteProtectedBranchPatterns = []
+                gitSettings.remoteProtectedBranchPatterns = []
             }
             return
         }
-        let cachedPatterns = remoteProtectedBranchPatternsByRoot[expectedRootPath]
+        let cachedPatterns = gitSettings.remoteProtectedBranchPatternsByRoot[expectedRootPath]
             ?? GitProtectedBranchRules.loadRemotePatterns(for: expectedRootPath)
         Task {
             var patterns = Set<String>()
@@ -98,10 +98,10 @@ extension ContentView {
                 hasProviderFailure: failed
             )
             await MainActor.run {
-                guard self.projectPath == expectedProjectPath else { return }
-                self.remoteProtectedBranchPatternsByRoot[expectedRootPath] = synchronizedPatterns
+                guard self.projectWorkspace.path == expectedProjectPath else { return }
+                self.gitSettings.remoteProtectedBranchPatternsByRoot[expectedRootPath] = synchronizedPatterns
                 if expectedRootPath == canonicalExternalLogPath(expectedProjectPath) {
-                    self.remoteProtectedBranchPatterns = synchronizedPatterns
+                    self.gitSettings.remoteProtectedBranchPatterns = synchronizedPatterns
                 }
                 GitProtectedBranchRules.saveRemotePatterns(synchronizedPatterns, for: expectedRootPath)
                 DiagnosticsLogger.shared.record(
@@ -114,11 +114,11 @@ extension ContentView {
     }
 
     func synchronizeRemoteProtectedBranchPatternsForAllRoots() {
-        if multiRootBranchSnapshots.isEmpty {
+        if multiRootWorkspace.branchSnapshots.isEmpty {
             synchronizeRemoteProtectedBranchPatterns()
             return
         }
-        for snapshot in multiRootBranchSnapshots {
+        for snapshot in multiRootWorkspace.branchSnapshots {
             synchronizeRemoteProtectedBranchPatterns(
                 for: snapshot.rootPath,
                 remotes: snapshot.remotes
@@ -154,9 +154,9 @@ extension ContentView {
             )
             return
         }
-        reviewCommentCommit = commit
-        reviewCommentRepository = repository
-        showReviewComment = true
+        hostingWorkspace.reviewCommentCommit = commit
+        hostingWorkspace.reviewCommentRepository = repository
+        hostingWorkspace.showReviewComment = true
     }
 
     func isAuthenticationFailure(_ error: Error) -> Bool {

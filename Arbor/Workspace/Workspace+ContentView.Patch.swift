@@ -15,7 +15,7 @@ extension ContentView {
         allowsBaseDirectory: Bool,
         onExport: @escaping (PatchExportOptions) -> Void
     ) {
-        patchExportRequest = PatchExportRequest(
+        fileWorkspace.patchExportRequest = PatchExportRequest(
             title: title,
             defaultFileName: defaultFileName,
             repositoryRootPath: repositoryRootPath,
@@ -129,17 +129,17 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     logRuntime.commandError = nil
     logList.follow = tab.follow
     logRuntime.sortModeRaw = tab.graphSortModeRaw
-    compareRev1 = tab.compareRevision1
-    compareRev2 = tab.compareRevision2
-    compareRepositoryPath = tab.compareRepositoryPath
-    compareWithWorkingTree = tab.compareWithWorkingTree
+    comparisonWorkspace.revision1 = tab.compareRevision1
+    comparisonWorkspace.revision2 = tab.compareRevision2
+    comparisonWorkspace.repositoryPath = tab.compareRepositoryPath
+    comparisonWorkspace.withWorkingTree = tab.compareWithWorkingTree
     branchComparison.firstFilter = tab.compareFirstFilter ?? BranchComparisonFilter()
     branchComparison.secondFilter = tab.compareSecondFilter ?? BranchComparisonFilter()
     if let path = tab.compareRepositoryPath,
        let comparisonRepo = try? openRepository(path: path) {
         activateComparisonRepository(comparisonRepo, rootPath: path)
     } else {
-        activeCompareRepo = nil
+        comparisonWorkspace.repository = nil
     }
     logList.entries = []
     logList.isShowingCachedSnapshot = false
@@ -695,8 +695,8 @@ func runLogApplyOperation(
     let emptyPolicyChoice = configuredCherryPickEmptyPolicyChoice()
     let emptyPolicy = emptyPolicyChoice.engineValue
     let protectedPatterns = effectiveProtectedBranchPatterns
-    let savePolicyChoice = GitLocalChangesSavePolicySettings.choice(for: projectPath)
-    let operationProjectPath = projectPath
+    let savePolicyChoice = GitLocalChangesSavePolicySettings.choice(for: projectWorkspace.path)
+    let operationProjectPath = projectWorkspace.path
     let logApplySessionID = UUID().uuidString
     let logApplyBatchCount = batches.count
     Task.detached(priority: .userInitiated) {
@@ -854,7 +854,7 @@ func runLogApplyOperation(
             let details = resultIDsSnapshot.map { rootPath, id in
                 "\(rootPath): \(String(id.prefix(7)))"
             }.joined(separator: "\n")
-            self.commitFeedback = operation.title
+            self.commitWorkspace.feedback = operation.title
             self.feedbackCenter.success(operation.title, detail: details)
             self.logSelectionState.selection = nil
             self.logSelectionState.selectedIDs = []
@@ -911,15 +911,15 @@ func handleLogApplyFailure(
     }
 
     if state != nil || firstConflict != nil {
-        entries = status
-        operationState = state
-        mergeInProgress = true
-        mergeInitialPath = firstConflict
-        showMergeRevisionsDialog = true
+        repositoryStatus.entries = status
+        operationRecovery.operation = state
+        mergeWorkspace.inProgress = true
+        operationRecovery.initialPath = firstConflict
+        operationRecovery.showConflictResolver = true
         let completedDetail = completedCommits.isEmpty
             ? ""
             : " (\(completedCommits.count) commit(s) completed before this root)"
-        commitFeedback = operation.pausedMessage + completedDetail
+        commitWorkspace.feedback = operation.pausedMessage + completedDetail
     } else {
         let expectedRecoveryOperation: PersistedLogApplyRecovery.Operation = operation == .revert
             ? .revert
@@ -947,16 +947,16 @@ func handleLogApplyFailure(
 /// 用路径范围状态替换文件树中的对应条目，避免每次单文件操作都重建整棵状态树。
 func applyIncrementalStatus(_ updates: [FileEntry], paths: [String]) {
     let pathSet = Set(paths)
-    entries.removeAll { pathSet.contains($0.path) }
-    entries.append(contentsOf: updates)
-    entries.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-    isShowingCachedStatusSnapshot = false
-    fileContentRefreshToken &+= 1
+    repositoryStatus.entries.removeAll { pathSet.contains($0.path) }
+    repositoryStatus.entries.append(contentsOf: updates)
+    repositoryStatus.entries.sort { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    repositoryStatus.isShowingCachedStatusSnapshot = false
+    fileWorkspace.refreshToken &+= 1
 }
 
 func applyExternalLogRootSelection(_ requestedPaths: Set<String>) {
     guard externalLogWindow else { return }
-    let availablePaths = normalizedLogRootPaths(multiRoots.map(\.path))
+    let availablePaths = normalizedLogRootPaths(multiRootWorkspace.roots.map(\.path))
     let next = reconciledExternalLogRootSelection(
         availableRoots: availablePaths,
         selectedRoots: requestedPaths,
@@ -996,7 +996,7 @@ func logApplyRecoveryAction(
 ) -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .retryLogApply,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: recovery.rootPath,
         shelfName: "",
         logApplyRecovery: recovery
@@ -1015,7 +1015,7 @@ func logApplyAffectedFilesAction(
     guard !recovery.affectedPaths.isEmpty else { return nil }
     let request = ArborVCSActionRequest(
         kind: .showLogApplyAffectedFiles,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: recovery.rootPath,
         shelfName: "",
         logApplyRecovery: recovery
@@ -1227,7 +1227,7 @@ func retryLogApplyRecovery(
             await MainActor.run {
                 self.refreshAll(showFeedback: false)
                 if let latestState, let rootPath = targetRepo.workdir() {
-                    self.operationState = latestState
+                    self.operationRecovery.operation = latestState
                     self.publishOperationRecoveryNoticeIfNeeded(
                         state: latestState,
                         rootPath: rootPath
@@ -1299,7 +1299,7 @@ func presentApplyPatchRequest(fileName: String, patch: String) {
         )
         return
     }
-    pendingApplyPatch = RebasedApplyPatchRequest(
+    fileWorkspace.pendingApplyPatch = RebasedApplyPatchRequest(
         fileName: fileName,
         patch: patch,
         paths: paths
@@ -1352,8 +1352,8 @@ func applyImportedPatch(
                 }
             }
             await MainActor.run {
-                self.entries = status
-                self.changeLists = (try? repo.changelistList()) ?? self.changeLists
+                self.repositoryStatus.entries = status
+                self.repositoryStatus.changeLists = (try? repo.changelistList()) ?? self.repositoryStatus.changeLists
                 self.refreshAfterShelfMutation(
                     repo: repo,
                     paths: appliedPaths
@@ -1482,7 +1482,7 @@ func showLogApplyAffectedFiles(
 
     let rootPath = URL(fileURLWithPath: recovery.rootPath).standardizedFileURL.path
     let preferredPath = recovery.affectedPaths.first
-    toolWindowMode = .commit
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     let currentRootMatches = repo?.workdir().map {
         URL(fileURLWithPath: $0).standardizedFileURL.path == rootPath
@@ -1495,17 +1495,17 @@ func showLogApplyAffectedFiles(
         return
     }
 
-    selection = preferredPath
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
+    fileWorkspace.selection = preferredPath
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
     Task.detached(priority: .userInitiated) {
         let status = (try? activeRepo.status()) ?? []
         await MainActor.run {
             guard self.repo === activeRepo else { return }
-            self.entries = status
-            self.selection = status.first(where: {
+            self.repositoryStatus.entries = status
+            self.fileWorkspace.selection = status.first(where: {
                 recovery.affectedPaths.contains($0.path)
             })?.path ?? preferredPath
         }

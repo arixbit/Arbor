@@ -10,11 +10,11 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("合并").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("分支名", text: $mergeBranch)
+                    TextField("分支名", text: $mergeWorkspace.branch)
                         .textFieldStyle(.roundedBorder)
                     Button("合并") { doMerge() }
                 }
-                if let mergeFeedback {
+                if let mergeFeedback = mergeWorkspace.feedback {
                     Text(mergeFeedback).font(.caption)
                         .foregroundStyle(mergeFeedback.hasPrefix("冲突") ? .red : .green)
                 }
@@ -77,7 +77,7 @@ var repoSidebar: some View {
                 HStack(spacing: 6) {
                     TextField("补丁名", text: $shelfWorkspace.name).textFieldStyle(.roundedBorder)
                     Button("保存全部变更") { doShelve() }
-                        .disabled(entries.isEmpty || shelfWorkspace.name.isEmpty)
+                        .disabled(repositoryStatus.entries.isEmpty || shelfWorkspace.name.isEmpty)
                 }
                 ForEach(shelfWorkspace.shelves, id: \.name) { s in
                     HStack(spacing: 6) {
@@ -93,16 +93,16 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("远程").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("远程名", text: $remoteName).textFieldStyle(.roundedBorder).frame(width: 80)
-                    TextField("URL", text: $remoteUrl).textFieldStyle(.roundedBorder)
+                    TextField("远程名", text: $remoteWorkspace.name).textFieldStyle(.roundedBorder).frame(width: 80)
+                    TextField("URL", text: $remoteWorkspace.url).textFieldStyle(.roundedBorder)
                     Button("添加") { remoteAdd() }
                 }
-                ForEach(remotes, id: \.name) { r in
+                ForEach(remoteWorkspace.remotes, id: \.name) { r in
                     HStack(spacing: 6) {
                         Text(r.name).font(.system(.body, design: .monospaced))
                         Text(r.url).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
-                        Toggle("force", isOn: $pushForce).toggleStyle(.checkbox).font(.caption)
+                        Toggle("force", isOn: $pushWorkspace.force).toggleStyle(.checkbox).font(.caption)
                         Button("fetch") { doFetch(r.name) }
                         Menu("pull") {
                             Button("merge") { doPull(r.name, rebase: false) }
@@ -117,34 +117,34 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("变基").font(.headline)
                 HStack(spacing: 10) {
-                    Toggle("保留 merge", isOn: $rebasePreserveMerges)
+                    Toggle("保留 merge", isOn: $rebaseWorkspace.preserveMerges)
                         .toggleStyle(.checkbox)
                         .font(.caption)
-                    Toggle("autosquash", isOn: $rebaseAutoSquash)
+                    Toggle("autosquash", isOn: $rebaseWorkspace.autoSquash)
                         .toggleStyle(.checkbox)
                         .font(.caption)
                 }
                 HStack(spacing: 10) {
-                    Toggle("保留空提交", isOn: $rebaseKeepEmpty)
+                    Toggle("保留空提交", isOn: $rebaseWorkspace.keepEmpty)
                         .toggleStyle(.checkbox)
                         .font(.caption)
-                    Toggle("更新 refs", isOn: $rebaseUpdateRefs)
+                    Toggle("更新 refs", isOn: $rebaseWorkspace.updateRefs)
                         .toggleStyle(.checkbox)
                         .font(.caption)
-                    Toggle("从 root", isOn: $rebaseRoot)
+                    Toggle("从 root", isOn: $rebaseWorkspace.root)
                         .toggleStyle(.checkbox)
                         .font(.caption)
                 }
                 HStack(spacing: 6) {
-                    TextField("onto（提交 id）", text: $rebaseOnto).textFieldStyle(.roundedBorder)
+                    TextField("onto（提交 id）", text: $rebaseWorkspace.onto).textFieldStyle(.roundedBorder)
                     Button("加载范围") { loadRebaseRange() }
                     Button("开始变基") { doRebase() }
-                        .disabled(rebaseRange.isEmpty)
+                        .disabled(rebaseWorkspace.range.isEmpty)
                 }
-                if rebasePaused {
+                if rebaseWorkspace.paused {
                     HStack(spacing: 6) {
-                        if rebasePauseReason == .conflict {
-                            Text("已暂停在冲突（\(rebaseConflicts.count) 个文件）")
+                        if rebaseWorkspace.pauseReason == .conflict {
+                            Text("已暂停在冲突（\(rebaseWorkspace.conflicts.count) 个文件）")
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         } else {
@@ -155,18 +155,18 @@ var repoSidebar: some View {
                         Button("继续") { doRebaseContinue() }
                         Button("中止") { doRebaseAbort() }
                     }
-                    if rebasePauseReason == .conflict, !rebaseConflicts.isEmpty {
-                        Text(rebaseConflicts.prefix(5).joined(separator: "、"))
+                    if rebaseWorkspace.pauseReason == .conflict, !rebaseWorkspace.conflicts.isEmpty {
+                        Text(rebaseWorkspace.conflicts.prefix(5).joined(separator: "、"))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
                 }
-                if let rebaseFeedback {
+                if let rebaseFeedback = rebaseWorkspace.feedback {
                     Text(rebaseFeedback).font(.caption)
                         .foregroundStyle(rebaseFeedback.hasPrefix("冲突") ? .red : .green)
                 }
-                ForEach(Array(rebaseRange.enumerated()), id: \.offset) { i, c in
+                ForEach(Array(rebaseWorkspace.range.enumerated()), id: \.offset) { i, c in
                     HStack {
                         Text(c.shortId).font(.caption2).foregroundStyle(.secondary)
                         Text(c.summary).font(.caption).lineLimit(1)
@@ -188,8 +188,8 @@ var repoSidebar: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("子模块").font(.headline)
                 HStack(spacing: 6) {
-                    TextField("URL", text: $submoduleUrl).textFieldStyle(.roundedBorder)
-                    TextField("路径", text: $submodulePath).textFieldStyle(.roundedBorder)
+                    TextField("URL", text: $submoduleWorkspace.url).textFieldStyle(.roundedBorder)
+                    TextField("路径", text: $submoduleWorkspace.path).textFieldStyle(.roundedBorder)
                     Button("添加") { submoduleAdd() }
                 }
                 Button("更新所有子模块") { submoduleUpdate() }
@@ -197,7 +197,7 @@ var repoSidebar: some View {
                     Button("同步配置") { submoduleSync() }
                     Button("刷新") { loadSubmodules() }
                 }
-                ForEach(submodules, id: \.path) { module in
+                ForEach(submoduleWorkspace.submodules, id: \.path) { module in
                     HStack(spacing: 6) {
                         Text(module.path).font(.system(.caption, design: .monospaced))
                         Spacer()
@@ -211,17 +211,17 @@ var repoSidebar: some View {
                             .buttonStyle(.borderless)
                     }
                 }
-                if let submoduleFeedback {
+                if let submoduleFeedback = submoduleWorkspace.feedback {
                     Text(submoduleFeedback).font(.caption)
                         .foregroundStyle(submoduleFeedback.hasPrefix("已") ? .green : .red)
                 }
             }
         }
         .padding(10)
-        .onChange(of: rebasePreserveMerges) { _, _ in
+        .onChange(of: rebaseWorkspace.preserveMerges) { _, _ in
             invalidateLoadedRebaseRange()
         }
-        .onChange(of: rebaseRoot) { _, _ in
+        .onChange(of: rebaseWorkspace.root) { _, _ in
             invalidateLoadedRebaseRange()
         }
     }
@@ -248,7 +248,7 @@ private func pullRequestAction(for branch: String) -> some View {
 
 private func pullRequestRemotes(for branch: String) -> [RemoteInfo] {
     guard let repo else { return [] }
-    return remotes.filter { remote in
+    return remoteWorkspace.remotes.filter { remote in
         repo.prUrl(remoteUrl: remote.url, branch: branch) != nil
     }
 }

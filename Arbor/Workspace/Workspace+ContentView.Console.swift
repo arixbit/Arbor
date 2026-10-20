@@ -33,7 +33,7 @@ func rewordUndoFeedbackAction(
 func gpgAgentSettingsFeedbackAction() -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .openGpgAgentSettings,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: ""
     )
@@ -73,13 +73,13 @@ func presentSmartOperationDecision(
     onSmart: @escaping () -> Void,
     onForce: (() -> Void)? = nil
 ) {
-    smartOperationRequest = SmartOperationRequest(
+    operationRecovery.smartOperationRequest = SmartOperationRequest(
         operationTitle: operationTitle,
         smartButtonTitle: smartButtonTitle,
         forceButtonTitle: forceButtonTitle,
         paths: paths,
         detail: detail,
-        localChangesSavePolicy: GitLocalChangesSavePolicySettings.choice(for: projectPath),
+        localChangesSavePolicy: GitLocalChangesSavePolicySettings.choice(for: projectWorkspace.path),
         onSmart: onSmart,
         onForce: onForce
     )
@@ -92,7 +92,7 @@ func runGitConsole(command: String, args: [String]) {
         do {
             let result = try repo.runGitCommand(command: command, args: args)
             await MainActor.run {
-                self.consoleResult = result
+                self.operationRecovery.consoleResult = result
                 self.feedbackCenter.recordGitCommand(result)
                 if result.exitCode == 0 {
                     self.feedbackCenter.success("Git command completed", detail: result.command)
@@ -114,12 +114,12 @@ func runGitConsole(command: String, args: [String]) {
 
 /// 在当前窗口加载单个项目，并丢弃上一项目的所有选择和缓存。
 func expireOperationRecoveryNotifications() {
-    for rootPath in operationRecoveryNotificationFingerprints.keys {
+    for rootPath in operationRecovery.notificationFingerprints.keys {
         feedbackCenter.expire(
             notificationID: operationRecoveryNotificationID(rootPath: rootPath)
         )
     }
-    operationRecoveryNotificationFingerprints.removeAll()
+    operationRecovery.notificationFingerprints.removeAll()
 }
 
 func runMultiRootResetOperation(
@@ -139,7 +139,7 @@ func runMultiRootResetOperation(
             .map(\.rootPath)
             .filter { !operationRootPaths.contains($0) }
     )
-    multiRootRunning = true
+    multiRootWorkspace.running = true
     let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
     beginFeedbackOperation("Multi-root reset")
     Task.detached(priority: .userInitiated) {
@@ -206,8 +206,8 @@ func runMultiRootResetOperation(
                 )
             }
             await MainActor.run {
-                self.multiRootRunning = false
-                self.multiRootResults = combinedOperationResults
+                self.multiRootWorkspace.running = false
+                self.multiRootWorkspace.results = combinedOperationResults
                 self.loadMultiRoots()
                 if !overwriteFailures.isEmpty && !smart && !force {
                     let detail = overwriteFailures.map {
@@ -295,7 +295,7 @@ func runMultiRootResetOperation(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 self.feedbackCenter.error(
                     "Multi-root Reset failed",
                     detail: errorMessage(error),
@@ -307,7 +307,7 @@ func runMultiRootResetOperation(
 }
 
 func multiRootResetNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -315,7 +315,7 @@ func multiRootResetNotificationID() -> String? {
 }
 
 func resetRecoveryNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -355,7 +355,7 @@ func executeMultiRootOperation(
     priorRevisionRanges: [PersistedLogRevisionRange] = []
 ) {
     if let rebase = multiRootPullRebaseMode(operation) {
-        multiRootPushRetryContext = nil
+        pushWorkspace.multiRootPushRetryContext = nil
         if let rootPaths {
             retryMultiRootUpdateFailedRoots(
                 rootPaths: rootPaths,
@@ -372,13 +372,13 @@ func executeMultiRootOperation(
         executeMultiRootPush()
         return
     default:
-        multiRootPushRetryContext = nil
+        pushWorkspace.multiRootPushRetryContext = nil
     }
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    guard let projectPath else { return }
-    multiRootRunning = true
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    guard let projectPath = projectWorkspace.path else { return }
+    multiRootWorkspace.running = true
     beginFeedbackOperation(
         multiRootOperationTitle(operation),
         notificationID: multiRootRetryOperation(for: operation)
@@ -411,8 +411,8 @@ func executeMultiRootOperation(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
-                let retryPaths = rootPaths ?? self.multiRoots.map(\.path)
+                self.multiRootWorkspace.running = false
+                let retryPaths = rootPaths ?? self.multiRootWorkspace.roots.map(\.path)
                 let retryAction: FeedbackAction? = self.multiRootRetryOperation(for: operation).flatMap { retryOperation in
                     guard !retryPaths.isEmpty else { return nil }
                     let request = self.makeMultiRootRetryRequest(
@@ -442,7 +442,7 @@ func executeMultiRootOperation(
                 // per-root results. Preserve the same hosting-token recovery
                 // path used by single-root and partial aggregate failures.
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -491,8 +491,8 @@ func finishGenericMultiRootOperation(
     priorRevisionRanges: [PersistedLogRevisionRange] = [],
     revisionRanges: [PersistedLogRevisionRange] = []
 ) {
-    multiRootResults = results
-    multiRootRunning = false
+    multiRootWorkspace.results = results
+    multiRootWorkspace.running = false
     showHostingAuthPromptIfNeeded(for: results)
 
     let completed = results.filter { $0.success && !$0.skipped }.count
@@ -572,7 +572,7 @@ func finishGenericMultiRootOperation(
 }
 
 func multiRootUpdateNotificationID(partial: Bool) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -582,7 +582,7 @@ func multiRootUpdateNotificationID(partial: Bool) -> String? {
 }
 
 func multiRootUpdateErrorNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -590,7 +590,7 @@ func multiRootUpdateErrorNotificationID() -> String? {
 }
 
 func multiRootUpdateRollbackNotificationID() -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -606,8 +606,8 @@ func retryMultiRootUpdateFailedRoots(
     rebaseRootPaths: [String]? = nil,
     priorRevisionRanges: [PersistedLogRevisionRange] = []
 ) {
-    guard let projectPath else { return }
-    let selectedRootPaths = rootPaths ?? multiRootResults
+    guard let projectPath = projectWorkspace.path else { return }
+    let selectedRootPaths = rootPaths ?? multiRootWorkspace.results
         .filter { !$0.success }
         .map(\.rootPath)
     guard !selectedRootPaths.isEmpty else {
@@ -617,10 +617,10 @@ func retryMultiRootUpdateFailedRoots(
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
     let cancel = GitCancelHandle()
-    let rebase = rebase ?? multiRootUpdateRebase
+    let rebase = rebase ?? multiRootWorkspace.updateRebase
     let rebaseRootPaths = rebaseRootPaths
-        ?? multiRootUpdateRebaseRootPaths.map(Array.init)
-    multiRootRunning = true
+        ?? multiRootWorkspace.updateRebaseRootPaths.map(Array.init)
+    multiRootWorkspace.running = true
     let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
     beginFeedbackOperation(
         rebase ? "Retry Update Project (rebase)" : "Retry Update Project",
@@ -678,7 +678,7 @@ func retryMultiRootUpdateFailedRoots(
                 }
             )
             await MainActor.run {
-                var mergedResults = self.multiRootResults
+                var mergedResults = self.multiRootWorkspace.results
                 for retryResult in retryResults {
                     if let index = mergedResults.firstIndex(where: { $0.rootPath == retryResult.rootPath }) {
                         mergedResults[index] = retryResult
@@ -686,8 +686,8 @@ func retryMultiRootUpdateFailedRoots(
                         mergedResults.append(retryResult)
                     }
                 }
-                self.multiRootResults = mergedResults
-                self.multiRootRunning = false
+                self.multiRootWorkspace.results = mergedResults
+                self.multiRootWorkspace.running = false
                 for result in retryResults {
                     if result.success || result.skipped {
                         self.stashRecovery.multiRootUpdateStashedRoots.remove(result.rootPath)
@@ -731,8 +731,8 @@ func retryMultiRootUpdateFailedRoots(
                     if let notificationID = self.multiRootUpdateNotificationID(partial: false) {
                         self.feedbackCenter.expire(notificationID: notificationID)
                     }
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     var details = Self.multiRootUpdateFailureDetails(
                         retryResults,
@@ -754,7 +754,7 @@ func retryMultiRootUpdateFailedRoots(
                             operation: .update,
                             rootPaths: retryPaths,
                             rebase: rebase,
-                            rebaseRootPaths: self.multiRootUpdateRebaseRootPaths.map(Array.init)
+                            rebaseRootPaths: self.multiRootWorkspace.updateRebaseRootPaths.map(Array.init)
                         )
                         additionalActions.append(
                             FeedbackAction(
@@ -798,7 +798,7 @@ func retryMultiRootUpdateFailedRoots(
             }
         } catch {
             await MainActor.run {
-                self.multiRootRunning = false
+                self.multiRootWorkspace.running = false
                 if let notificationID = self.multiRootUpdateNotificationID(partial: false) {
                     self.feedbackCenter.expire(notificationID: notificationID)
                 }
@@ -812,7 +812,7 @@ func retryMultiRootUpdateFailedRoots(
                     notificationID: self.multiRootUpdateErrorNotificationID()
                 )
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -843,7 +843,7 @@ func makeMultiRootRetryRequest(
     }
     return ArborVCSActionRequest(
         kind: .retryMultiRootOperation,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootRetryOperation: operation,
@@ -924,7 +924,7 @@ func multiRootChangesMutationNotificationID(
     rootPath: String,
     path: String?
 ) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableComponent: (String) -> String = { value in
         value
             .replacingOccurrences(of: "/", with: "_")
@@ -944,7 +944,7 @@ func multiRootChangesBatchMutationNotificationID(
     operation: ArborVCSActionRequest.MultiRootRetryOperation,
     changePaths: [PersistedMultiRootChangePath]
 ) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableComponent: (String) -> String = { value in
         value
             .replacingOccurrences(of: "/", with: "_")
@@ -966,7 +966,7 @@ func multiRootChangesBatchMutationNotificationID(
 func multiRootRetryNotificationID(
     _ operation: ArborVCSActionRequest.MultiRootRetryOperation
 ) -> String? {
-    guard let projectPath, !projectPath.isEmpty else { return nil }
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     let stableProject = URL(fileURLWithPath: projectPath).standardizedFileURL.path
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: ":", with: "_")
@@ -1032,7 +1032,7 @@ func operationRecoveryFeedbackActions(
     var actions = [
         operationRecoveryFeedbackAction(
             .continueOperation,
-            projectPath: projectPath,
+            projectPath: projectWorkspace.path,
             rootPath: rootPath
         )
     ]
@@ -1040,7 +1040,7 @@ func operationRecoveryFeedbackActions(
         actions.append(
             operationRecoveryFeedbackAction(
                 .skip,
-                projectPath: projectPath,
+                projectPath: projectWorkspace.path,
                 rootPath: rootPath
             )
         )
@@ -1048,14 +1048,14 @@ func operationRecoveryFeedbackActions(
     actions.append(
         operationRecoveryFeedbackAction(
             .abort,
-            projectPath: projectPath,
+            projectPath: projectWorkspace.path,
             rootPath: rootPath
         )
     )
     actions.append(
         operationRecoveryFeedbackAction(
             .openRecovery,
-            projectPath: projectPath,
+            projectPath: projectWorkspace.path,
             rootPath: rootPath
         )
     )
@@ -1070,7 +1070,7 @@ func publishOperationRecoveryNotice(
     let hasDedicatedRebaseRecovery = state.kind == .rebase
         && (
             loadRebaseUndoSeed(repositoryPath: normalizedRoot) != nil
-                || multiRootRebaseSession?.roots.contains(where: {
+                || rebaseWorkspace.multiRootSession?.roots.contains(where: {
                     URL(fileURLWithPath: $0.rootPath).standardizedFileURL.path == normalizedRoot
                 }) == true
         )
@@ -1103,14 +1103,14 @@ func publishOperationRecoveryNoticeIfNeeded(
 ) {
     let key = operationRecoveryNotificationRootKey(rootPath)
     let fingerprint = operationRecoveryNotificationFingerprint(state)
-    guard operationRecoveryNotificationFingerprints[key] != fingerprint else { return }
+    guard operationRecovery.notificationFingerprints[key] != fingerprint else { return }
     if publishOperationRecoveryNotice(state: state, rootPath: rootPath) {
-        operationRecoveryNotificationFingerprints[key] = fingerprint
+        operationRecovery.notificationFingerprints[key] = fingerprint
     }
 }
 
 func openOperationRecovery(rootPath: String, preferredPath: String? = nil) {
-    toolWindowMode = .commit
+    projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     let currentRootMatches = repo?.workdir().map {
         URL(fileURLWithPath: $0).standardizedFileURL.path
@@ -1124,13 +1124,13 @@ func openOperationRecovery(rootPath: String, preferredPath: String? = nil) {
         return
     }
     if let preferredPath {
-        mergeInitialPath = preferredPath
-        selection = preferredPath
-    } else if let conflictPath = operationState?.conflictedFiles.first {
-        mergeInitialPath = conflictPath
-        selection = conflictPath
+        operationRecovery.initialPath = preferredPath
+        fileWorkspace.selection = preferredPath
+    } else if let conflictPath = operationRecovery.operation?.conflictedFiles.first {
+        operationRecovery.initialPath = conflictPath
+        fileWorkspace.selection = conflictPath
     }
-    if let state = operationState, !state.conflictedFiles.isEmpty {
+    if let state = operationRecovery.operation, !state.conflictedFiles.isEmpty {
         openMultiRootConflictResolver(
             preferredRootPath: rootPath,
             preferredPath: preferredPath ?? state.conflictedFiles.first
@@ -1145,15 +1145,15 @@ func doOperationContinue() {
         finishStashConflict()
         return
     }
-    guard let repo, let state = operationState else { return }
+    guard let repo, let state = operationRecovery.operation else { return }
     let rebaseRootPath = repo.workdir()
     let rebaseSessionID = state.kind == .rebase
-        ? multiRootRebaseSession?.roots.contains(where: { $0.rootPath == rebaseRootPath }) == true
-            ? multiRootRebaseSession?.id
+        ? rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == rebaseRootPath }) == true
+            ? rebaseWorkspace.multiRootSession?.id
             : nil
         : nil
     let sourceBranch = state.kind == .merge && state.origin == .engine
-        ? (pendingMergeDeleteBranch ?? repo.mergeSourceReference())
+        ? (mergeWorkspace.pendingDeleteBranch ?? repo.mergeSourceReference())
         : nil
     let protectedPatterns = effectiveProtectedBranchPatterns
     let pendingPullStash = stashRecovery.pendingPullStashPop
@@ -1161,7 +1161,7 @@ func doOperationContinue() {
     let pendingPullStashMessageValue = stashRecovery.pendingPullStashMessage
     let pendingPullShelfNameValue = stashRecovery.pendingPullShelfName
     let singleRootRebaseSeed = state.kind == .rebase && rebaseSessionID == nil
-        ? rebaseUndoSeed
+        ? rebaseWorkspace.undoSeed
         : nil
     let completedLogApplyRecovery = rebaseRootPath.flatMap { rootPath -> PersistedLogApplyRecovery? in
         guard let recovery = loadLogApplyRecovery(repositoryPath: rootPath) else { return nil }
@@ -1287,7 +1287,7 @@ func doOperationContinue() {
             let pullRestoreShelfNameValue = pullRestoreShelfName
             let pullChangesRestoredValue = pullChangesRestored
             await MainActor.run {
-                self.operationFeedback = "已继续"
+                self.operationRecovery.feedback = "已继续"
                 if let pullStashRestoreConflictPathsValue {
                     self.showStashRestoreConflict(
                         pullStashRestoreConflictPathsValue,
@@ -1349,26 +1349,26 @@ func doOperationContinue() {
                     )
                 }
                 if state.kind == .merge {
-                    self.pendingMergeDeleteBranch = nil
+                    self.mergeWorkspace.pendingDeleteBranch = nil
                 }
                 if state.kind == .rebase, rebaseSessionID == nil {
                     if operationStillActive {
-                        self.rebasePaused = true
-                        self.rebasePauseReason = continuationState?.conflictedFiles.isEmpty == false
+                        self.rebaseWorkspace.paused = true
+                        self.rebaseWorkspace.pauseReason = continuationState?.conflictedFiles.isEmpty == false
                             ? .conflict
                             : .edit
-                        self.rebaseConflicts = continuationState?.conflictedFiles ?? []
-                        self.rebaseUndoSeed = singleRootRebaseSeed
-                        self.rebaseUndoTarget = nil
+                        self.rebaseWorkspace.conflicts = continuationState?.conflictedFiles ?? []
+                        self.rebaseWorkspace.undoSeed = singleRootRebaseSeed
+                        self.rebaseWorkspace.undoTarget = nil
                         if let singleRootRebaseSeed {
                             saveRebaseUndoSeed(singleRootRebaseSeed)
                         }
                     } else if !pullRestoreBlocked {
-                        self.rebasePaused = false
-                        self.rebasePauseReason = nil
-                        self.rebaseConflicts = []
-                        self.rebaseUndoSeed = nil
-                        self.rebaseUndoTarget = completedRebaseUndoTarget
+                        self.rebaseWorkspace.paused = false
+                        self.rebaseWorkspace.pauseReason = nil
+                        self.rebaseWorkspace.conflicts = []
+                        self.rebaseWorkspace.undoSeed = nil
+                        self.rebaseWorkspace.undoTarget = completedRebaseUndoTarget
                         if let singleRootRebaseSeed {
                             clearRebaseUndoSeed(repositoryPath: singleRootRebaseSeed.repositoryPath)
                         }
@@ -1377,11 +1377,11 @@ func doOperationContinue() {
                         // scene remains unresolved. Keep its seed for a
                         // later expected-HEAD Undo, but do not leave the
                         // operation bar pretending that Git is still paused.
-                        self.rebasePaused = false
-                        self.rebasePauseReason = nil
-                        self.rebaseConflicts = []
-                        self.rebaseUndoSeed = singleRootRebaseSeed
-                        self.rebaseUndoTarget = nil
+                        self.rebaseWorkspace.paused = false
+                        self.rebaseWorkspace.pauseReason = nil
+                        self.rebaseWorkspace.conflicts = []
+                        self.rebaseWorkspace.undoSeed = singleRootRebaseSeed
+                        self.rebaseWorkspace.undoTarget = nil
                         if let singleRootRebaseSeed {
                             saveRebaseUndoSeed(singleRootRebaseSeed)
                         }
@@ -1454,7 +1454,7 @@ func doOperationContinue() {
             let latestState = try? repo.operationState()
             let latestRootPath = repo.workdir()
             await MainActor.run {
-                self.operationFeedback = friendlyRemoteError(error)
+                self.operationRecovery.feedback = friendlyRemoteError(error)
                 // A failed recovery command can leave Git at a different
                 // paused step (or with a different conflict set). Read the
                 // state synchronously before publishing actions; refresh the
@@ -1513,14 +1513,14 @@ func doOperationContinue() {
 }
 
 func doOperationSkip() {
-    guard let repo, let state = operationState, state.kind == .rebase else { return }
+    guard let repo, let state = operationRecovery.operation, state.kind == .rebase else { return }
     let rebaseRootPath = repo.workdir()
     let rebaseSessionID = rebaseRootPath.flatMap { rootPath in
-        multiRootRebaseSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
-            ? multiRootRebaseSession?.id
+        rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
+            ? rebaseWorkspace.multiRootSession?.id
             : nil
     }
-    let singleRootRebaseSeed = rebaseSessionID == nil ? rebaseUndoSeed : nil
+    let singleRootRebaseSeed = rebaseSessionID == nil ? rebaseWorkspace.undoSeed : nil
     let operationNotificationID = rebaseRootPath.map {
         operationRecoveryNotificationID(rootPath: $0)
     }
@@ -1546,16 +1546,16 @@ func doOperationSkip() {
                 completedRebaseUndoTarget = nil
             }
             await MainActor.run {
-                self.operationFeedback = outcome.paused ? "已跳过当前步，rebase 继续暂停" : "已跳过，rebase 完成"
+                self.operationRecovery.feedback = outcome.paused ? "已跳过当前步，rebase 继续暂停" : "已跳过，rebase 完成"
                 if operationStillActive {
-                    self.rebaseUndoSeed = singleRootRebaseSeed
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = singleRootRebaseSeed
+                    self.rebaseWorkspace.undoTarget = nil
                     if let singleRootRebaseSeed {
                         saveRebaseUndoSeed(singleRootRebaseSeed)
                     }
                 } else {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = completedRebaseUndoTarget
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = completedRebaseUndoTarget
                     if let singleRootRebaseSeed {
                         clearRebaseUndoSeed(repositoryPath: singleRootRebaseSeed.repositoryPath)
                     }
@@ -1574,7 +1574,7 @@ func doOperationSkip() {
                     if let completedRebaseUndoTarget, !operationStillActive {
                         self.feedbackCenter.success(
                             "Rebase completed",
-                            detail: self.operationFeedback,
+                            detail: self.operationRecovery.feedback,
                             additionalActions: [self.rebaseUndoFeedbackAction(for: completedRebaseUndoTarget)],
                             notificationID: rebaseUndoNotificationID(
                                 repositoryPath: completedRebaseUndoTarget.repositoryPath
@@ -1584,7 +1584,7 @@ func doOperationSkip() {
                 } else {
                     self.feedbackCenter.success(
                         outcome.paused ? "Rebase step skipped" : "Rebase completed",
-                        detail: self.operationFeedback,
+                        detail: self.operationRecovery.feedback,
                         notificationID: operationNotificationID
                     )
                 }
@@ -1593,7 +1593,7 @@ func doOperationSkip() {
             let latestState = try? repo.operationState()
             let latestRootPath = repo.workdir()
             await MainActor.run {
-                self.operationFeedback = friendlyRemoteError(error)
+                self.operationRecovery.feedback = friendlyRemoteError(error)
                 // Re-read the native rebase state before exposing another
                 // Skip/Continue/Abort action after a failed command.
                 self.refreshAll(showFeedback: false)
@@ -1625,7 +1625,7 @@ func doOperationSkip() {
 }
 
 func doOperationAbort() {
-    guard let repo, let state = operationState else { return }
+    guard let repo, let state = operationRecovery.operation else { return }
     let repositoryName = repo.workdir()
         .map { URL(fileURLWithPath: $0).lastPathComponent }
         .flatMap { $0.isEmpty ? nil : $0 }
@@ -1645,13 +1645,13 @@ func doOperationAbort() {
     let rebaseRootPath = repo.workdir()
     let rebaseSessionID = state.kind == .rebase
         ? rebaseRootPath.flatMap { rootPath in
-            multiRootRebaseSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
-                ? multiRootRebaseSession?.id
+            rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
+                ? rebaseWorkspace.multiRootSession?.id
                 : nil
         }
         : nil
     let singleRootRebaseSeed = state.kind == .rebase && rebaseSessionID == nil
-        ? rebaseUndoSeed
+        ? rebaseWorkspace.undoSeed
         : nil
     let operationNotificationID = rebaseRootPath.map {
         operationRecoveryNotificationID(rootPath: $0)
@@ -1693,7 +1693,7 @@ func doOperationAbort() {
             }
             let operationStillActive = try repo.operationState() != nil
             await MainActor.run {
-                self.operationFeedback = "已中止"
+                self.operationRecovery.feedback = "已中止"
                 if !operationStillActive {
                     for recovery in logApplyRecoveriesToCancel {
                         clearLogApplyRecovery(repositoryPath: recovery.rootPath)
@@ -1708,12 +1708,12 @@ func doOperationAbort() {
                     }
                 }
                 if state.kind == .merge {
-                    self.pendingMergeDeleteBranch = nil
-                    self.mergeInitialHead = nil
+                    self.mergeWorkspace.pendingDeleteBranch = nil
+                    self.mergeWorkspace.initialHead = nil
                 }
                 if state.kind == .rebase, rebaseSessionID == nil {
-                    self.rebaseUndoSeed = nil
-                    self.rebaseUndoTarget = nil
+                    self.rebaseWorkspace.undoSeed = nil
+                    self.rebaseWorkspace.undoTarget = nil
                     if let singleRootRebaseSeed {
                         clearRebaseUndoSeed(repositoryPath: singleRootRebaseSeed.repositoryPath)
                     } else if let rebaseRootPath {
@@ -1743,7 +1743,7 @@ func doOperationAbort() {
             let latestState = try? repo.operationState()
             let latestRootPath = repo.workdir()
             await MainActor.run {
-                self.operationFeedback = friendlyRemoteError(error)
+                self.operationRecovery.feedback = friendlyRemoteError(error)
                 // Abort failures must retain the current Git operation and
                 // its latest conflicts, not the snapshot captured at click
                 // time. This keeps Retry/Continue/Abort root-qualified.
@@ -1802,7 +1802,7 @@ func doOperationAbort() {
 func showOperationDetailsAction(notificationID: String) -> FeedbackAction {
     let request = ArborVCSActionRequest(
         kind: .showOperationDetails,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         operationNotificationID: notificationID

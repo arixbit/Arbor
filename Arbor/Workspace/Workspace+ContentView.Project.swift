@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 extension ContentView {
 func handleContentViewAppearAndLoadRoots() {
-    externalLogSessionDisposed = false
+    logRuntime.externalSessionDisposed = false
     // Root discovery starts after the primary status snapshot is visible so
     // startup work cannot compete with the first usable Changes rows.
     handleContentViewAppear()
@@ -12,28 +12,28 @@ func handleContentViewAppearAndLoadRoots() {
 }
 
 func handleRepositoryChange(_ event: RepositoryChangeEvent) {
-    guard !(externalLogWindow && externalLogSessionDisposed) else { return }
+    guard !(externalLogWindow && logRuntime.externalSessionDisposed) else { return }
     let eventPath = URL(fileURLWithPath: event.repositoryPath)
         .standardizedFileURL.path
     // Invalidate at event delivery, before the 100 ms packed refresh debounce,
     // so an Apply Patch dialog opened during that window cannot read stale
     // filename membership.
     RebasedPatchFilenameIndexStore.invalidate(rootPath: eventPath)
-    repositoryChangeBatch.insert(event)
-    guard repositoryChangeDeliveryTask == nil else { return }
-    repositoryChangeDeliveryTask = Task { @MainActor in
+    repositoryStatus.changeBatch.insert(event)
+    guard repositoryStatus.changeDeliveryTask == nil else { return }
+    repositoryStatus.changeDeliveryTask = Task { @MainActor in
         do {
             try await Task.sleep(for: .milliseconds(100))
         } catch {
-            self.repositoryChangeDeliveryTask = nil
+            self.repositoryStatus.changeDeliveryTask = nil
             return
         }
         guard !Task.isCancelled else {
-            self.repositoryChangeDeliveryTask = nil
+            self.repositoryStatus.changeDeliveryTask = nil
             return
         }
-        let events = self.repositoryChangeBatch.drain()
-        self.repositoryChangeDeliveryTask = nil
+        let events = self.repositoryStatus.changeBatch.drain()
+        self.repositoryStatus.changeDeliveryTask = nil
         for event in events {
             processRepositoryChange(event)
         }
@@ -43,13 +43,13 @@ func handleRepositoryChange(_ event: RepositoryChangeEvent) {
 func processRepositoryChange(_ event: RepositoryChangeEvent) {
     let eventPath = URL(fileURLWithPath: event.repositoryPath)
         .standardizedFileURL.path
-    repositoryDirtyScopeManager.register(
+    repositoryStatus.dirtyScopeManager.register(
         repositoryPaths: autoFetchRootPaths + [eventPath]
     )
     // Keep the exact VFS records before RootDirtySet-style compaction. The
     // refresh scope may become a directory or full-root scan, but actions and
     // lifecycle completion still need the original file/rename endpoints.
-    repositoryDirtyFileManager.mark(
+    repositoryStatus.dirtyFileManager.mark(
         repositoryPath: eventPath,
         dirtyPaths: event.dirtyPaths
     )
@@ -70,7 +70,7 @@ func processRepositoryChange(_ event: RepositoryChangeEvent) {
             gitDir: eventRepo.gitDir(),
             dirtyPaths: event.dirtyPaths
         )
-        affectedRootPaths = repositoryDirtyScopeManager.mark(
+        affectedRootPaths = repositoryStatus.dirtyScopeManager.mark(
             repositoryPath: eventPath,
             scope: scope,
             changeScope: event.scopes,
@@ -81,7 +81,7 @@ func processRepositoryChange(_ event: RepositoryChangeEvent) {
         // disappeared while the watcher was delivering it. A later root
         // discovery will reconcile the full state instead of dropping the
         // invalidation because the Repository object is temporarily absent.
-        affectedRootPaths = repositoryDirtyScopeManager.markEverything(
+        affectedRootPaths = repositoryStatus.dirtyScopeManager.markEverything(
             repositoryPath: eventPath,
             changeScope: event.scopes,
             dirtyPaths: event.dirtyPaths
@@ -93,14 +93,14 @@ func processRepositoryChange(_ event: RepositoryChangeEvent) {
             $0.kind == .created || $0.kind == .removed || $0.kind == .renamed
         }
     if hasExternalVCSActionEvents, eventRepo != nil {
-        repositoryExternalVCSActionManager.enqueue(event)
+        repositoryStatus.externalVCSActionManager.enqueue(event)
     }
 
     for rootPath in affectedRootPaths where rootPath != eventPath {
         // GitVcsDirtyScope marks every nested root dirty when a recursive
         // parent event covers it. The exact file ledger still needs a record
         // for that synthetic full-root refresh.
-        repositoryDirtyFileManager.mark(
+        repositoryStatus.dirtyFileManager.mark(
             repositoryPath: rootPath,
             dirtyPaths: [
                 RepositoryDirtyPath(
@@ -122,12 +122,12 @@ func processRepositoryChange(_ event: RepositoryChangeEvent) {
 /// deliberately the source of truth here; the watcher/event batch only
 /// schedules this function and never directly acknowledges a dirty path.
 func startPendingRepositoryDirtyScopes() {
-    let records = repositoryDirtyScopeManager.retrieveScopes()
+    let records = repositoryStatus.dirtyScopeManager.retrieveScopes()
     guard !records.isEmpty else { return }
 
     for record in records {
         let refreshEvent = record.event
-        let dirtyFileTicket = repositoryDirtyFileManager.beginProcessing(
+        let dirtyFileTicket = repositoryStatus.dirtyFileManager.beginProcessing(
             repositoryPath: record.repositoryPath
         )
         let shouldStartExternalVCSActions = refreshEvent.scopes.contains(.worktree)
@@ -145,11 +145,11 @@ func startPendingRepositoryDirtyScopes() {
         }
 
         refreshRepositoryChange(refreshEvent) {
-            self.repositoryDirtyScopeManager.changesProcessed(
+            self.repositoryStatus.dirtyScopeManager.changesProcessed(
                 repositoryPath: record.repositoryPath
             )
             if let dirtyFileTicket {
-                self.repositoryDirtyFileManager.changesProcessed(dirtyFileTicket)
+                self.repositoryStatus.dirtyFileManager.changesProcessed(dirtyFileTicket)
             }
             if shouldStartExternalVCSActions, let eventRepo {
                 self.startNextExternalVCSAction(repo: eventRepo)
@@ -231,7 +231,7 @@ func refreshAll(
     if showFeedback {
         beginFeedbackOperation("Refresh status")
     }
-    let repositoryPath = projectPath
+    let repositoryPath = projectWorkspace.path
     let refreshMetadata = changeScope?.contains(.gitMetadata) ?? true
     let requestedIncrementalStatusPaths = refreshMetadata
         ? nil
@@ -240,15 +240,15 @@ func refreshAll(
             gitDir: repo.gitDir(),
             dirtyPaths: dirtyPaths
         )
-    let refreshTicket = refreshGate.begin(
+    let refreshTicket = repositoryStatus.refreshGate.begin(
         usesIncrementalStatus: requestedIncrementalStatusPaths != nil
     )
     let incrementalStatusPaths = refreshTicket.usesIncrementalStatus
         ? requestedIncrementalStatusPaths
         : nil
-    let existingEntries = entries
-    let shouldLoadLog = refreshMetadata && toolWindowMode == .log && logList.viewMode != .reflog
-    let shouldLoadReflog = refreshMetadata && toolWindowMode == .log && logList.viewMode == .reflog
+    let existingEntries = repositoryStatus.entries
+    let shouldLoadLog = refreshMetadata && projectWorkspace.toolWindowMode == .log && logList.viewMode != .reflog
+    let shouldLoadReflog = refreshMetadata && projectWorkspace.toolWindowMode == .log && logList.viewMode == .reflog
     DiagnosticsLogger.shared.record(operation: "refresh", repositoryPath: repositoryPath, code: "started")
     Task.detached(priority: .userInitiated) {
         do {
@@ -290,21 +290,21 @@ func refreshAll(
             let opState = try? repo.operationState()
             let resolvedPaths = (try? repo.conflictWorkspace().resolvedFiles) ?? []
             await MainActor.run {
-                guard self.projectRepo === repo else {
+                guard self.projectWorkspace.repository === repo else {
                     onCompleted?()
                     return
                 }
-                guard self.refreshGate.isCurrent(refreshTicket) else {
+                guard self.repositoryStatus.refreshGate.isCurrent(refreshTicket) else {
                     onCompleted?()
                     return
                 }
-                guard self.refreshGate.finish(refreshTicket) else {
+                guard self.repositoryStatus.refreshGate.finish(refreshTicket) else {
                     onCompleted?()
                     return
                 }
-                self.entries = st
-                self.changeLists = cls
-                self.isShowingCachedStatusSnapshot = false
+                self.repositoryStatus.entries = st
+                self.repositoryStatus.changeLists = cls
+                self.repositoryStatus.isShowingCachedStatusSnapshot = false
                 if incrementalStatusPaths == nil,
                    let rootPath = repo.workdir() {
                     savePersistedStatusCache(
@@ -313,10 +313,10 @@ func refreshAll(
                         changeLists: cls
                     )
                 }
-                self.fileContentRefreshToken &+= 1
-                self.headId = hid
-                self.mergeInProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
-                self.operationState = opState
+                self.fileWorkspace.refreshToken &+= 1
+                self.repositoryStatus.headId = hid
+                self.mergeWorkspace.inProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
+                self.operationRecovery.operation = opState
                 if let opState, let rootPath = repo.workdir() {
                     self.feedbackCenter.expire(
                         notificationID: self.logApplyRecoveryNotificationID(rootPath: rootPath)
@@ -333,15 +333,15 @@ func refreshAll(
                     self.feedbackCenter.expire(
                         notificationID: operationRecoveryNotificationID(rootPath: rootPath)
                     )
-                    self.operationRecoveryNotificationFingerprints.removeValue(
+                    self.operationRecovery.notificationFingerprints.removeValue(
                         forKey: operationRecoveryNotificationRootKey(rootPath)
                     )
                 }
-                self.resolvedConflictPaths = resolvedPaths
+                self.operationRecovery.resolvedConflictPaths = resolvedPaths
                 if (mergePending || self.stashRecovery.popConflictInProgress),
-                   self.toolWindowMode != .log,
-                   self.selection == nil {
-                    self.selection = st.first(where: {
+                   self.projectWorkspace.toolWindowMode != .log,
+                   self.fileWorkspace.selection == nil {
+                    self.fileWorkspace.selection = st.first(where: {
                         $0.staged == .conflicted || $0.unstaged == .conflicted
                     })?.path
                 }
@@ -371,10 +371,10 @@ func refreshAll(
                 let staging = try? repo.stagingModel()
                 guard refreshMetadata else {
                     await MainActor.run {
-                        guard self.projectRepo === repo,
-                              self.refreshGate.isCurrent(refreshTicket) else { return }
-                        self.stagingModel = staging
-                        self.lastIndexRevision = staging?.indexRevision
+                        guard self.projectWorkspace.repository === repo,
+                              self.repositoryStatus.refreshGate.isCurrent(refreshTicket) else { return }
+                        self.repositoryStatus.stagingModel = staging
+                        self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                     }
                     return
                 }
@@ -389,16 +389,16 @@ func refreshAll(
                 let recentBranches = (try? repo.recentBranches(limit: 10)) ?? []
                 let syncStatuses = (try? repo.syncStatus()) ?? []
                 await MainActor.run {
-                    guard self.projectRepo === repo,
-                          self.refreshGate.isCurrent(refreshTicket) else { return }
-                    self.ignoredRules = ignoredRules
-                    self.recentMessages = recent
+                    guard self.projectWorkspace.repository === repo,
+                          self.repositoryStatus.refreshGate.isCurrent(refreshTicket) else { return }
+                    self.repositoryStatus.ignoredRules = ignoredRules
+                    self.commitWorkspace.recentMessages = recent
                     self.tagWorkspace.tags = tags
-                    self.submodules = submodules
-                    self.worktrees = worktrees
-                    self.isShallowRepository = isShallow
-                    self.stagingModel = staging
-                    self.lastIndexRevision = staging?.indexRevision
+                    self.submoduleWorkspace.submodules = submodules
+                    self.worktreeWorkspace.worktrees = worktrees
+                    self.repositoryStatus.isShallowRepository = isShallow
+                    self.repositoryStatus.stagingModel = staging
+                    self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                     self.branchWorkspace.remoteBranches = remoteBranches
                     self.branchWorkspace.recentBranches = recentBranches
                     self.branchWorkspace.syncStatuses = syncStatuses
@@ -407,20 +407,20 @@ func refreshAll(
         } catch {
             DiagnosticsLogger.shared.record(level: .error, operation: "refresh", repositoryPath: repositoryPath, code: "failed")
             await MainActor.run {
-                guard self.projectRepo === repo else {
+                guard self.projectWorkspace.repository === repo else {
                     onCompleted?()
                     return
                 }
-                guard self.refreshGate.isCurrent(refreshTicket) else {
+                guard self.repositoryStatus.refreshGate.isCurrent(refreshTicket) else {
                     onCompleted?()
                     return
                 }
-                guard self.refreshGate.finish(refreshTicket) else {
+                guard self.repositoryStatus.refreshGate.finish(refreshTicket) else {
                     onCompleted?()
                     return
                 }
                 if showFeedback {
-                    self.loadError = errorMessage(error)
+                    self.repositoryStatus.loadError = errorMessage(error)
                     self.feedbackCenter.error("Refresh failed", detail: errorMessage(error), nextStep: "Check the repository and retry.")
                 }
                 onCompleted?()
@@ -434,7 +434,7 @@ func handleProjectDrop(_ providers: [NSItemProvider]) -> Bool {
     _ = provider.loadObject(ofClass: NSURL.self) { object, _ in
         guard let url = object as? URL, url.hasDirectoryPath else { return }
         DispatchQueue.main.async {
-            self.path = url.path
+            self.projectWorkspace.inputPath = url.path
             self.requestOpenProject(url.path)
         }
     }
@@ -459,12 +459,12 @@ func initializeProject(at requestedPath: String) {
             let initializedPath = try initializeRepository(path: selectedPath)
             await MainActor.run {
                 self.feedbackCenter.success("Git repository initialized", detail: initializedPath)
-                self.path = initializedPath
+                self.projectWorkspace.inputPath = initializedPath
             }
             await MainActor.run { self.requestOpenProject(initializedPath) }
         } catch {
             await MainActor.run {
-                self.loadError = errorMessage(error)
+                self.repositoryStatus.loadError = errorMessage(error)
                 self.feedbackCenter.error("Initialize Git repository failed", detail: errorMessage(error), nextStep: "Choose a writable directory and retry.")
             }
         }
@@ -475,44 +475,44 @@ func initializeProject(at requestedPath: String) {
 func requestOpenProject(_ requestedPath: String) {
     let selectedPath = URL(fileURLWithPath: requestedPath).standardizedFileURL.path
     guard !selectedPath.isEmpty else { return }
-    if projectRepo != nil, projectPath != selectedPath {
-        pendingProjectPath = selectedPath
-        showProjectSwitchAlert = true
+    if projectWorkspace.repository != nil, projectWorkspace.path != selectedPath {
+        projectWorkspace.pendingPath = selectedPath
+        projectWorkspace.showSwitchAlert = true
     } else {
         openProjectPath(selectedPath)
     }
 }
 
 func replacePendingProject() {
-    guard let pendingProjectPath else { return }
+    guard let pendingProjectPath = projectWorkspace.pendingPath else { return }
     let next = pendingProjectPath
-    self.pendingProjectPath = nil
+    self.projectWorkspace.pendingPath = nil
     resetProjectState()
-    projectPath = next
-    path = next
+    projectWorkspace.path = next
+    projectWorkspace.inputPath = next
     openProjectPath(next)
 }
 
 func openPendingProjectInNewWindow() {
-    guard let pendingProjectPath else { return }
+    guard let pendingProjectPath = projectWorkspace.pendingPath else { return }
     let next = pendingProjectPath
-    self.pendingProjectPath = nil
+    self.projectWorkspace.pendingPath = nil
     openWindow(value: next)
 }
 
 func openProjectPath(_ projectPath: String) {
     expireOperationRecoveryNotifications()
-    repositoryChangeDeliveryTask?.cancel()
-    repositoryChangeDeliveryTask = nil
-    repositoryChangeBatch.removeAll()
-    repositoryExternalVCSActionManager.removeAll()
-    repositoryDirtyScopeManager.removeAll()
-    repositoryDirtyFileManager.removeAll()
-    multiRootLoadTask?.cancel()
-    multiRootLoadTask = nil
-    multiRootLoadGeneration &+= 1
-    multiRootLoadNeedsRefresh = false
-    multiRootLoadCompletion = nil
+    repositoryStatus.changeDeliveryTask?.cancel()
+    repositoryStatus.changeDeliveryTask = nil
+    repositoryStatus.changeBatch.removeAll()
+    repositoryStatus.externalVCSActionManager.removeAll()
+    repositoryStatus.dirtyScopeManager.removeAll()
+    repositoryStatus.dirtyFileManager.removeAll()
+    multiRootWorkspace.loadTask?.cancel()
+    multiRootWorkspace.loadTask = nil
+    multiRootWorkspace.loadGeneration &+= 1
+    multiRootWorkspace.loadNeedsRefresh = false
+    multiRootWorkspace.loadCompletion = nil
     beginFeedbackOperation("Open project")
     logList.refreshTask?.cancel()
     logList.refreshTask = nil
@@ -523,16 +523,16 @@ func openProjectPath(_ projectPath: String) {
     reflog.loadMoreTask?.cancel()
     reflog.loadMoreTask = nil
     reflog.generation += 1
-    compareLoadTask?.cancel()
-    compareLoadTask = nil
+    comparisonWorkspace.loadTask?.cancel()
+    comparisonWorkspace.loadTask = nil
     cancelBranchComparisonTasks()
-    activeCompareRepo = nil
-    compareRepositoryPath = nil
+    comparisonWorkspace.repository = nil
+    comparisonWorkspace.repositoryPath = nil
     logList.generation += 1
-    isLoading = true
-    logList.isLoading = toolWindowMode == .log
-    loadError = nil
-    commitFeedback = nil
+    repositoryStatus.isLoading = true
+    logList.isLoading = projectWorkspace.toolWindowMode == .log
+    repositoryStatus.loadError = nil
+    commitWorkspace.feedback = nil
     stashRecovery.popConflictInProgress = false
     stashRecovery.applyConflictInProgress = false
     shelfWorkspace.conflictInProgress = false
@@ -550,15 +550,15 @@ func openProjectPath(_ projectPath: String) {
     stashRecovery.pendingPullStashID = nil
     stashRecovery.pendingPullStashMessage = nil
     stashRecovery.pendingPullShelfName = nil
-    showMergeRevisionsDialog = false
+    operationRecovery.showConflictResolver = false
     // The split workspaces keep their own selections. Clear them before the
     // new repository starts publishing data so a previous project's diff or
     // stash preview cannot remain actionable during the transition.
-    selection = nil
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
     logSelectionState.selectedIDs = []
     reflog.rootPath = nil
     reflog.rootRepo = nil
@@ -571,9 +571,9 @@ func openProjectPath(_ projectPath: String) {
     shelfWorkspace.previewName = nil
     shelfWorkspace.previewText = nil
     shelfWorkspace.showPreview = false
-    remoteProtectedBranchPatterns = []
-    remoteProtectedBranchPatternsByRoot = [:]
-    isShallowRepository = false
+    gitSettings.remoteProtectedBranchPatterns = []
+    gitSettings.remoteProtectedBranchPatternsByRoot = [:]
+    repositoryStatus.isShallowRepository = false
     let requestedPath = projectPath
     logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
         GitBranchesPopupSettings.logSelectionActionKey,
@@ -600,10 +600,10 @@ func openProjectPath(_ projectPath: String) {
                 code: "opened"
             )
             await MainActor.run {
-                guard !(self.externalLogWindow && self.externalLogSessionDisposed) else { return }
+                guard !(self.externalLogWindow && self.logRuntime.externalSessionDisposed) else { return }
                 let root = r.workdir() ?? requestedPath
-                self.projectPath = root
-                self.path = root
+                self.projectWorkspace.path = root
+                self.projectWorkspace.inputPath = root
                 self.loadMergeDialogSettings(for: root)
                 self.loadRebaseDialogSettings(for: root)
                 self.logBranchesPanel.selectionActionRaw = GitBranchesPopupSettings.stringValue(
@@ -619,10 +619,10 @@ func openProjectPath(_ projectPath: String) {
                     for: root
                 )
                 self.loadProjectProtectedBranchSettings(for: root)
-                self.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(for: root)
-                self.projectFetchTagsMode = GitFetchTagsSettings.mode(for: root)
-                self.projectUpdateMethod = GitUpdateMethodSettings.method(for: root)
-                self.projectRepo = r
+                self.gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(for: root)
+                self.gitSettings.projectFetchTagsMode = GitFetchTagsSettings.mode(for: root)
+                self.gitSettings.projectUpdateMethod = GitUpdateMethodSettings.method(for: root)
+                self.projectWorkspace.repository = r
                 if shouldLoadReflog {
                     self.reflog.rootPath = root
                     self.reflog.rootRepo = r
@@ -635,55 +635,55 @@ func openProjectPath(_ projectPath: String) {
                 self.logRuntime.activeRemotes = []
                 self.logRuntime.aggregateBranchFilters = []
                 self.logRuntime.aggregateRevisionRanges = []
-                self.externalLogAggregateLoadStarted = false
+                self.logRuntime.externalAggregateLoadStarted = false
                 let preserveInitialExternalLogRoots = self.externalLogWindow
-                    && !self.externalLogRootRequestConsumed
+                    && !self.logRuntime.externalRootRequestConsumed
                     && !self.initialExternalLogRootPaths.isEmpty
                 if preserveInitialExternalLogRoots {
                     self.logRuntime.aggregateRootPaths = self.initialExternalLogRootPaths
-                    self.externalLogRootSelectionInitialized = true
-                    self.externalLogRootRequestConsumed = true
+                    self.logRuntime.externalRootSelectionInitialized = true
+                    self.logRuntime.externalRootRequestConsumed = true
                 } else {
                     self.logRuntime.aggregateRootPaths = []
-                    self.externalLogRootSelectionInitialized = false
+                    self.logRuntime.externalRootSelectionInitialized = false
                 }
                 self.logRuntime.aggregateRepositories = [:]
                 self.logRuntime.aggregateLoadedCounts = [:]
                 self.restorePersistedMultiRootRebaseSession(for: root)
-                if self.multiRootRebaseSession == nil {
+                if self.rebaseWorkspace.multiRootSession == nil {
                     self.restorePersistedSingleRootRebaseState(for: root)
                     self.restorePersistedPullPreservation(for: root)
                 }
                 self.rememberRecentPath(root)
-                self.headId = hid
+                self.repositoryStatus.headId = hid
                 // The log and the current branch are the critical path. Do not
                 // wait for repository-wide reachability scans before exposing
                 // the graph: large repositories such as IntelliJ can contain
                 // millions of packed objects.
                 self.branchWorkspace.branches = bs
                 self.refreshLogMyBranches()
-                self.selection = nil; self.fileSelection = nil
+                self.fileWorkspace.selection = nil; self.fileWorkspace.fileSelection = nil
                 self.logSelectionState.selection = nil
-                self.compareSelection = nil
-                self.compareSelectedPaths = []
+                self.comparisonWorkspace.selection = nil
+                self.comparisonWorkspace.selectedPaths = []
                 if let cachedStatus = loadPersistedStatusCache(rootPath: root),
                    let snapshot = cachedStatus.restoredSnapshot(rootPath: root) {
-                    self.entries = snapshot.files
-                    self.changeLists = snapshot.changeLists
-                    self.isShowingCachedStatusSnapshot = true
+                    self.repositoryStatus.entries = snapshot.files
+                    self.repositoryStatus.changeLists = snapshot.changeLists
+                    self.repositoryStatus.isShowingCachedStatusSnapshot = true
                 } else {
-                    self.entries = []
-                    self.changeLists = []
-                    self.isShowingCachedStatusSnapshot = false
+                    self.repositoryStatus.entries = []
+                    self.repositoryStatus.changeLists = []
+                    self.repositoryStatus.isShowingCachedStatusSnapshot = false
                 }
-                self.ignoredRules = []
-                self.stagingModel = nil
-                self.lastIndexRevision = nil
-                self.mergeInProgress = false
-                self.mergeInitialHead = nil
-                self.operationState = nil
+                self.repositoryStatus.ignoredRules = []
+                self.repositoryStatus.stagingModel = nil
+                self.repositoryStatus.lastIndexRevision = nil
+                self.mergeWorkspace.inProgress = false
+                self.mergeWorkspace.initialHead = nil
+                self.operationRecovery.operation = nil
                 expireOperationRecoveryNotifications()
-                self.isLoading = false
+                self.repositoryStatus.isLoading = false
                 self.feedbackCenter.success("Project opened")
             }
 
@@ -692,8 +692,8 @@ func openProjectPath(_ projectPath: String) {
             // refresh/filter changes so the persisted snapshot is available
             // after relaunch and the active tab query is not silently dropped.
             await MainActor.run {
-                guard self.projectRepo === r else { return }
-                if self.toolWindowMode == .log {
+                guard self.projectWorkspace.repository === r else { return }
+                if self.projectWorkspace.toolWindowMode == .log {
                     self.loadLog(reset: true)
                 }
             }
@@ -715,10 +715,10 @@ func openProjectPath(_ projectPath: String) {
                     let mergePending = r.mergeInProgress()
                     let shelveRestore = try? r.shelveRestoreInfo()
                     await MainActor.run {
-                        guard self.projectRepo === r else { return }
-                        self.entries = st
-                        self.changeLists = cls
-                        self.isShowingCachedStatusSnapshot = false
+                        guard self.projectWorkspace.repository === r else { return }
+                        self.repositoryStatus.entries = st
+                        self.repositoryStatus.changeLists = cls
+                        self.repositoryStatus.isShowingCachedStatusSnapshot = false
                         if let rootPath = r.workdir() {
                             savePersistedStatusCache(
                                 rootPath: rootPath,
@@ -726,12 +726,12 @@ func openProjectPath(_ projectPath: String) {
                                 changeLists: cls
                             )
                         }
-                        self.mergeInProgress = mergePending
-                        if self.mergeInProgress, self.toolWindowMode != .log {
-                            self.selection = st.first(where: {
+                        self.mergeWorkspace.inProgress = mergePending
+                        if self.mergeWorkspace.inProgress, self.projectWorkspace.toolWindowMode != .log {
+                            self.fileWorkspace.selection = st.first(where: {
                                 $0.staged == .conflicted || $0.unstaged == .conflicted
                             })?.path
-                            self.showMergeRevisionsDialog = st.contains {
+                            self.operationRecovery.showConflictResolver = st.contains {
                                 $0.staged == .conflicted || $0.unstaged == .conflicted
                             }
                         } else if let shelveRestore {
@@ -742,18 +742,18 @@ func openProjectPath(_ projectPath: String) {
                             self.shelfWorkspace.conflictIsDirectPatch = shelveRestore.isDirectPatch
                             self.shelfWorkspace.pendingConflictPatch = shelveRestore.patch
                             self.shelfWorkspace.conflictInProgress = true
-                            self.mergeInitialPath = shelveRestore.paths.first
-                            if self.toolWindowMode != .log {
-                                self.selection = shelveRestore.paths.first
-                                self.showMergeRevisionsDialog = true
+                            self.operationRecovery.initialPath = shelveRestore.paths.first
+                            if self.projectWorkspace.toolWindowMode != .log {
+                                self.fileWorkspace.selection = shelveRestore.paths.first
+                                self.operationRecovery.showConflictResolver = true
                             }
                         }
                         self.loadMultiRoots()
                     }
                 } catch {
                     await MainActor.run {
-                        guard self.projectRepo === r else { return }
-                        self.isShowingCachedStatusSnapshot = !self.entries.isEmpty
+                        guard self.projectWorkspace.repository === r else { return }
+                        self.repositoryStatus.isShowingCachedStatusSnapshot = !self.repositoryStatus.entries.isEmpty
                         self.feedbackCenter.warning(
                             "Status refresh failed",
                             detail: errorMessage(error),
@@ -785,21 +785,21 @@ func openProjectPath(_ projectPath: String) {
                             let recentBranches = (try? r.recentBranches(limit: 10)) ?? []
                             let mergePending = r.mergeInProgress()
                             await MainActor.run {
-                                guard self.projectRepo === r else { return }
-                                self.ignoredRules = ignoredRules
-                                self.recentMessages = recentMessages
-                                self.stagingModel = staging
-                                self.lastIndexRevision = staging?.indexRevision
-                        self.operationState = operationState
-                        self.mergeInProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
-                                self.stashUI.stashes = ss; self.remotes = rs
-                                self.isShallowRepository = isShallow
-                                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
+                                guard self.projectWorkspace.repository === r else { return }
+                                self.repositoryStatus.ignoredRules = ignoredRules
+                                self.commitWorkspace.recentMessages = recentMessages
+                                self.repositoryStatus.stagingModel = staging
+                                self.repositoryStatus.lastIndexRevision = staging?.indexRevision
+                        self.operationRecovery.operation = operationState
+                        self.mergeWorkspace.inProgress = mergePending || self.stashRecovery.popConflictInProgress || self.stashRecovery.applyConflictInProgress
+                                self.stashUI.stashes = ss; self.remoteWorkspace.remotes = rs
+                                self.repositoryStatus.isShallowRepository = isShallow
+                                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectWorkspace.path)
                                 self.branchWorkspace.remoteBranches = remoteBranches
                                 self.branchWorkspace.recentBranches = recentBranches; self.branchWorkspace.syncStatuses = syncStatuses
                                 self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
-                        self.submodules = submodules
-                        self.worktrees = worktrees
+                        self.submoduleWorkspace.submodules = submodules
+                        self.worktreeWorkspace.worktrees = worktrees
                         if let operationState,
                            let rootPath = r.workdir() {
                             self.feedbackCenter.expire(
@@ -826,9 +826,9 @@ func openProjectPath(_ projectPath: String) {
                     repositoryPath: requestedPath,
                     code: "open-failed"
                 )
-                self.loadError = errorMessage(error)
-                self.projectRepo = nil
-                self.entries = []; self.isLoading = false
+                self.repositoryStatus.loadError = errorMessage(error)
+                self.projectWorkspace.repository = nil
+                self.repositoryStatus.entries = []; self.repositoryStatus.isLoading = false
                 self.feedbackCenter.error("Open project failed", detail: errorMessage(error), nextStep: "Choose a valid Git repository and retry.")
             }
         }
@@ -837,17 +837,17 @@ func openProjectPath(_ projectPath: String) {
 
 func resetProjectState() {
     expireOperationRecoveryNotifications()
-    repositoryChangeDeliveryTask?.cancel()
-    repositoryChangeDeliveryTask = nil
-    repositoryChangeBatch.removeAll()
-    repositoryExternalVCSActionManager.removeAll()
-    repositoryDirtyScopeManager.removeAll()
-    repositoryDirtyFileManager.removeAll()
-    multiRootLoadTask?.cancel()
-    multiRootLoadTask = nil
-    multiRootLoadGeneration &+= 1
-    multiRootLoadNeedsRefresh = false
-    multiRootLoadCompletion = nil
+    repositoryStatus.changeDeliveryTask?.cancel()
+    repositoryStatus.changeDeliveryTask = nil
+    repositoryStatus.changeBatch.removeAll()
+    repositoryStatus.externalVCSActionManager.removeAll()
+    repositoryStatus.dirtyScopeManager.removeAll()
+    repositoryStatus.dirtyFileManager.removeAll()
+    multiRootWorkspace.loadTask?.cancel()
+    multiRootWorkspace.loadTask = nil
+    multiRootWorkspace.loadGeneration &+= 1
+    multiRootWorkspace.loadNeedsRefresh = false
+    multiRootWorkspace.loadCompletion = nil
     logList.refreshTask?.cancel()
     logList.refreshTask = nil
     logList.loadTask?.cancel()
@@ -860,9 +860,9 @@ func resetProjectState() {
     logSelectionState.detailLoadTask = nil
     reflog.detailLoadTask?.cancel()
     reflog.detailLoadTask = nil
-    compareLoadTask?.cancel()
-    compareLoadTask = nil
-    activeCompareRepo = nil
+    comparisonWorkspace.loadTask?.cancel()
+    comparisonWorkspace.loadTask = nil
+    comparisonWorkspace.repository = nil
     logList.activeRootPath = nil
     logList.activeRepo = nil
     logRuntime.activeBranches = []
@@ -871,8 +871,8 @@ func resetProjectState() {
     logRuntime.aggregateBranchFilters = []
     logRuntime.aggregateRevisionRanges = []
     logRuntime.aggregateRootPaths = []
-    externalLogRootSelectionInitialized = false
-    externalLogAggregateLoadStarted = false
+    logRuntime.externalRootSelectionInitialized = false
+    logRuntime.externalAggregateLoadStarted = false
     logRuntime.aggregateRepositories = [:]
     logRuntime.aggregateLoadedCounts = [:]
     logList.generation += 1
@@ -883,21 +883,21 @@ func resetProjectState() {
     logBranchesPanel.myBranchIDs = []
     logBranchesPanel.isLoadingMy = false
     feedbackCenter.clearHistory()
-    projectRepo = nil
-    projectIncomingCheckStrategyRaw = nil
-    projectFetchTagsMode = .default
-    projectUpdateMethod = .merge
+    projectWorkspace.repository = nil
+    gitSettings.projectIncomingCheckStrategyRaw = nil
+    gitSettings.projectFetchTagsMode = .default
+    gitSettings.projectUpdateMethod = .merge
     logBranchesPanel.selectionActionRaw = LogBranchSelectionAction.navigate.rawValue
     logBranchesPanel.groupByDirectory = GitBranchesPopupSettings.defaultGroupByDirectory
-    multiRootRebaseSession = nil
-    multiRootRebaseRollbackContext = nil
-    entries = []
-    changeLists = []
-    isShowingCachedStatusSnapshot = false
-    ignoredRules = []
-    stagingModel = nil
-    lastIndexRevision = nil
-    headId = nil
+    rebaseWorkspace.multiRootSession = nil
+    rebaseWorkspace.multiRootRollbackContext = nil
+    repositoryStatus.entries = []
+    repositoryStatus.changeLists = []
+    repositoryStatus.isShowingCachedStatusSnapshot = false
+    repositoryStatus.ignoredRules = []
+    repositoryStatus.stagingModel = nil
+    repositoryStatus.lastIndexRevision = nil
+    repositoryStatus.headId = nil
     logList.entries = []
     logSelectionState.tabs = [LogTabDescriptor()]
     logSelectionState.activeTabID = nil
@@ -921,26 +921,26 @@ func resetProjectState() {
     stashUI.stashes = []
     shelfWorkspace.shelves = []
     shelfWorkspace.deletedShelves = []
-    remotes = []
-    isShallowRepository = false
-    remoteProtectedBranchPatterns = []
-    remoteProtectedBranchPatternsByRoot = [:]
+    remoteWorkspace.remotes = []
+    repositoryStatus.isShallowRepository = false
+    gitSettings.remoteProtectedBranchPatterns = []
+    gitSettings.remoteProtectedBranchPatternsByRoot = [:]
     branchWorkspace.remoteBranches = []
     branchWorkspace.syncStatuses = []
     tagWorkspace.tags = []
-    worktrees = []
-    worktreeFeedback = nil
-    consoleResult = nil
+    worktreeWorkspace.worktrees = []
+    worktreeWorkspace.feedback = nil
+    operationRecovery.consoleResult = nil
     reflog.entries = []
     reflog.selection = nil
     reflog.selectedIDs = []
     reflog.rootPath = nil
     reflog.rootRepo = nil
-    selection = nil
-    fileSelection = nil
-    selectionModePath = nil
-    commitPreviewPath = nil
-    commitPreviewVisible = false
+    fileWorkspace.selection = nil
+    fileWorkspace.fileSelection = nil
+    fileWorkspace.selectionModePath = nil
+    fileWorkspace.previewPath = nil
+    fileWorkspace.previewVisible = false
     logSelectionState.selectedIDs = []
     stashUI.previewStashID = nil
     stashUI.previewText = nil
@@ -949,10 +949,10 @@ func resetProjectState() {
     shelfWorkspace.previewText = nil
     shelfWorkspace.showPreview = false
     logSelectionState.selection = nil
-    compareSelection = nil
-    compareSelectedPaths = []
-    mergeInProgress = false
-    mergeInitialHead = nil
+    comparisonWorkspace.selection = nil
+    comparisonWorkspace.selectedPaths = []
+    mergeWorkspace.inProgress = false
+    mergeWorkspace.initialHead = nil
     stashRecovery.popConflictInProgress = false
     stashRecovery.applyConflictInProgress = false
     shelfWorkspace.conflictInProgress = false
@@ -970,8 +970,8 @@ func resetProjectState() {
     stashRecovery.pendingPullStashID = nil
     stashRecovery.pendingPullStashMessage = nil
     stashRecovery.pendingPullShelfName = nil
-    showMergeRevisionsDialog = false
-    loadError = nil
+    operationRecovery.showConflictResolver = false
+    repositoryStatus.loadError = nil
 }
 
 /// IntelliJ's cherry-picked highlighter compares a selected source branch with
@@ -1022,8 +1022,8 @@ func refreshCherryPickedHighlights() {
     let target = cherryPickTargetBranch(
         mode: logList.viewMode,
         sourceBranch: source,
-        firstBranch: compareRev1,
-        secondBranch: compareRev2,
+        firstBranch: comparisonWorkspace.revision1,
+        secondBranch: comparisonWorkspace.revision2,
         currentBranch: activeLogBranches.first(where: \.isCurrent)?.name
     )
     let eligibleRepositories = requestedRepositories.filter { request in
@@ -1116,8 +1116,8 @@ func refreshCherryPickedHighlights() {
                       cherryPickTargetBranch(
                           mode: self.logList.viewMode,
                           sourceBranch: self.logCherryPickCompareBranch,
-                          firstBranch: self.compareRev1,
-                          secondBranch: self.compareRev2,
+                          firstBranch: self.comparisonWorkspace.revision1,
+                          secondBranch: self.comparisonWorkspace.revision2,
                           currentBranch: self.activeLogBranches.first(where: \.isCurrent)?.name
                       ) == target else { return }
             }
@@ -1149,25 +1149,25 @@ func refreshCherryPickedHighlights() {
 }
 
 func loadTreeChanges() {
-    compareLoadTask?.cancel()
-    compareLoadTask = nil
-    let comparisonRepo = activeCompareRepo ?? repo
+    comparisonWorkspace.loadTask?.cancel()
+    comparisonWorkspace.loadTask = nil
+    let comparisonRepo = comparisonWorkspace.repository ?? repo
     guard let comparisonRepo else {
-        treeChanges = []
-        compareSelection = nil
-        compareSelectedPaths = []
-        compareError = nil
+        comparisonWorkspace.treeChanges = []
+        comparisonWorkspace.selection = nil
+        comparisonWorkspace.selectedPaths = []
+        comparisonWorkspace.error = nil
         return
     }
-    let old = compareRev1.trimmingCharacters(in: .whitespaces)
-    let new = compareRev2.trimmingCharacters(in: .whitespaces)
-    let usesWorkingTree = compareWithWorkingTree
+    let old = comparisonWorkspace.revision1.trimmingCharacters(in: .whitespaces)
+    let new = comparisonWorkspace.revision2.trimmingCharacters(in: .whitespaces)
+    let usesWorkingTree = comparisonWorkspace.withWorkingTree
     let tabID = currentLogTabID
     guard !old.isEmpty, usesWorkingTree || !new.isEmpty else {
-        treeChanges = []
-        compareSelection = nil
-        compareSelectedPaths = []
-        compareError = "请输入两个 revision"
+        comparisonWorkspace.treeChanges = []
+        comparisonWorkspace.selection = nil
+        comparisonWorkspace.selectedPaths = []
+        comparisonWorkspace.error = "请输入两个 revision"
         return
     }
     let task = Task.detached(priority: .userInitiated) {
@@ -1181,36 +1181,36 @@ func loadTreeChanges() {
             await MainActor.run {
                 guard !Task.isCancelled,
                       self.externalLogTabIsAlive(tabID),
-                      self.compareRev1.trimmingCharacters(in: .whitespaces) == old,
-                      (usesWorkingTree || self.compareRev2.trimmingCharacters(in: .whitespaces) == new),
-                      self.compareWithWorkingTree == usesWorkingTree,
-                      self.activeCompareRepo === comparisonRepo ||
-                        (self.activeCompareRepo == nil && self.projectRepo === comparisonRepo) else { return }
-                self.treeChanges = changes
+                      self.comparisonWorkspace.revision1.trimmingCharacters(in: .whitespaces) == old,
+                      (usesWorkingTree || self.comparisonWorkspace.revision2.trimmingCharacters(in: .whitespaces) == new),
+                      self.comparisonWorkspace.withWorkingTree == usesWorkingTree,
+                      self.comparisonWorkspace.repository === comparisonRepo ||
+                        (self.comparisonWorkspace.repository == nil && self.projectWorkspace.repository === comparisonRepo) else { return }
+                self.comparisonWorkspace.treeChanges = changes
                 // The reference changes browser selects the first affected
                 // file when a comparison is opened, so the right preview is
                 // immediately useful instead of showing a blank inspector.
-                self.compareSelection = changes.first?.path
-                self.compareSelectedPaths = changes.first.map { [$0.path] } ?? []
-                self.compareError = nil
+                self.comparisonWorkspace.selection = changes.first?.path
+                self.comparisonWorkspace.selectedPaths = changes.first.map { [$0.path] } ?? []
+                self.comparisonWorkspace.error = nil
             }
         } catch {
             await MainActor.run {
                 guard !Task.isCancelled,
                       self.externalLogTabIsAlive(tabID),
-                      self.compareRev1.trimmingCharacters(in: .whitespaces) == old,
-                      (usesWorkingTree || self.compareRev2.trimmingCharacters(in: .whitespaces) == new),
-                      self.compareWithWorkingTree == usesWorkingTree,
-                      self.activeCompareRepo === comparisonRepo ||
-                        (self.activeCompareRepo == nil && self.projectRepo === comparisonRepo) else { return }
-                self.treeChanges = []
-                self.compareSelection = nil
-                self.compareSelectedPaths = []
-                self.compareError = errorMessage(error)
+                      self.comparisonWorkspace.revision1.trimmingCharacters(in: .whitespaces) == old,
+                      (usesWorkingTree || self.comparisonWorkspace.revision2.trimmingCharacters(in: .whitespaces) == new),
+                      self.comparisonWorkspace.withWorkingTree == usesWorkingTree,
+                      self.comparisonWorkspace.repository === comparisonRepo ||
+                        (self.comparisonWorkspace.repository == nil && self.projectWorkspace.repository === comparisonRepo) else { return }
+                self.comparisonWorkspace.treeChanges = []
+                self.comparisonWorkspace.selection = nil
+                self.comparisonWorkspace.selectedPaths = []
+                self.comparisonWorkspace.error = errorMessage(error)
             }
         }
     }
-    compareLoadTask = task
+    comparisonWorkspace.loadTask = task
 }
 
 func multiRootResetRollbackRequest(
@@ -1218,7 +1218,7 @@ func multiRootResetRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: .rollbackMultiRootReset,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootResetRollbackTargets: targets
@@ -1249,7 +1249,7 @@ func rollbackMultiRootReset(
                 targets: targets.map { $0.makeLiveTarget() }
             )
             await MainActor.run {
-                self.multiRootResults = results
+                self.multiRootWorkspace.results = results
                 self.loadMultiRoots()
                 let failures = results.filter { !$0.success }
                 guard !failures.isEmpty else {
@@ -1320,7 +1320,7 @@ func ignorePaths(_ paths: [String], ignoreFilePath: String? = nil) {
            ignoreFilePath: ignoreFilePath,
            workdir: workdir
        ) {
-        pendingIgnoreFileCreation = IgnoreFileCreationRequest(
+        fileWorkspace.pendingIgnoreFileCreation = IgnoreFileCreationRequest(
             paths: paths,
             workdir: URL(fileURLWithPath: workdir).standardizedFileURL.path
         )
@@ -1330,8 +1330,8 @@ func ignorePaths(_ paths: [String], ignoreFilePath: String? = nil) {
 }
 
 func confirmPendingIgnoreFileCreation() {
-    guard let request = pendingIgnoreFileCreation else { return }
-    pendingIgnoreFileCreation = nil
+    guard let request = fileWorkspace.pendingIgnoreFileCreation else { return }
+    fileWorkspace.pendingIgnoreFileCreation = nil
     guard let repo,
           let workdir = repo.workdir(),
           URL(fileURLWithPath: workdir).standardizedFileURL.path == request.workdir
@@ -1385,7 +1385,7 @@ func performIgnorePaths(_ paths: [String], ignoreFilePath: String?) {
                     "Ignored",
                     detail: "\(rules.joined(separator: ", ")) -> \(destination)"
                 )
-                self.operationFeedback = nil
+                self.operationRecovery.feedback = nil
                 self.refreshAll(showFeedback: false)
             }
         } catch {
@@ -1408,19 +1408,19 @@ func editGitignore() {
 
 /// REPO-001:发现项目下的所有 Git root(聚合视图数据源)。
 func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
-    if multiRootLoadTask != nil {
+    if multiRootWorkspace.loadTask != nil {
         // Native repository calls are synchronous, so cancelling their Swift
         // task does not stop work already running in the engine. Coalesce
         // requests and run one fresh scan after the active one finishes.
-        multiRootLoadNeedsRefresh = true
+        multiRootWorkspace.loadNeedsRefresh = true
         if let onCompleted {
-            multiRootLoadCompletion = onCompleted
+            multiRootWorkspace.loadCompletion = onCompleted
         }
         return
     }
-    multiRootLoadGeneration &+= 1
-    let generation = multiRootLoadGeneration
-    guard let projectPath else {
+    multiRootWorkspace.loadGeneration &+= 1
+    let generation = multiRootWorkspace.loadGeneration
+    guard let projectPath = projectWorkspace.path else {
         onCompleted?()
         return
     }
@@ -1519,31 +1519,31 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             let snapshotsSnapshot = snapshots
             await MainActor.run {
                 guard !Task.isCancelled,
-                      generation == self.multiRootLoadGeneration,
-                      self.projectPath.map(canonicalExternalLogPath) == requestedProjectPath,
-                      !(self.externalLogWindow && self.externalLogSessionDisposed) else { return }
-                self.multiRootLoadTask = nil
-                let needsRefresh = self.multiRootLoadNeedsRefresh
-                let completion = self.multiRootLoadCompletion
-                self.multiRootLoadNeedsRefresh = false
-                self.multiRootLoadCompletion = nil
+                      generation == self.multiRootWorkspace.loadGeneration,
+                      self.projectWorkspace.path.map(canonicalExternalLogPath) == requestedProjectPath,
+                      !(self.externalLogWindow && self.logRuntime.externalSessionDisposed) else { return }
+                self.multiRootWorkspace.loadTask = nil
+                let needsRefresh = self.multiRootWorkspace.loadNeedsRefresh
+                let completion = self.multiRootWorkspace.loadCompletion
+                self.multiRootWorkspace.loadNeedsRefresh = false
+                self.multiRootWorkspace.loadCompletion = nil
                 if needsRefresh {
                     self.loadMultiRoots(onCompleted: completion)
                     return
                 }
                 let externalLogNeedsInitialLoad = self.externalLogWindow
-                    && !self.externalLogAggregateLoadStarted
+                    && !self.logRuntime.externalAggregateLoadStarted
                     && !rootsSnapshot.isEmpty
                 let externalLogSelection = reconciledExternalLogRootSelection(
                     availableRoots: rootsSnapshot.map(\.path),
                     selectedRoots: self.logRuntime.aggregateRootPaths,
-                    initialized: self.externalLogRootSelectionInitialized
+                    initialized: self.logRuntime.externalRootSelectionInitialized
                 )
                 let externalLogSelectionChanged = self.externalLogWindow
                     && externalLogSelection != self.logRuntime.aggregateRootPaths
-                self.multiRoots = rootsSnapshot
-                self.multiRootBranchSnapshots = snapshotsSnapshot
-                self.remoteProtectedBranchPatternsByRoot = Dictionary(
+                self.multiRootWorkspace.roots = rootsSnapshot
+                self.multiRootWorkspace.branchSnapshots = snapshotsSnapshot
+                self.gitSettings.remoteProtectedBranchPatternsByRoot = Dictionary(
                     uniqueKeysWithValues: snapshotsSnapshot.compactMap { snapshot -> (String, [String])? in
                         guard !self.hostingRepositories(for: snapshot.remotes).isEmpty else {
                             return nil
@@ -1552,12 +1552,12 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         return (key, GitProtectedBranchRules.loadRemotePatterns(for: key))
                     }
                 )
-                if let primaryPath = self.projectPath {
+                if let primaryPath = self.projectWorkspace.path {
                     let primaryKey = canonicalExternalLogPath(primaryPath)
-                    self.remoteProtectedBranchPatterns =
-                        self.remoteProtectedBranchPatternsByRoot[primaryKey] ?? []
+                    self.gitSettings.remoteProtectedBranchPatterns =
+                        self.gitSettings.remoteProtectedBranchPatternsByRoot[primaryKey] ?? []
                 }
-                self.multiRootConflictGroups = conflictGroups
+                self.operationRecovery.multiRootConflictGroups = conflictGroups
                 if let selectedShelfRoot = self.shelfWorkspace.rootPath,
                    !rootsSnapshot.contains(where: {
                        canonicalExternalLogPath($0.path)
@@ -1579,10 +1579,10 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 }
                 if self.externalLogWindow {
                     self.logRuntime.aggregateRootPaths = externalLogSelection
-                    self.externalLogRootSelectionInitialized = !externalLogSelection.isEmpty
+                    self.logRuntime.externalRootSelectionInitialized = !externalLogSelection.isEmpty
                 }
                 let previousOperationRoots = Set(
-                    self.operationRecoveryNotificationFingerprints.keys
+                    self.operationRecovery.notificationFingerprints.keys
                 )
                 let activeOperationRoots = Set(operationStates.map {
                     operationRecoveryNotificationRootKey($0.0)
@@ -1592,8 +1592,8 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         notificationID: operationRecoveryNotificationID(rootPath: rootKey)
                     )
                 }
-                self.operationRecoveryNotificationFingerprints =
-                    self.operationRecoveryNotificationFingerprints.filter {
+                self.operationRecovery.notificationFingerprints =
+                    self.operationRecovery.notificationFingerprints.filter {
                         activeOperationRoots.contains($0.key)
                     }
                 for (rootPath, state) in operationStates {
@@ -1652,7 +1652,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         self.logSelectionState.selection = nil
                         self.logSelectionState.selectedIDs = []
                     } else {
-                        self.externalLogAggregateLoadStarted = true
+                        self.logRuntime.externalAggregateLoadStarted = true
                         if self.logList.viewMode == .command {
                             self.runLogCommand()
                         } else {
@@ -1660,7 +1660,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         }
                     }
                 } else if externalLogNeedsInitialLoad {
-                    self.externalLogAggregateLoadStarted = true
+                    self.logRuntime.externalAggregateLoadStarted = true
                     if self.logList.viewMode == .command {
                         self.runLogCommand()
                     } else {
@@ -1671,22 +1671,22 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
             }
         } catch {
             await MainActor.run {
-                guard generation == self.multiRootLoadGeneration,
-                      self.projectPath.map(canonicalExternalLogPath) == requestedProjectPath else {
+                guard generation == self.multiRootWorkspace.loadGeneration,
+                      self.projectWorkspace.path.map(canonicalExternalLogPath) == requestedProjectPath else {
                     return
                 }
-                self.multiRootLoadTask = nil
-                let needsRefresh = self.multiRootLoadNeedsRefresh
-                let completion = self.multiRootLoadCompletion
-                self.multiRootLoadNeedsRefresh = false
-                self.multiRootLoadCompletion = nil
+                self.multiRootWorkspace.loadTask = nil
+                let needsRefresh = self.multiRootWorkspace.loadNeedsRefresh
+                let completion = self.multiRootWorkspace.loadCompletion
+                self.multiRootWorkspace.loadNeedsRefresh = false
+                self.multiRootWorkspace.loadCompletion = nil
                 if needsRefresh {
                     self.loadMultiRoots(onCompleted: completion)
                     return
                 }
-                self.multiRoots = []
-                self.multiRootBranchSnapshots = []
-                self.multiRootConflictGroups = []
+                self.multiRootWorkspace.roots = []
+                self.multiRootWorkspace.branchSnapshots = []
+                self.operationRecovery.multiRootConflictGroups = []
                 self.stashRecovery.multiRootUpdateStashedRoots = []
                 self.shelfWorkspace.rootLoadGeneration += 1
                 self.shelfWorkspace.rootPath = nil
@@ -1702,21 +1702,21 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.logRuntime.aggregateBranchFilters = []
                 self.logRuntime.aggregateRevisionRanges = []
                 self.logRuntime.aggregateRootPaths = []
-                self.externalLogRootSelectionInitialized = false
-                self.externalLogAggregateLoadStarted = false
+                self.logRuntime.externalRootSelectionInitialized = false
+                self.logRuntime.externalAggregateLoadStarted = false
                 self.logRuntime.aggregateRepositories = [:]
                 self.logRuntime.aggregateLoadedCounts = [:]
                 onCompleted?()
             }
         }
     }
-    multiRootLoadTask = task
+    multiRootWorkspace.loadTask = task
 }
 
 /// Open the project-level Changes Browser. Its write actions are still routed
 /// to an explicit Git root rather than the window's primary repository.
 func openMultiRootChanges() {
-    showMultiRootChanges = true
+    multiRootWorkspace.showChanges = true
     loadMultiRootChanges()
 }
 
@@ -1834,20 +1834,20 @@ func runMultiRootChangeMutation(
 /// retained alongside the Repository so a diff can never fall back to the
 /// primary repository merely because two roots contain the same relative path.
 func loadMultiRootChanges() {
-    multiRootChangesGeneration &+= 1
-    let generation = multiRootChangesGeneration
-    guard !multiRoots.isEmpty else {
-        multiRootChangeGroups = []
-        multiRootChangesError = nil
-        multiRootChangesLoading = false
+    multiRootWorkspace.changesGeneration &+= 1
+    let generation = multiRootWorkspace.changesGeneration
+    guard !multiRootWorkspace.roots.isEmpty else {
+        multiRootWorkspace.changeGroups = []
+        multiRootWorkspace.changesError = nil
+        multiRootWorkspace.changesLoading = false
         return
     }
 
-    let roots = multiRoots.map {
+    let roots = multiRootWorkspace.roots.map {
         (path: $0.path, displayName: $0.displayName, relativePath: $0.relativePath)
     }
-    multiRootChangesLoading = true
-    multiRootChangesError = nil
+    multiRootWorkspace.changesLoading = true
+    multiRootWorkspace.changesError = nil
 
     Task.detached(priority: .userInitiated) {
         var groups: [MultiRootChangeGroup] = []
@@ -1875,10 +1875,10 @@ func loadMultiRootChanges() {
         let loadedGroups = groups
         let failureMessage = failures.isEmpty ? nil : failures.joined(separator: "\n")
         await MainActor.run {
-            guard generation == self.multiRootChangesGeneration else { return }
-            self.multiRootChangeGroups = loadedGroups
-            self.multiRootChangesLoading = false
-            self.multiRootChangesError = failureMessage
+            guard generation == self.multiRootWorkspace.changesGeneration else { return }
+            self.multiRootWorkspace.changeGroups = loadedGroups
+            self.multiRootWorkspace.changesLoading = false
+            self.multiRootWorkspace.changesError = failureMessage
         }
     }
 }
@@ -1889,7 +1889,7 @@ func validateMultiRootRenameName(_ value: String) -> String? {
     guard candidate != branchWorkspace.multiRootRenameOldName else {
         return String(localized: "The new name must be different.")
     }
-    let selected = multiRootBranchSnapshots.filter { snapshot in
+    let selected = multiRootWorkspace.branchSnapshots.filter { snapshot in
         branchWorkspace.multiRootRenameSelectedRootPaths.contains(snapshot.rootPath)
             && snapshot.branches.contains(where: { $0.name == branchWorkspace.multiRootRenameOldName })
     }
@@ -2120,7 +2120,7 @@ func multiRootUpdateRollbackRequest(
 ) -> ArborVCSActionRequest {
     ArborVCSActionRequest(
         kind: kind,
-        projectPath: projectPath,
+        projectPath: projectWorkspace.path,
         rootPath: nil,
         shelfName: "",
         multiRootUpdateRollbackTargets: targets
@@ -2171,17 +2171,17 @@ func updateRootRecoveryActions(
 func requestUpdateProject() {
     guard !isArborBackgroundVCSOperationInProgress(
         feedbackIsRunning: feedbackCenter.isRunning,
-        multiRootIsRunning: multiRootRunning || updateProjectDiscoveryRunning
+        multiRootIsRunning: multiRootWorkspace.running || multiRootWorkspace.updateDiscoveryRunning
     ) else { return }
     guard repo != nil else { return }
-    guard let projectPath, !projectPath.isEmpty else {
-        executeMultiRootUpdate(rebase: projectUpdateMethod == .rebase)
+    guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else {
+        executeMultiRootUpdate(rebase: gitSettings.projectUpdateMethod == .rebase)
         return
     }
     if GitUpdateOptionsDialogSettings.shouldShow(for: projectPath) {
-        showUpdateProjectOptions = true
+        gitSettings.showUpdateProjectOptions = true
     } else {
-        executeMultiRootUpdate(rebase: projectUpdateMethod == .rebase)
+        executeMultiRootUpdate(rebase: gitSettings.projectUpdateMethod == .rebase)
     }
 }
 
@@ -2190,15 +2190,15 @@ func requestUpdateProject() {
 func executeMultiRootUpdate(rebase: Bool) {
     guard !isArborBackgroundVCSOperationInProgress(
         feedbackIsRunning: feedbackCenter.isRunning,
-        multiRootIsRunning: multiRootRunning || updateProjectDiscoveryRunning
+        multiRootIsRunning: multiRootWorkspace.running || multiRootWorkspace.updateDiscoveryRunning
     ) else { return }
-    multiRootUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryAvailable = false
-    multiRootCheckoutUpdateRetryContext = nil
-    multiRootUpdateRebaseRootPaths = nil
-    guard let projectPath else { return }
-    updateProjectDiscoveryRunning = true
-    multiRootUpdateRebase = rebase
+    multiRootWorkspace.updateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryAvailable = false
+    multiRootWorkspace.checkoutUpdateRetryContext = nil
+    multiRootWorkspace.updateRebaseRootPaths = nil
+    guard let projectPath = projectWorkspace.path else { return }
+    multiRootWorkspace.updateDiscoveryRunning = true
+    multiRootWorkspace.updateRebase = rebase
     let broker = credentialAuth.broker
     let tagMode = fetchTagsMode
     let cancel = GitCancelHandle()
@@ -2221,7 +2221,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                         }
                         guard decision != .cancel else {
                             await MainActor.run {
-                                self.updateProjectDiscoveryRunning = false
+                                self.multiRootWorkspace.updateDiscoveryRunning = false
                                 self.feedbackCenter.warning(
                                     "Update Project cancelled",
                                     detail: "No working tree changes were applied."
@@ -2230,7 +2230,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                             return
                         }
                         await MainActor.run {
-                            self.updateProjectDiscoveryRunning = false
+                            self.multiRootWorkspace.updateDiscoveryRunning = false
                             self.doPull(
                                 nil,
                                 rebase: decision == .rebaseAnyway,
@@ -2241,7 +2241,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                     }
                 }
                 await MainActor.run {
-                    self.updateProjectDiscoveryRunning = false
+                    self.multiRootWorkspace.updateDiscoveryRunning = false
                     self.doPull(nil, rebase: rebase, autoOpenUpdateInfo: true)
                 }
                 return
@@ -2249,9 +2249,9 @@ func executeMultiRootUpdate(rebase: Bool) {
             let submoduleRootPaths = Set(roots.filter(\.isSubmodule).map(\.path))
             let rootPaths = roots.map(\.path)
             await MainActor.run {
-                self.updateProjectDiscoveryRunning = false
-                self.multiRootRunning = true
-                self.multiRootUpdateRetryAvailable = true
+                self.multiRootWorkspace.updateDiscoveryRunning = false
+                self.multiRootWorkspace.running = true
+                self.multiRootWorkspace.updateRetryAvailable = true
                 self.beginFeedbackOperation(
                     rebase ? "Update Project (rebase)" : "Update Project",
                     cancelHandle: cancel
@@ -2279,8 +2279,8 @@ func executeMultiRootUpdate(rebase: Bool) {
             }
             guard decision != .cancel else {
                 await MainActor.run {
-                    self.multiRootRunning = false
-                    self.multiRootUpdateRetryAvailable = false
+                    self.multiRootWorkspace.running = false
+                    self.multiRootWorkspace.updateRetryAvailable = false
                     self.feedbackCenter.warning(
                         "Update Project cancelled",
                         detail: "No working tree changes were applied."
@@ -2292,7 +2292,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                 ? rootPaths.filter { !(preflight?.problematicRootPaths.contains($0) ?? false) }
                 : nil
             await MainActor.run {
-                self.multiRootUpdateRebaseRootPaths = rebaseRootPaths.map(Set.init)
+                self.multiRootWorkspace.updateRebaseRootPaths = rebaseRootPaths.map(Set.init)
             }
             let previousHeads = Self.headCommitIDs(for: rootPaths)
             let previousHeadBranches = Self.headBranchNames(for: rootPaths)
@@ -2333,9 +2333,9 @@ func executeMultiRootUpdate(rebase: Bool) {
                 }
             )
             await MainActor.run {
-                self.multiRootResults = results
-                self.updateProjectDiscoveryRunning = false
-                self.multiRootRunning = false
+                self.multiRootWorkspace.results = results
+                self.multiRootWorkspace.updateDiscoveryRunning = false
+                self.multiRootWorkspace.running = false
                 for result in results {
                     if result.success || result.skipped {
                         self.stashRecovery.multiRootUpdateStashedRoots.remove(result.rootPath)
@@ -2359,8 +2359,8 @@ func executeMultiRootUpdate(rebase: Bool) {
                     if let notificationID = self.multiRootUpdateNotificationID(partial: true) {
                         self.feedbackCenter.expire(notificationID: notificationID)
                     }
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     let details = Self.multiRootUpdateFailureDetails(
                         results,
@@ -2394,8 +2394,8 @@ func executeMultiRootUpdate(rebase: Bool) {
                     if let notificationID = self.multiRootUpdateNotificationID(partial: true) {
                         self.feedbackCenter.expire(notificationID: notificationID)
                     }
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     let skippedDetails = Self.skippedUpdateRootDetails(results)
                     let detail = skippedDetails.isEmpty
@@ -2445,8 +2445,8 @@ func executeMultiRootUpdate(rebase: Bool) {
                     if let notificationID = self.multiRootUpdateNotificationID(partial: false) {
                         self.feedbackCenter.expire(notificationID: notificationID)
                     }
-                    self.operationsViewMode = .roots
-                    self.toolWindowMode = .operations
+                    self.operationRecovery.viewMode = .roots
+                    self.projectWorkspace.toolWindowMode = .operations
                     self.toolWindowExpanded = true
                     var details = Self.multiRootUpdateFailureDetails(
                         results,
@@ -2468,7 +2468,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                             operation: .update,
                             rootPaths: retryPaths,
                             rebase: rebase,
-                            rebaseRootPaths: self.multiRootUpdateRebaseRootPaths.map(Array.init)
+                            rebaseRootPaths: self.multiRootWorkspace.updateRebaseRootPaths.map(Array.init)
                         )
                         additionalActions.append(
                             FeedbackAction(
@@ -2512,8 +2512,8 @@ func executeMultiRootUpdate(rebase: Bool) {
             }
         } catch {
             await MainActor.run {
-                self.updateProjectDiscoveryRunning = false
-                self.multiRootRunning = false
+                self.multiRootWorkspace.updateDiscoveryRunning = false
+                self.multiRootWorkspace.running = false
                 if let notificationID = self.multiRootUpdateNotificationID(partial: false) {
                     self.feedbackCenter.expire(notificationID: notificationID)
                 }
@@ -2527,7 +2527,7 @@ func executeMultiRootUpdate(rebase: Bool) {
                     notificationID: self.multiRootUpdateErrorNotificationID()
                 )
                 if self.isAuthenticationFailure(error) {
-                    self.showHostingAuthPrompt = true
+                    self.hostingWorkspace.showHostingAuthPrompt = true
                 }
             }
         }
@@ -2625,50 +2625,50 @@ func normalizedMultiRootChangePaths(
 
 /// 选择统一 resolver 中的 root，并只加载该 root 的 Repository/status。
 func selectMultiRootResolverRoot(_ rootPath: String) {
-    guard let root = multiRootResolverRoots.first(where: { $0.rootPath == rootPath }) else { return }
-    multiRootResolverActiveRootPath = rootPath
-    multiRootResolverActiveInitialPath = root.paths.first
-    multiRootResolverActiveKind = root.kind
-    multiRootResolverActiveRepo = nil
-    multiRootResolverActiveEntries = []
-    multiRootResolverWorking = true
+    guard let root = operationRecovery.multiRootResolverRoots.first(where: { $0.rootPath == rootPath }) else { return }
+    operationRecovery.multiRootResolverActiveRootPath = rootPath
+    operationRecovery.multiRootResolverActiveInitialPath = root.paths.first
+    operationRecovery.multiRootResolverActiveKind = root.kind
+    operationRecovery.multiRootResolverActiveRepo = nil
+    operationRecovery.multiRootResolverActiveEntries = []
+    operationRecovery.multiRootResolverWorking = true
     Task.detached(priority: .userInitiated) {
         do {
             let rootRepo = try openRepository(path: rootPath)
             let entries = try rootRepo.status()
             await MainActor.run {
-                guard self.multiRootResolverActiveRootPath == rootPath else { return }
-                self.multiRootResolverActiveRepo = rootRepo
-                self.multiRootResolverActiveEntries = entries
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = nil
+                guard self.operationRecovery.multiRootResolverActiveRootPath == rootPath else { return }
+                self.operationRecovery.multiRootResolverActiveRepo = rootRepo
+                self.operationRecovery.multiRootResolverActiveEntries = entries
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = nil
             }
         } catch {
             await MainActor.run {
-                guard self.multiRootResolverActiveRootPath == rootPath else { return }
-                self.multiRootResolverWorking = false
-                self.multiRootResolverError = "\(root.displayName): \(errorMessage(error))"
+                guard self.operationRecovery.multiRootResolverActiveRootPath == rootPath else { return }
+                self.operationRecovery.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverError = "\(root.displayName): \(errorMessage(error))"
             }
         }
     }
 }
 
 func refreshMultiRootResolverActiveRoot() {
-    guard let rootRepo = multiRootResolverActiveRepo,
-          let rootPath = multiRootResolverActiveRootPath else { return }
+    guard let rootRepo = operationRecovery.multiRootResolverActiveRepo,
+          let rootPath = operationRecovery.multiRootResolverActiveRootPath else { return }
     Task.detached(priority: .userInitiated) {
         let entries = (try? rootRepo.status()) ?? []
         await MainActor.run {
-            guard self.multiRootResolverActiveRootPath == rootPath,
-                  self.multiRootResolverActiveRepo === rootRepo else { return }
-            self.multiRootResolverActiveEntries = entries
+            guard self.operationRecovery.multiRootResolverActiveRootPath == rootPath,
+                  self.operationRecovery.multiRootResolverActiveRepo === rootRepo else { return }
+            self.operationRecovery.multiRootResolverActiveEntries = entries
         }
     }
 }
 
 func completeMultiRootResolverRoot() {
-    guard let root = multiRootResolverRoots.first(where: {
-        $0.rootPath == self.multiRootResolverActiveRootPath
+    guard let root = operationRecovery.multiRootResolverRoots.first(where: {
+        $0.rootPath == self.operationRecovery.multiRootResolverActiveRootPath
     }) else { return }
     switch root.kind {
     case .operation:
@@ -2683,15 +2683,15 @@ func completeMultiRootResolverRoot() {
 }
 
 func skipMultiRootResolverRoot() {
-    guard let root = multiRootResolverRoots.first(where: {
-        $0.rootPath == self.multiRootResolverActiveRootPath
+    guard let root = operationRecovery.multiRootResolverRoots.first(where: {
+        $0.rootPath == self.operationRecovery.multiRootResolverActiveRootPath
     }), root.canSkip else { return }
     runMultiRootResolverRecovery(rootPath: root.rootPath, action: .skip)
 }
 
 func abortMultiRootResolverRoot() {
-    guard let root = multiRootResolverRoots.first(where: {
-        $0.rootPath == self.multiRootResolverActiveRootPath
+    guard let root = operationRecovery.multiRootResolverRoots.first(where: {
+        $0.rootPath == self.operationRecovery.multiRootResolverActiveRootPath
     }) else { return }
     switch root.kind {
     case .operation:
@@ -2704,12 +2704,12 @@ func abortMultiRootResolverRoot() {
 }
 
 func closeMultiRootResolver() {
-    multiRootResolverLoadGeneration += 1
-    showMultiRootConflictResolver = false
-    multiRootResolverWorking = false
-    multiRootResolverActiveRepo = nil
-    multiRootResolverActiveEntries = []
-    multiRootResolverActiveKind = nil
+    operationRecovery.multiRootResolverLoadGeneration += 1
+    operationRecovery.showMultiRootConflictResolver = false
+    operationRecovery.multiRootResolverWorking = false
+    operationRecovery.multiRootResolverActiveRepo = nil
+    operationRecovery.multiRootResolverActiveEntries = []
+    operationRecovery.multiRootResolverActiveKind = nil
 }
 
 /// 统一 resolver 中的 Continue/Skip/Abort。完成一个 root 后立即重读整个
@@ -2719,14 +2719,14 @@ func runMultiRootResolverRecovery(
     action: MultiRootRecoveryAction,
     stageTrackedBeforeContinue: Bool = false
 ) {
-    guard !multiRootResolverWorking else { return }
+    guard !operationRecovery.multiRootResolverWorking else { return }
     let restoresUpdateLocalChanges = stashRecovery.multiRootUpdateStashedRoots.contains(rootPath)
-    let batchRebaseSessionID = multiRootRebaseSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
-        ? multiRootRebaseSession?.id
+    let batchRebaseSessionID = rebaseWorkspace.multiRootSession?.roots.contains(where: { $0.rootPath == rootPath }) == true
+        ? rebaseWorkspace.multiRootSession?.id
         : nil
     let protectedPatterns = effectiveProtectedBranchPatterns
-    multiRootResolverWorking = true
-    multiRootResolverError = nil
+    operationRecovery.multiRootResolverWorking = true
+    operationRecovery.multiRootResolverError = nil
     beginFeedbackOperation("Multi-root recovery")
     Task.detached(priority: .userInitiated) {
         do {
@@ -2746,10 +2746,10 @@ func runMultiRootResolverRecovery(
                 while !Task.isCancelled {
                     if let pending = try? rootRepo.rebasePendingMessage() {
                         await MainActor.run {
-                            guard !self.showRawRebaseMessageEditor else { return }
-                            self.rawRebaseMessageRepository = rootRepo
-                            self.rawRebaseMessageText = pending
-                            self.showRawRebaseMessageEditor = true
+                            guard !self.rebaseWorkspace.showRawMessageEditor else { return }
+                            self.rebaseWorkspace.rawMessageRepository = rootRepo
+                            self.rebaseWorkspace.rawMessageText = pending
+                            self.rebaseWorkspace.showRawMessageEditor = true
                         }
                     }
                     try? await Task.sleep(nanoseconds: 100_000_000)
@@ -2863,11 +2863,11 @@ func runMultiRootResolverRecovery(
             let resolvedStashRestoreFailure = stashRestoreFailure
             let resolvedShelfRestoreConflict = shelfRestoreConflict
             await MainActor.run {
-                self.multiRootResolverWorking = false
-                if (self.rawRebaseMessageRepository?.workdir() ?? "") == rootPath {
-                    self.showRawRebaseMessageEditor = false
-                    self.rawRebaseMessageRepository = nil
-                    self.rawRebaseMessageText = ""
+                self.operationRecovery.multiRootResolverWorking = false
+                if (self.rebaseWorkspace.rawMessageRepository?.workdir() ?? "") == rootPath {
+                    self.rebaseWorkspace.showRawMessageEditor = false
+                    self.rebaseWorkspace.rawMessageRepository = nil
+                    self.rebaseWorkspace.rawMessageText = ""
                 }
                 if let resolvedStashConflictPaths {
                     self.stashRecovery.multiRootConflicts[rootPath] = resolvedStashConflictPaths
@@ -2880,10 +2880,10 @@ func runMultiRootResolverRecovery(
                     self.stashRecovery.multiRootUpdateStashedRoots.remove(rootPath)
                 }
                 if resolvedShelfRestoreConflict {
-                    self.multiRootResolverError = nil
+                    self.operationRecovery.multiRootResolverError = nil
                     self.openMultiRootConflictResolver(preferredRootPath: rootPath)
                 } else if let resolvedStashRestoreFailure {
-                    self.multiRootResolverError = "\(rootPath): \(resolvedStashRestoreFailure)"
+                    self.operationRecovery.multiRootResolverError = "\(rootPath): \(resolvedStashRestoreFailure)"
                 } else if state.kind == .rebase, let batchRebaseSessionID {
                     self.closeMultiRootResolver()
                     self.handleMultiRootRebaseRecovery(
@@ -2896,7 +2896,7 @@ func runMultiRootResolverRecovery(
                         self.openMultiRootConflictResolver(preferredRootPath: rootPath)
                     }
                 } else {
-                    self.multiRootResolverError = nil
+                    self.operationRecovery.multiRootResolverError = nil
                     let mergeViewCommitsAction = state.kind == .merge
                         && action == .continueOperation
                         ? self.completedMergeViewCommitsAction(
@@ -2948,7 +2948,7 @@ func runMultiRootResolverRecovery(
                 }) ?? false
             }()
             await MainActor.run {
-                self.multiRootResolverWorking = false
+                self.operationRecovery.multiRootResolverWorking = false
                 if case let .StashApplyConflict(paths, stashID) = error as? EngineError {
                     self.presentMultiRootMergeRestoreConflict(
                         rootPath: rootPath,
@@ -2961,7 +2961,7 @@ func runMultiRootResolverRecovery(
                     self.presentMultiRootMergeRestoreConflict(rootPath: rootPath, paths: [])
                     return
                 }
-                self.multiRootResolverError = "\(rootPath): \(errorMessage(error))"
+                self.operationRecovery.multiRootResolverError = "\(rootPath): \(errorMessage(error))"
                 let stageAndRetryAction = canStageAndRetry
                     ? batchRebaseSessionID.map {
                         self.multiRootRebaseRecoveryFeedbackAction(
@@ -2973,7 +2973,7 @@ func runMultiRootResolverRecovery(
                     : nil
                 self.feedbackCenter.error(
                     "Multi-root recovery failed",
-                    detail: self.multiRootResolverError,
+                    detail: self.operationRecovery.multiRootResolverError,
                     nextStep: "Resolve the remaining conflicts in that root, then retry Continue, Skip, or Abort.",
                     additionalActions: stageAndRetryAction.map { [$0] } ?? [],
                     notificationID: self.multiRootRebaseNotificationID()
@@ -3018,29 +3018,29 @@ func loadRepoData(includeComparisons: Bool = true) {
             let submodules = (try? repo.submoduleList()) ?? []
             let identity = (try? repo.gitIdentity()) ?? GitIdentity(name: nil, email: nil, signingKey: nil, signingFormat: nil, signCommits: false)
             await MainActor.run {
-                guard self.projectRepo === repo else { return }
-                self.branchWorkspace.branches = bs; self.ignoredRules = ignoredRules
+                guard self.projectWorkspace.repository === repo else { return }
+                self.branchWorkspace.branches = bs; self.repositoryStatus.ignoredRules = ignoredRules
                 self.refreshLogMyBranches()
                 if let comparisons { self.branchWorkspace.comparisons = comparisons }
-                self.stashUI.stashes = ss; self.remotes = rs
-                self.isShallowRepository = isShallow
-                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectPath)
+                self.stashUI.stashes = ss; self.remoteWorkspace.remotes = rs
+                self.repositoryStatus.isShallowRepository = isShallow
+                self.restoreRemoteProtectedBranchPatterns(for: rs, projectPath: self.projectWorkspace.path)
                 self.branchWorkspace.remoteBranches = remoteBranches
                 self.branchWorkspace.recentBranches = recentBranches; self.branchWorkspace.syncStatuses = syncStatuses
                 self.shelfWorkspace.shelves = sh; self.shelfWorkspace.deletedShelves = dsh; self.tagWorkspace.tags = ts
                 self.refreshLfsPathMarkers()
-                self.submodules = submodules
-                self.identityName = identity.name ?? ""
-                self.identityEmail = identity.email ?? ""
-                self.identitySetNameEmailGlobally = GitIdentityScopeSettings.setNameEmailGlobally(
-                    for: self.projectPath
+                self.submoduleWorkspace.submodules = submodules
+                self.gitSettings.identityName = identity.name ?? ""
+                self.gitSettings.identityEmail = identity.email ?? ""
+                self.gitSettings.identitySetNameEmailGlobally = GitIdentityScopeSettings.setNameEmailGlobally(
+                    for: self.projectWorkspace.path
                 )
-                self.identitySigningKey = identity.signingKey ?? ""
-                self.identitySigningFormat = identity.signingFormat ?? "gpg"
-                self.identitySignCommits = identity.signCommits
+                self.gitSettings.identitySigningKey = identity.signingKey ?? ""
+                self.gitSettings.identitySigningFormat = identity.signingFormat ?? "gpg"
+                self.gitSettings.identitySignCommits = identity.signCommits
                 self.refreshCherryPickedHighlights()
             }
-        } catch { await MainActor.run { self.loadError = errorMessage(error) } }
+        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
 }
 
@@ -3180,7 +3180,7 @@ nonisolated func dirtyPathsForSmartDecision(_ repo: Repository) throws -> [Strin
 func validateSingleRootRenameName(rootPath: String, oldName: String, value: String) -> String? {
     let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !candidate.isEmpty else { return nil }
-    guard let snapshot = multiRootBranchSnapshots.first(where: { $0.rootPath == rootPath }) else {
+    guard let snapshot = multiRootWorkspace.branchSnapshots.first(where: { $0.rootPath == rootPath }) else {
         return "The selected Git root is no longer available."
     }
     if let conflict = branchRenameConflictMessage(
@@ -3256,17 +3256,17 @@ nonisolated static func newSavedChangeIDsByRoot(
 /// currently checked-out branch in that root.
 func prepareMultiRootRawTodoEditor(_ draft: MultiRootRebaseTodoDraft) {
     guard draft.loadError == nil else { return }
-    let onto = rebaseOnto.trimmingCharacters(in: .whitespacesAndNewlines)
-    let branch = rebaseBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-    let preserveMerges = rebasePreserveMerges
-    let autoSquash = rebaseAutoSquash
-    let keepEmpty = rebaseKeepEmpty
-    let updateRefs = rebaseUpdateRefs
-    let rootMode = rebaseRoot
-    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectPath)
+    let onto = rebaseWorkspace.onto.trimmingCharacters(in: .whitespacesAndNewlines)
+    let branch = rebaseWorkspace.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    let preserveMerges = rebaseWorkspace.preserveMerges
+    let autoSquash = rebaseWorkspace.autoSquash
+    let keepEmpty = rebaseWorkspace.keepEmpty
+    let updateRefs = rebaseWorkspace.updateRefs
+    let rootMode = rebaseWorkspace.root
+    let projectSavePolicy = GitLocalChangesSavePolicySettings.engineValue(for: projectWorkspace.path)
     if let rawTodo = draft.rawTodo {
-        multiRootRawTodoText = rawTodo
-        multiRootRawTodoContext = MultiRootRawTodoContext(
+        rebaseWorkspace.multiRootRawTodoText = rawTodo
+        rebaseWorkspace.multiRootRawTodoContext = MultiRootRawTodoContext(
             rootPath: draft.rootPath,
             displayName: draft.displayName,
             onto: onto,
@@ -3296,8 +3296,8 @@ func prepareMultiRootRawTodoEditor(_ draft: MultiRootRebaseTodoDraft) {
                 cancel: cancel
             )
             await MainActor.run {
-                self.multiRootRawTodoText = rawTodo
-                self.multiRootRawTodoContext = MultiRootRawTodoContext(
+                self.rebaseWorkspace.multiRootRawTodoText = rawTodo
+                self.rebaseWorkspace.multiRootRawTodoContext = MultiRootRawTodoContext(
                     rootPath: draft.rootPath,
                     displayName: draft.displayName,
                     onto: onto,
@@ -3332,14 +3332,14 @@ func prepareMultiRootRawTodoEditor(_ draft: MultiRootRebaseTodoDraft) {
 /// Store the text edited for one root without starting the batch yet. Other
 /// roots remain structured or raw independently in the same editor.
 func finishMultiRootRawTodoEditor(_ context: MultiRootRawTodoContext) {
-    let rawTodo = multiRootRawTodoText
+    let rawTodo = rebaseWorkspace.multiRootRawTodoText
     guard !rawTodo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          let index = multiRootRebaseDrafts.firstIndex(where: { $0.rootPath == context.rootPath }) else {
+          let index = rebaseWorkspace.multiRootDrafts.firstIndex(where: { $0.rootPath == context.rootPath }) else {
         return
     }
-    multiRootRebaseDrafts[index].rawTodo = rawTodo
-    multiRootRawTodoContext = nil
-    multiRootRawTodoText = ""
+    rebaseWorkspace.multiRootDrafts[index].rawTodo = rawTodo
+    rebaseWorkspace.multiRootRawTodoContext = nil
+    rebaseWorkspace.multiRootRawTodoText = ""
 }
 
 }

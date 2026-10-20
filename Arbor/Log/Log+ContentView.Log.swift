@@ -36,22 +36,22 @@ var logInspector: some View {
         switch logList.viewMode {
         case .compare:
             TreeCompareDetailView(
-                repo: activeCompareRepo ?? repo,
+                repo: comparisonWorkspace.repository ?? repo,
                 change: selectedTreeChange,
                 selectedChanges: selectedTreeChanges,
-                selectedPaths: compareSelectedPaths,
-                rev1: compareRev1,
-                rev2: compareRev2,
-                comparesWithWorkingTree: compareWithWorkingTree,
-                projectPath: projectPath,
+                selectedPaths: comparisonWorkspace.selectedPaths,
+                rev1: comparisonWorkspace.revision1,
+                rev2: comparisonWorkspace.revision2,
+                comparesWithWorkingTree: comparisonWorkspace.withWorkingTree,
+                projectPath: projectWorkspace.path,
                 onSelectPath: { path in
-                    guard treeChanges.contains(where: { $0.path == path }) else { return }
-                    compareSelection = path
+                    guard comparisonWorkspace.treeChanges.contains(where: { $0.path == path }) else { return }
+                    comparisonWorkspace.selection = path
                 }
             )
         case .compareBranches:
             LogCommitInspectorView(
-                repo: activeCompareRepo ?? repo,
+                repo: comparisonWorkspace.repository ?? repo,
                 repositoryForCommit: logRepository(for:),
                 remotesForCommit: logRemotes(for:),
                 commits: selectedBranchComparisonCommit.map { [$0] } ?? [],
@@ -1478,8 +1478,8 @@ struct LogChangesBrowserView: View {
 var logActionAvailability: LogActionAvailability {
     LogActionAvailability(
         hasLocalChanges: hasLocalChanges,
-        activeOperationRootPath: operationState == nil ? nil : repo?.workdir(),
-        hasRemotes: !remotes.isEmpty
+        activeOperationRootPath: operationRecovery.operation == nil ? nil : repo?.workdir(),
+        hasRemotes: !remoteWorkspace.remotes.isEmpty
     )
 }
 
@@ -1661,7 +1661,7 @@ func setLogColumnWidth(_ column: LogColumnID, to width: CGFloat) {
 
 var externalLogRootsMenu: some View {
     Menu {
-        if multiRoots.isEmpty {
+        if multiRootWorkspace.roots.isEmpty {
             Text("No Git roots available")
         } else {
             Button("Select All Roots") {
@@ -1671,7 +1671,7 @@ var externalLogRootsMenu: some View {
                 selectPrimaryExternalLogRoot()
             }
             Divider()
-            ForEach(multiRoots, id: \.path) { root in
+            ForEach(multiRootWorkspace.roots, id: \.path) { root in
                 let normalizedPath = canonicalExternalLogPath(root.path)
                 let title = root.relativePath == "."
                     ? root.displayName
@@ -1689,7 +1689,7 @@ var externalLogRootsMenu: some View {
         }
     } label: {
         Label(
-            "Git Roots \(logRuntime.aggregateRootPaths.count)/\(multiRoots.count)",
+            "Git Roots \(logRuntime.aggregateRootPaths.count)/\(multiRootWorkspace.roots.count)",
             systemImage: "folder"
         )
     }
@@ -2627,13 +2627,13 @@ var logGraphGearMenu: some View {
                 Toggle("Show Only Affected Changes", isOn: $logShowOnlyAffectedChanges)
             }
             Button("Open Log in New Window") {
-                guard let projectPath,
+                guard let projectPath = projectWorkspace.path,
                       let request = chooseExternalLogWindowRequest(for: projectPath) else {
                     return
                 }
                 openWindow(id: "git-log", value: request)
             }
-            .disabled(projectRepo == nil || projectPath == nil)
+            .disabled(projectWorkspace.repository == nil || projectWorkspace.path == nil)
             Button("Open Another Log Tab") { openAnotherLogTab() }
         }
         Divider()
@@ -2861,20 +2861,20 @@ HStack(spacing: 10) {
 .overlay(alignment: .bottom) { Divider() }
 .onChange(of: logList.viewMode) { _, mode in
     if mode == .graph {
-        activeCompareRepo = nil
-        compareRepositoryPath = nil
+        comparisonWorkspace.repository = nil
+        comparisonWorkspace.repositoryPath = nil
         loadLog()
     } else if mode == .reflog {
-        activeCompareRepo = nil
-        compareRepositoryPath = nil
+        comparisonWorkspace.repository = nil
+        comparisonWorkspace.repositoryPath = nil
         prepareReflogRoot()
     } else if mode == .command {
-        activeCompareRepo = nil
-        compareRepositoryPath = nil
+        comparisonWorkspace.repository = nil
+        comparisonWorkspace.repositoryPath = nil
         runLogCommand()
     } else if mode == .tags {
-        activeCompareRepo = nil
-        compareRepositoryPath = nil
+        comparisonWorkspace.repository = nil
+        comparisonWorkspace.repositoryPath = nil
         // Tags is its own Log sub-view. Do not leave the last History
         // commit rendered in the inspector while the left workspace
         // has already switched to tag management.
@@ -2945,8 +2945,8 @@ VStack(spacing: 0) {
         logGraphHistoryContent
     case .compareBranches:
         BranchCommitComparisonView(
-            firstBranch: compareRev1,
-            secondBranch: compareRev2,
+            firstBranch: comparisonWorkspace.revision1,
+            secondBranch: comparisonWorkspace.revision2,
             firstCommits: branchComparison.firstEntries,
             secondCommits: branchComparison.secondEntries,
             firstFilter: $branchComparison.firstFilter,
@@ -2984,36 +2984,36 @@ VStack(spacing: 0) {
     case .compare:
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("旧版本 / 分支", text: $compareRev1)
+                TextField("旧版本 / 分支", text: $comparisonWorkspace.revision1)
                     .textFieldStyle(.roundedBorder)
                 Text("→").foregroundStyle(.secondary)
-                TextField("新版本 / 分支", text: $compareRev2)
+                TextField("新版本 / 分支", text: $comparisonWorkspace.revision2)
                     .textFieldStyle(.roundedBorder)
                 Button("比较") {
-                    compareWithWorkingTree = false
+                    comparisonWorkspace.withWorkingTree = false
                     loadTreeChanges()
                 }
                 Menu {
                     Button("Select All") {
-                        compareSelectedPaths = Set(treeChanges.map(\.path))
-                        compareSelection = treeChanges.first?.path
+                        comparisonWorkspace.selectedPaths = Set(comparisonWorkspace.treeChanges.map(\.path))
+                        comparisonWorkspace.selection = comparisonWorkspace.treeChanges.first?.path
                     }
-                    .disabled(treeChanges.isEmpty)
+                    .disabled(comparisonWorkspace.treeChanges.isEmpty)
                     Button("Clear") {
-                        compareSelectedPaths = []
-                        compareSelection = nil
+                        comparisonWorkspace.selectedPaths = []
+                        comparisonWorkspace.selection = nil
                     }
-                    .disabled(compareSelectedPaths.isEmpty)
+                    .disabled(comparisonWorkspace.selectedPaths.isEmpty)
                     Divider()
                     Button("Copy Selected Paths") {
                         copySelectedComparePaths()
                     }
-                    .disabled(compareSelectedPaths.isEmpty)
+                    .disabled(comparisonWorkspace.selectedPaths.isEmpty)
                     Divider()
                     Button("Create Patch…") {
                         createPatchFromCompare()
                     }
-                    .disabled(compareSelectedPaths.isEmpty)
+                    .disabled(comparisonWorkspace.selectedPaths.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -3022,19 +3022,19 @@ VStack(spacing: 0) {
             }
             .padding(.horizontal, 8)
             HStack(spacing: 8) {
-                Text("\(treeChanges.count) files")
-                if !compareSelectedPaths.isEmpty {
-                    Text("\(compareSelectedPaths.count) selected")
+                Text("\(comparisonWorkspace.treeChanges.count) files")
+                if !comparisonWorkspace.selectedPaths.isEmpty {
+                    Text("\(comparisonWorkspace.selectedPaths.count) selected")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
             .font(.caption2)
             .padding(.horizontal, 8)
-            if let compareError {
+            if let compareError = comparisonWorkspace.error {
                 Text(compareError).foregroundStyle(.red).font(.caption).padding(.horizontal, 8)
             }
-            List(treeChanges, id: \.path, selection: $compareSelectedPaths) { change in
+            List(comparisonWorkspace.treeChanges, id: \.path, selection: $comparisonWorkspace.selectedPaths) { change in
                 HStack {
                     Text(treeChangeKindText(change.kind))
                         .font(.caption2)
@@ -3044,22 +3044,22 @@ VStack(spacing: 0) {
                 }
                 .tag(change.path)
                 .simultaneousGesture(TapGesture().onEnded {
-                    compareSelection = change.path
+                    comparisonWorkspace.selection = change.path
                 })
             }
             .listStyle(.inset)
-            .onChange(of: compareSelectedPaths) { _, selectedPaths in
-                let validPaths = Set(treeChanges.map(\.path))
+            .onChange(of: comparisonWorkspace.selectedPaths) { _, selectedPaths in
+                let validPaths = Set(comparisonWorkspace.treeChanges.map(\.path))
                 let normalized = selectedPaths.intersection(validPaths)
                 if normalized != selectedPaths {
-                    compareSelectedPaths = normalized
+                    comparisonWorkspace.selectedPaths = normalized
                     return
                 }
-                if let compareSelection, normalized.contains(compareSelection) {
+                if let compareSelection = comparisonWorkspace.selection, normalized.contains(compareSelection) {
                     return
                 }
-                compareSelection = orderedCompareSelection(
-                    changes: treeChanges,
+                comparisonWorkspace.selection = orderedCompareSelection(
+                    changes: comparisonWorkspace.treeChanges,
                     selectedPaths: normalized
                 ).first?.path
             }
