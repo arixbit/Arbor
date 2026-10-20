@@ -78,16 +78,16 @@ func applyLogBranchFilters(_ filters: [LogRootBranchFilter]) {
         return seen.insert(LogRootBranchFilter(rootPath: rootPath, branch: branch)).inserted
     }
     guard !normalized.isEmpty else { return }
-    logAggregateBranchFilters = normalized
-    logAggregateRevisionRanges = []
-    logAggregateRootPaths = []
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
+    logRuntime.aggregateBranchFilters = normalized
+    logRuntime.aggregateRevisionRanges = []
+    logRuntime.aggregateRootPaths = []
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
     logList.activeRootPath = nil
     logList.activeRepo = nil
-    logActiveBranches = []
-    logActiveRemoteBranches = []
-    logActiveRemotes = []
+    logRuntime.activeBranches = []
+    logRuntime.activeRemoteBranches = []
+    logRuntime.activeRemotes = []
     logList.startRevision = ""
     logList.startRevisions = []
     logSelection = nil
@@ -98,17 +98,17 @@ func applyLogBranchFilters(_ filters: [LogRootBranchFilter]) {
 
 func applyLogTab(_ tab: LogTabDescriptor) {
     applyLogTabRootContext(tab.rootPath)
-    logAggregateBranchFilters = tab.aggregateBranchFilters ?? []
-    logAggregateRevisionRanges = (tab.aggregateRevisionRanges ?? tab.updateInfoRanges ?? [])
+    logRuntime.aggregateBranchFilters = tab.aggregateBranchFilters ?? []
+    logRuntime.aggregateRevisionRanges = (tab.aggregateRevisionRanges ?? tab.updateInfoRanges ?? [])
         .map(LogRootRevisionRange.init)
     if let aggregateRootPaths = tab.aggregateRootPaths {
-        logAggregateRootPaths = Set(normalizedLogRootPaths(aggregateRootPaths))
+        logRuntime.aggregateRootPaths = Set(normalizedLogRootPaths(aggregateRootPaths))
     } else if !externalLogWindow {
-        logAggregateRootPaths = []
+        logRuntime.aggregateRootPaths = []
     }
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
-    logAggregatePageCursors = [:]
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
+    logRuntime.aggregatePageCursors = [:]
     logList.viewMode = tab.viewMode
     let tabRevisions = tab.startRevisions.isEmpty
         ? (tab.startRevision.isEmpty ? [] : [tab.startRevision])
@@ -123,12 +123,12 @@ func applyLogTab(_ tab: LogTabDescriptor) {
     logList.messageMatchCase = tab.messageMatchCase
     logList.since = tab.sinceText
     logList.until = tab.untilText
-    logCommandFilter = tab.commandFilter
-    logCommandEntries = []
+    logRuntime.commandFilter = tab.commandFilter
+    logRuntime.commandEntries = []
     hasMoreLogCommand = true
-    logCommandError = nil
+    logRuntime.commandError = nil
     logList.follow = tab.follow
-    logGraphSortModeRaw = tab.graphSortModeRaw
+    logRuntime.sortModeRaw = tab.graphSortModeRaw
     compareRev1 = tab.compareRevision1
     compareRev2 = tab.compareRevision2
     compareRepositoryPath = tab.compareRepositoryPath
@@ -176,15 +176,15 @@ func applyLogTabRootContext(_ rootPath: String?) {
     logList.activeRootPath = normalizedRootPath
     guard let rootRepo = try? openRepository(path: normalizedRootPath) else {
         logList.activeRepo = nil
-        logActiveBranches = []
-        logActiveRemoteBranches = []
-        logActiveRemotes = []
+        logRuntime.activeBranches = []
+        logRuntime.activeRemoteBranches = []
+        logRuntime.activeRemotes = []
         return
     }
     logList.activeRepo = rootRepo
-    logActiveBranches = (try? rootRepo.branchList()) ?? []
-    logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
-    logActiveRemotes = (try? rootRepo.remoteList()) ?? []
+    logRuntime.activeBranches = (try? rootRepo.branchList()) ?? []
+    logRuntime.activeRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
+    logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
 }
 
 func applyManualLogPathFilter() {
@@ -962,12 +962,12 @@ func applyExternalLogRootSelection(_ requestedPaths: Set<String>) {
         selectedRoots: requestedPaths,
         initialized: true
     )
-    guard !next.isEmpty, next != logAggregateRootPaths else { return }
-    logAggregateBranchFilters = []
-    logAggregateRevisionRanges = []
-    logAggregateRootPaths = next
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
+    guard !next.isEmpty, next != logRuntime.aggregateRootPaths else { return }
+    logRuntime.aggregateBranchFilters = []
+    logRuntime.aggregateRevisionRanges = []
+    logRuntime.aggregateRootPaths = next
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
     logSelection = nil
     logSelectedIDs = []
     logList.error = nil

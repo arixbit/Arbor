@@ -461,9 +461,9 @@ var cherryPickCompareBranchChoices: [String] {
         // An aggregate Log has no single active Repository. Apply the chosen
         // source name independently to every root that exposes that ref.
         let aggregateRootPaths = Set(
-            logAggregateBranchFilters.map(\.rootPath)
-                + logAggregateRevisionRanges.map(\.rootPath)
-                + Array(logAggregateRootPaths)
+            logRuntime.aggregateBranchFilters.map(\.rootPath)
+                + logRuntime.aggregateRevisionRanges.map(\.rootPath)
+                + Array(logRuntime.aggregateRootPaths)
         )
         let eligibleSnapshots = multiRootBranchSnapshots.filter {
             aggregateRootPaths.contains($0.rootPath)

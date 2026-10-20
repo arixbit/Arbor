@@ -630,25 +630,25 @@ func openProjectPath(_ projectPath: String) {
                 }
                 self.logList.activeRootPath = nil
                 self.logList.activeRepo = nil
-                self.logActiveBranches = []
-                self.logActiveRemoteBranches = []
-                self.logActiveRemotes = []
-                self.logAggregateBranchFilters = []
-                self.logAggregateRevisionRanges = []
+                self.logRuntime.activeBranches = []
+                self.logRuntime.activeRemoteBranches = []
+                self.logRuntime.activeRemotes = []
+                self.logRuntime.aggregateBranchFilters = []
+                self.logRuntime.aggregateRevisionRanges = []
                 self.externalLogAggregateLoadStarted = false
                 let preserveInitialExternalLogRoots = self.externalLogWindow
                     && !self.externalLogRootRequestConsumed
                     && !self.initialExternalLogRootPaths.isEmpty
                 if preserveInitialExternalLogRoots {
-                    self.logAggregateRootPaths = self.initialExternalLogRootPaths
+                    self.logRuntime.aggregateRootPaths = self.initialExternalLogRootPaths
                     self.externalLogRootSelectionInitialized = true
                     self.externalLogRootRequestConsumed = true
                 } else {
-                    self.logAggregateRootPaths = []
+                    self.logRuntime.aggregateRootPaths = []
                     self.externalLogRootSelectionInitialized = false
                 }
-                self.logAggregateRepositories = [:]
-                self.logAggregateLoadedCounts = [:]
+                self.logRuntime.aggregateRepositories = [:]
+                self.logRuntime.aggregateLoadedCounts = [:]
                 self.restorePersistedMultiRootRebaseSession(for: root)
                 if self.multiRootRebaseSession == nil {
                     self.restorePersistedSingleRootRebaseState(for: root)
@@ -865,16 +865,16 @@ func resetProjectState() {
     activeCompareRepo = nil
     logList.activeRootPath = nil
     logList.activeRepo = nil
-    logActiveBranches = []
-    logActiveRemoteBranches = []
-    logActiveRemotes = []
-    logAggregateBranchFilters = []
-    logAggregateRevisionRanges = []
-    logAggregateRootPaths = []
+    logRuntime.activeBranches = []
+    logRuntime.activeRemoteBranches = []
+    logRuntime.activeRemotes = []
+    logRuntime.aggregateBranchFilters = []
+    logRuntime.aggregateRevisionRanges = []
+    logRuntime.aggregateRootPaths = []
     externalLogRootSelectionInitialized = false
     externalLogAggregateLoadStarted = false
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
     logList.generation += 1
     reflogGeneration += 1
     logShowMyTask?.cancel()
@@ -999,13 +999,13 @@ func refreshCherryPickedHighlights() {
     }
     let source = logCherryPickCompareBranch
     let aggregate = isLogAggregate
-    let aggregateFilters = logAggregateBranchFilters
-    let aggregateRevisionRanges = logAggregateRevisionRanges
-    let aggregateRootPaths = logAggregateRootPaths
+    let aggregateFilters = logRuntime.aggregateBranchFilters
+    let aggregateRevisionRanges = logRuntime.aggregateRevisionRanges
+    let aggregateRootPaths = logRuntime.aggregateRootPaths
     let requestedLogGeneration = logList.generation
     let requestedRepositories: [(path: String, repo: Repository)]
     if aggregate {
-        requestedRepositories = logAggregateRepositories
+        requestedRepositories = logRuntime.aggregateRepositories
             .sorted { $0.key < $1.key }
             .map { (path: $0.key, repo: $0.value) }
     } else if let repo = logRepository {
@@ -1108,9 +1108,9 @@ func refreshCherryPickedHighlights() {
                 resultSourceBranch: source
             ) else { return }
             if aggregate {
-                guard self.logAggregateBranchFilters == aggregateFilters,
-                      self.logAggregateRevisionRanges == aggregateRevisionRanges,
-                      self.logAggregateRootPaths == aggregateRootPaths else { return }
+                guard self.logRuntime.aggregateBranchFilters == aggregateFilters,
+                      self.logRuntime.aggregateRevisionRanges == aggregateRevisionRanges,
+                      self.logRuntime.aggregateRootPaths == aggregateRootPaths else { return }
             } else {
                 guard self.isActiveLogRepository(eligibleRepositories[0].repo),
                       cherryPickTargetBranch(
@@ -1536,11 +1536,11 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     && !rootsSnapshot.isEmpty
                 let externalLogSelection = reconciledExternalLogRootSelection(
                     availableRoots: rootsSnapshot.map(\.path),
-                    selectedRoots: self.logAggregateRootPaths,
+                    selectedRoots: self.logRuntime.aggregateRootPaths,
                     initialized: self.externalLogRootSelectionInitialized
                 )
                 let externalLogSelectionChanged = self.externalLogWindow
-                    && externalLogSelection != self.logAggregateRootPaths
+                    && externalLogSelection != self.logRuntime.aggregateRootPaths
                 self.multiRoots = rootsSnapshot
                 self.multiRootBranchSnapshots = snapshotsSnapshot
                 self.remoteProtectedBranchPatternsByRoot = Dictionary(
@@ -1578,7 +1578,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                     self.showShelfPreview = false
                 }
                 if self.externalLogWindow {
-                    self.logAggregateRootPaths = externalLogSelection
+                    self.logRuntime.aggregateRootPaths = externalLogSelection
                     self.externalLogRootSelectionInitialized = !externalLogSelection.isEmpty
                 }
                 let previousOperationRoots = Set(
@@ -1610,29 +1610,29 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                         || !snapshotsSnapshot.contains(where: { $0.rootPath == activeRootPath }) {
                         self.logList.activeRootPath = nil
                         self.logList.activeRepo = nil
-                        self.logActiveBranches = []
-                        self.logActiveRemoteBranches = []
-                        self.logActiveRemotes = []
+                        self.logRuntime.activeBranches = []
+                        self.logRuntime.activeRemoteBranches = []
+                        self.logRuntime.activeRemotes = []
                     } else if let activeSnapshot = snapshotsSnapshot.first(
                         where: { $0.rootPath == activeRootPath }
                     ) {
                         // Keep the Log context tied to the refreshed root while
                         // retaining the live Repository for operations such as
                         // remote URL lookup and credential-aware actions.
-                        self.logActiveBranches = activeSnapshot.branches
-                        self.logActiveRemoteBranches = activeSnapshot.remoteBranches
+                        self.logRuntime.activeBranches = activeSnapshot.branches
+                        self.logRuntime.activeRemoteBranches = activeSnapshot.remoteBranches
                         if let activeRepo = self.logList.activeRepo {
-                            self.logActiveRemotes = (try? activeRepo.remoteList()) ?? self.logActiveRemotes
+                            self.logRuntime.activeRemotes = (try? activeRepo.remoteList()) ?? self.logRuntime.activeRemotes
                         }
                     }
                 }
-                if self.logAggregateBranchFilters.contains(where: { filter in
+                if self.logRuntime.aggregateBranchFilters.contains(where: { filter in
                     !snapshotsSnapshot.contains(where: { $0.rootPath == filter.rootPath })
                 }) {
-                    self.logAggregateBranchFilters = []
-                    self.logAggregateRevisionRanges = []
-                    self.logAggregateRepositories = [:]
-                    self.logAggregateLoadedCounts = [:]
+                    self.logRuntime.aggregateBranchFilters = []
+                    self.logRuntime.aggregateRevisionRanges = []
+                    self.logRuntime.aggregateRepositories = [:]
+                    self.logRuntime.aggregateLoadedCounts = [:]
                     self.logList.entries = []
                     self.logSelection = nil
                     self.logSelectedIDs = []
@@ -1647,7 +1647,7 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.multiRootUpdateStashedRoots = updateStashRoots
                 self.scanPendingApplyRestores()
                 if externalLogSelectionChanged {
-                    if self.logAggregateRootPaths.isEmpty {
+                    if self.logRuntime.aggregateRootPaths.isEmpty {
                         self.logList.entries = []
                         self.logSelection = nil
                         self.logSelectedIDs = []
@@ -1696,16 +1696,16 @@ func loadMultiRoots(onCompleted: (() -> Void)? = nil) {
                 self.shelfRootError = nil
                 self.logList.activeRootPath = nil
                 self.logList.activeRepo = nil
-                self.logActiveBranches = []
-                self.logActiveRemoteBranches = []
-                self.logActiveRemotes = []
-                self.logAggregateBranchFilters = []
-                self.logAggregateRevisionRanges = []
-                self.logAggregateRootPaths = []
+                self.logRuntime.activeBranches = []
+                self.logRuntime.activeRemoteBranches = []
+                self.logRuntime.activeRemotes = []
+                self.logRuntime.aggregateBranchFilters = []
+                self.logRuntime.aggregateRevisionRanges = []
+                self.logRuntime.aggregateRootPaths = []
                 self.externalLogRootSelectionInitialized = false
                 self.externalLogAggregateLoadStarted = false
-                self.logAggregateRepositories = [:]
-                self.logAggregateLoadedCounts = [:]
+                self.logRuntime.aggregateRepositories = [:]
+                self.logRuntime.aggregateLoadedCounts = [:]
                 onCompleted?()
             }
         }

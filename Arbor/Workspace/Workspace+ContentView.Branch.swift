@@ -18,11 +18,11 @@ var logBranchFilterTitle: String {
 /// Git root changes only the Log repository context; the primary Commit/Status
 /// repository remains unchanged.
 func navigateLogToBranch(rootPath: String?, branch: String) {
-    logAggregateBranchFilters = []
-    logAggregateRevisionRanges = []
-    logAggregateRootPaths = []
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
+    logRuntime.aggregateBranchFilters = []
+    logRuntime.aggregateRevisionRanges = []
+    logRuntime.aggregateRootPaths = []
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
     var navigationHeadID: String?
     if let rootPath {
         guard let rootRepo = try? openRepository(path: rootPath) else {
@@ -35,16 +35,16 @@ func navigateLogToBranch(rootPath: String?, branch: String) {
         }
         logList.activeRootPath = rootPath
         logList.activeRepo = rootRepo
-        logActiveBranches = (try? rootRepo.branchList()) ?? []
-        logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
-        logActiveRemotes = (try? rootRepo.remoteList()) ?? []
+        logRuntime.activeBranches = (try? rootRepo.branchList()) ?? []
+        logRuntime.activeRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
+        logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
         navigationHeadID = try? rootRepo.revisionCommitId(revision: branch)
     } else {
         logList.activeRootPath = nil
         logList.activeRepo = nil
-        logActiveBranches = []
-        logActiveRemoteBranches = []
-        logActiveRemotes = []
+        logRuntime.activeBranches = []
+        logRuntime.activeRemoteBranches = []
+        logRuntime.activeRemotes = []
         navigationHeadID = repo.flatMap { try? $0.revisionCommitId(revision: branch) }
     }
     setLogStartRevision(branch)

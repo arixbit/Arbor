@@ -1488,8 +1488,8 @@ var logActionAvailability: LogActionAvailability {
 /// repeated Collapse/Expand requests are delivered even when their action type
 /// is unchanged.
 func issueLogGraphCommand(_ action: LinearBekGraphActionType) {
-    logGraphCommand = LinearBekGraphCommand(
-        id: (logGraphCommand?.id ?? 0) + 1,
+    logRuntime.graphCommand = LinearBekGraphCommand(
+        id: (logRuntime.graphCommand?.id ?? 0) + 1,
         action: action
     )
 }
@@ -1501,23 +1501,23 @@ func issueLogGraphCommand(_ action: LinearBekGraphActionType) {
 /// cancellable background batch and stale generations are discarded.
 func loadLogSignatureStatuses() {
     guard logShowSignatureColumn, logList.viewMode == .graph else {
-        logSignatureLoadTask?.cancel()
-        logSignatureLoadingIDs.removeAll()
-        logSignatureFailedIDs.removeAll()
+        logRuntime.signatureLoadTask?.cancel()
+        logRuntime.signatureLoadingIDs.removeAll()
+        logRuntime.signatureFailedIDs.removeAll()
         return
     }
 
     let commits = logList.entries
     guard !commits.isEmpty else {
-        logSignatureLoadTask?.cancel()
-        logSignatureLoadingIDs.removeAll()
-        logSignatureFailedIDs.removeAll()
+        logRuntime.signatureLoadTask?.cancel()
+        logRuntime.signatureLoadingIDs.removeAll()
+        logRuntime.signatureFailedIDs.removeAll()
         return
     }
 
-    logSignatureLoadTask?.cancel()
-    logSignatureGeneration += 1
-    let generation = logSignatureGeneration
+    logRuntime.signatureLoadTask?.cancel()
+    logRuntime.signatureGeneration += 1
+    let generation = logRuntime.signatureGeneration
     let aggregate = isLogAggregate
     let grouped = Dictionary(grouping: commits) { $0.repositoryPath ?? "" }
     var requests: [LogSignatureBatchRequest] = []
@@ -1530,7 +1530,7 @@ func loadLogSignatureStatuses() {
                 id: commit.id,
                 aggregate: aggregate
             )
-            return logSignatureStatuses[key] == nil
+            return logRuntime.signatureStatuses[key] == nil
         }
         guard !pending.isEmpty else { continue }
         guard let repository = logRepository(for: pending) else {
@@ -1558,12 +1558,12 @@ func loadLogSignatureStatuses() {
     }
 
     let requestedKeys = Set(requests.flatMap { $0.keyByCommitID.values })
-    logSignatureLoadingIDs = requestedKeys
-    logSignatureFailedIDs.formUnion(unavailableKeys)
+    logRuntime.signatureLoadingIDs = requestedKeys
+    logRuntime.signatureFailedIDs.formUnion(unavailableKeys)
     guard !requests.isEmpty else {
         return
     }
-    logSignatureFailedIDs.subtract(requestedKeys)
+    logRuntime.signatureFailedIDs.subtract(requestedKeys)
 
     let requestBatch = requests
     let task = Task { @MainActor in
@@ -1596,13 +1596,13 @@ func loadLogSignatureStatuses() {
         }.value
 
         guard !Task.isCancelled,
-              generation == logSignatureGeneration,
+              generation == logRuntime.signatureGeneration,
               let result else { return }
-        logSignatureStatuses.merge(result.statuses) { _, new in new }
-        logSignatureLoadingIDs.subtract(requestedKeys)
-        logSignatureFailedIDs.formUnion(result.failedKeys)
+        logRuntime.signatureStatuses.merge(result.statuses) { _, new in new }
+        logRuntime.signatureLoadingIDs.subtract(requestedKeys)
+        logRuntime.signatureFailedIDs.formUnion(result.failedKeys)
     }
-    logSignatureLoadTask = task
+    logRuntime.signatureLoadTask = task
 }
 
 
@@ -1678,18 +1678,18 @@ var externalLogRootsMenu: some View {
                     : "\(root.displayName) · \(root.relativePath)"
                 Toggle(
                     isOn: Binding(
-                        get: { logAggregateRootPaths.contains(normalizedPath) },
+                        get: { logRuntime.aggregateRootPaths.contains(normalizedPath) },
                         set: { setExternalLogRootSelection(root.path, selected: $0) }
                     )
                 ) {
                     Text(title)
                 }
-                .disabled(logAggregateRootPaths.count == 1 && logAggregateRootPaths.contains(normalizedPath))
+                .disabled(logRuntime.aggregateRootPaths.count == 1 && logRuntime.aggregateRootPaths.contains(normalizedPath))
             }
         }
     } label: {
         Label(
-            "Git Roots \(logAggregateRootPaths.count)/\(multiRoots.count)",
+            "Git Roots \(logRuntime.aggregateRootPaths.count)/\(multiRoots.count)",
             systemImage: "folder"
         )
     }
@@ -1972,7 +1972,7 @@ var logCommandFilterBar: some View {
         Text("git log")
             .font(.system(.body, design: .monospaced))
             .foregroundStyle(.secondary)
-        TextField("command and arguments", text: $logCommandFilter)
+        TextField("command and arguments", text: $logRuntime.commandFilter)
             .textFieldStyle(.roundedBorder)
             .font(.system(.body, design: .monospaced))
             .onSubmit { runLogCommand() }
@@ -1993,8 +1993,8 @@ var logCommandFilterBar: some View {
 var logGraphHistoryContent: some View {
     let isCommand = logList.viewMode == .command
     let isFileHistory = logTabs.first { $0.id == currentLogTabID }?.historyPath != nil
-    let entries = isCommand ? logCommandEntries : logList.entries
-    let isLoading = isCommand ? isLoadingLogCommand : logList.isLoading
+    let entries = isCommand ? logRuntime.commandEntries : logList.entries
+    let isLoading = isCommand ? logRuntime.isLoadingCommand : logList.isLoading
     if isLoading && entries.isEmpty {
         ProgressView("Loading history…")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2009,7 +2009,7 @@ var logGraphHistoryContent: some View {
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(.secondary)
                 Text(isCommand
-                    ? (logCommandError ?? "No commits match the command")
+                    ? (logRuntime.commandError ?? "No commits match the command")
                     : (logList.error ?? "No commits match the current filters"))
                     .foregroundStyle(.secondary)
                 Button("Refresh") {
@@ -2038,9 +2038,9 @@ var logGraphHistoryContent: some View {
                 showHashColumn: logShowHashColumn,
                 showRootColumn: logShowRootColumn,
                 showSignatureColumn: logShowSignatureColumn,
-                signatureStatuses: logSignatureStatuses,
-                signatureLoadingIDs: logSignatureLoadingIDs,
-                signatureFailedIDs: logSignatureFailedIDs,
+                signatureStatuses: logRuntime.signatureStatuses,
+                signatureLoadingIDs: logRuntime.signatureLoadingIDs,
+                signatureFailedIDs: logRuntime.signatureFailedIDs,
                 columnLayout: LogColumnLayout(
                     orderRaw: logColumnOrderRaw,
                     widthsRaw: logColumnWidthsRaw
@@ -2049,13 +2049,13 @@ var logGraphHistoryContent: some View {
                 alignLabels: logAlignLabels,
                 showLongEdges: logShowLongEdges,
                 collapseGraph: logCollapseGraph,
-                graphCommand: logGraphCommand,
+                graphCommand: logRuntime.graphCommand,
                 highlightCherryPickedCommits: logHighlightCherryPicked,
                 actionAvailability: logActionAvailability,
                 isFileHistory: isFileHistory,
                 onReachedEnd: loadMoreLog,
                 hasMore: isCommand ? hasMoreLogCommand : logList.hasMore,
-                isLoadingMore: isCommand ? isLoadingLogCommand : logList.isLoadingMore,
+                isLoadingMore: isCommand ? logRuntime.isLoadingCommand : logList.isLoadingMore,
                 pullRequestRemotesForCommit: pullRequestRemotesForCommit,
                 onOpenPullRequest: openPullRequestsForCommit,
                 commentRemotesForCommit: commentRemotesForCommit,
@@ -2474,7 +2474,7 @@ var logGraphGearMenu: some View {
             Text("Tags").tag(LogViewMode.tags)
             Text("Reflog").tag(LogViewMode.reflog)
         }
-        Picker("Sort", selection: $logGraphSortModeRaw) {
+        Picker("Sort", selection: $logRuntime.sortModeRaw) {
             ForEach(LogGraphSortChoice.allCases) { choice in
                 Text(choice.title).tag(choice.rawValue)
             }
@@ -2538,9 +2538,9 @@ var logGraphGearMenu: some View {
         Divider()
         Menu("More Log Actions") {
             Button("Show Git Log Command…") {
-                logCommandFilter = ""
-                logCommandEntries = []
-                logCommandError = nil
+                logRuntime.commandFilter = ""
+                logRuntime.commandEntries = []
+                logRuntime.commandError = nil
                 logList.viewMode = .command
             }
             Button("Create Patch…") {
@@ -2882,7 +2882,7 @@ HStack(spacing: 10) {
         logSelectedIDs = []
     }
 }
-.onChange(of: logGraphSortModeRaw) { _, _ in
+.onChange(of: logRuntime.sortModeRaw) { _, _ in
     guard logList.viewMode == .graph else { return }
     scheduleLogRefresh()
 }

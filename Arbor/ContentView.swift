@@ -10,6 +10,9 @@ struct ContentView: View {
 
     /// Log 列表与过滤状态（过滤条件、分页、当前 root）。
     @StateObject var logList = LogListState()
+
+    /// Log 运行期数据（命令日志 / 签名 / 多 root 聚合 / 图命令）。
+    @StateObject var logRuntime: LogRuntimeState
     let externalLogWindow: Bool
     let initialExternalLogRootPaths: Set<String>
     let externalLogProviderSession: ExternalLogProviderSession?
@@ -69,7 +72,6 @@ struct ContentView: View {
     @AppStorage("arbor.log.alignLabels.v1") var logAlignLabels = false
     @AppStorage("arbor.log.showLongEdges.v1") var logShowLongEdges = true
     @AppStorage("arbor.log.collapseGraph.v1") var logCollapseGraph = false
-    @State var logGraphCommand: LinearBekGraphCommand?
     @AppStorage("arbor.log.noMerges.v1") var logNoMerges = false
     @AppStorage("arbor.log.branches.visible.v1") var logBranchesVisible = false
     @State var logBranchesGroupByDirectory = GitBranchesPopupSettings.defaultGroupByDirectory
@@ -189,13 +191,13 @@ struct ContentView: View {
     }
 
     var isLogAggregate: Bool {
-        !logAggregateBranchFilters.isEmpty
-            || !logAggregateRevisionRanges.isEmpty
-            || !logAggregateRootPaths.isEmpty
+        !logRuntime.aggregateBranchFilters.isEmpty
+            || !logRuntime.aggregateRevisionRanges.isEmpty
+            || !logRuntime.aggregateRootPaths.isEmpty
     }
 
     var isLogRootQualified: Bool {
-        isLogAggregate || (logList.viewMode == .command && logCommandIsAggregate)
+        isLogAggregate || (logList.viewMode == .command && logRuntime.commandIsAggregate)
     }
 
     var availableReflogRootPaths: [String] {
@@ -340,7 +342,7 @@ struct ContentView: View {
               !repositoryPath.isEmpty else {
             return logList.activeRepo ?? repo
         }
-        if let aggregateRepository = logAggregateRepositories[repositoryPath] {
+        if let aggregateRepository = logRuntime.aggregateRepositories[repositoryPath] {
             return aggregateRepository
         }
         if logList.activeRootPath == repositoryPath {
@@ -395,7 +397,7 @@ struct ContentView: View {
                 return snapshot.branches.first(where: \.isCurrent)?.name
             }
             if repositoryPath == logList.activeRootPath {
-                return logActiveBranches.first(where: \.isCurrent)?.name
+                return logRuntime.activeBranches.first(where: \.isCurrent)?.name
             }
             return nil
         }
@@ -411,7 +413,7 @@ struct ContentView: View {
                 return snapshot.remotes
             }
             if repositoryPath == logList.activeRootPath {
-                return logActiveRemotes
+                return logRuntime.activeRemotes
             }
             return []
         }
@@ -419,15 +421,15 @@ struct ContentView: View {
     }
 
     var activeLogBranches: [BranchInfo] {
-        logList.activeRootPath == nil ? branches : logActiveBranches
+        logList.activeRootPath == nil ? branches : logRuntime.activeBranches
     }
 
     var activeLogRemoteBranches: [RemoteBranchInfo] {
-        logList.activeRootPath == nil ? remoteBranches : logActiveRemoteBranches
+        logList.activeRootPath == nil ? remoteBranches : logRuntime.activeRemoteBranches
     }
 
     var activeLogRemotes: [RemoteInfo] {
-        logList.activeRootPath == nil ? remotes : logActiveRemotes
+        logList.activeRootPath == nil ? remotes : logRuntime.activeRemotes
     }
 
     /// Include repository identity so a project restored before its
@@ -535,8 +537,6 @@ struct ContentView: View {
     /// 逐行暂存入口：侧栏「逐行」点击后选中文件并让 diff 视图进入选择模式
     @State var selectionModePath: String?
     // 日志模式
-    @State var logCommandEntries: [CommitInfo] = []
-    @State var logCommandIsAggregate = false
     @State var hasMoreLogCommand = true
     @State var logTabs: [LogTabDescriptor] = [LogTabDescriptor()]
     @State var activeLogTabID: UUID?
@@ -561,12 +561,6 @@ struct ContentView: View {
     /// loads from competing for CPU while the user changes filters or panes.
     /// Coalesce several filter/control mutations arriving in one main-actor
     /// turn before starting the expensive VisibleGraph refresh.
-    @State var logSignatureLoadTask: Task<Void, Never>?
-    @State var logSignatureGeneration: Int = 0
-    @State var logSignatureStatuses: [String: CommitSignatureInfo] = [:]
-    @State var logSignatureLoadingIDs: Set<String> = []
-    @State var logSignatureFailedIDs: Set<String> = []
-    @State var logCommandTask: Task<Void, Never>?
     /// A commit referenced by a notification or reflog may not be in the
     /// currently visible history page. Keep that detail record separate from
     /// the paged graph so the inspector never falls back to an empty pane.
@@ -698,32 +692,18 @@ struct ContentView: View {
     @State var multiRootResolverError: String?
     @State var multiRootResolverLoadGeneration = 0
     @State var multiRootUpdateStashedRoots: Set<String> = []
-    @State var logGraphSortModeRaw = LogGraphSortChoice.byCommitDate.rawValue
-    @State var logCommandFilter = ""
-    @State var logCommandError: String?
-    @State var logCommandGeneration = 0
-    @State var isLoadingLogCommand = false
     /// The Log dashboard may be scoped to a nested Git root without changing
     /// the project's primary repository context used by Commit/Status panes.
-    @State var logActiveBranches: [BranchInfo] = []
-    @State var logActiveRemoteBranches: [RemoteBranchInfo] = []
-    @State var logActiveRemotes: [RemoteInfo] = []
-    @State var logAggregateBranchFilters: [LogRootBranchFilter] = []
-    @State var logAggregateRevisionRanges: [LogRootRevisionRange] = []
     /// External Git Log windows can aggregate all or a selected subset of the
     /// project's discovered Git roots. An empty set means the selector has
     /// not been initialized yet (or discovery currently has no roots).
-    @State var logAggregateRootPaths: Set<String> = []
     @State var externalLogRootSelectionInitialized = false
     @State var externalLogRootRequestConsumed = false
     @State var externalLogAggregateLoadStarted = false
     @State var externalLogSessionDisposed = false
-    @State var logAggregateRepositories: [String: Repository] = [:]
-    @State var logAggregateLoadedCounts: [String: Int] = [:]
     /// Each aggregate-log root owns an independent engine pagination cursor.
     /// Keeping this separate from the merged row count prevents a later page
     /// from re-querying the entire root history just to discard its prefix.
-    @State var logAggregatePageCursors: [String: String] = [:]
     @State var logCherryPickedCommitIDs: Set<String> = []
     @State var logCherryPickComparisonReady = false
     @State var compareRev1: String = ""
@@ -1118,14 +1098,17 @@ struct ContentView: View {
         self.externalLogUIManager = externalLogUIManager
         let normalizedInitialExternalLogRoots = Set(normalizedLogRootPaths(initialExternalLogRootPaths))
         self.initialExternalLogRootPaths = normalizedInitialExternalLogRoots
-        _logAggregateRootPaths = State(initialValue: self.initialExternalLogRootPaths)
-        _logAggregateRepositories = State(
-            initialValue: externalLogUIManager?.repositories(
-                for: Array(normalizedInitialExternalLogRoots)
-            ) ?? externalLogProviderSession?.repositories(
-                for: Array(normalizedInitialExternalLogRoots)
-            ) ?? [:]
-        )
+        // 先算成本地值：StateObject 的 autoclosure 是 escaping 的，init 里不能
+        // 捕获 self。
+        let initialLogRepositories = externalLogUIManager?.repositories(
+            for: Array(normalizedInitialExternalLogRoots)
+        ) ?? externalLogProviderSession?.repositories(
+            for: Array(normalizedInitialExternalLogRoots)
+        ) ?? [:]
+        _logRuntime = StateObject(wrappedValue: LogRuntimeState(
+            aggregateRootPaths: normalizedInitialExternalLogRoots,
+            aggregateRepositories: initialLogRepositories
+        ))
         _externalLogRootSelectionInitialized = State(
             initialValue: externalLogWindow && !self.initialExternalLogRootPaths.isEmpty
         )
@@ -1352,7 +1335,7 @@ struct ContentView: View {
     }
     var selectedCommit: CommitInfo? {
         guard let logSelection else { return nil }
-        let visibleEntries = logList.viewMode == .command ? logCommandEntries : logList.entries
+        let visibleEntries = logList.viewMode == .command ? logRuntime.commandEntries : logList.entries
         return visibleEntries.first {
             let identity = logCommitIdentity($0)
             return identity == logSelection

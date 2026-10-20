@@ -749,9 +749,9 @@ func activateComparisonRepository(_ rootRepo: Repository, rootPath: String) {
     compareRepositoryPath = rootPath
     logList.activeRootPath = rootPath
     logList.activeRepo = rootRepo
-    logActiveBranches = (try? rootRepo.branchList()) ?? []
-    logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
-    logActiveRemotes = (try? rootRepo.remoteList()) ?? []
+    logRuntime.activeBranches = (try? rootRepo.branchList()) ?? []
+    logRuntime.activeRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
+    logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
 }
 
 /// 多 root Branches Popup 的 Show Files Diff：打开正确 Git root 的

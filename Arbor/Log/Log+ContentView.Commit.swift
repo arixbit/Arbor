@@ -181,7 +181,7 @@ struct CommitDetailsMetadataView: View {
 /// diff surface lightweight, and load each selected commit's tree off the
 /// main actor.
 var selectedLogCommits: [CommitInfo] {
-    let entries = logList.viewMode == .command ? logCommandEntries : logList.entries
+    let entries = logList.viewMode == .command ? logRuntime.commandEntries : logList.entries
     let selected = entries.filter { logSelectedIDs.contains(logCommitIdentity($0)) }
     if selected.count > 1 { return selected }
     if let selectedCommit { return [selectedCommit] }

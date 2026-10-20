@@ -51,11 +51,11 @@ func openRewordCommit(rootPath: String, commitID: String) {
         return
     }
 
-    logAggregateBranchFilters = []
-    logAggregateRevisionRanges = []
-    logAggregateRootPaths = []
-    logAggregateRepositories = [:]
-    logAggregateLoadedCounts = [:]
+    logRuntime.aggregateBranchFilters = []
+    logRuntime.aggregateRevisionRanges = []
+    logRuntime.aggregateRootPaths = []
+    logRuntime.aggregateRepositories = [:]
+    logRuntime.aggregateLoadedCounts = [:]
     logSelection = nil
     logSelectedIDs = []
     logList.viewMode = .graph
@@ -67,15 +67,15 @@ func openRewordCommit(rootPath: String, commitID: String) {
     if normalizedRootPath == primaryRoot {
         logList.activeRootPath = nil
         logList.activeRepo = nil
-        logActiveBranches = []
-        logActiveRemoteBranches = []
-        logActiveRemotes = []
+        logRuntime.activeBranches = []
+        logRuntime.activeRemoteBranches = []
+        logRuntime.activeRemotes = []
     } else {
         logList.activeRootPath = normalizedRootPath
         logList.activeRepo = rootRepo
-        logActiveBranches = (try? rootRepo.branchList()) ?? []
-        logActiveRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
-        logActiveRemotes = (try? rootRepo.remoteList()) ?? []
+        logRuntime.activeBranches = (try? rootRepo.branchList()) ?? []
+        logRuntime.activeRemoteBranches = (try? rootRepo.remoteBranchList()) ?? []
+        logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
     }
     loadLog()
 
@@ -145,7 +145,7 @@ func loadCommitDetailsIfNeeded(_ id: String, forReflog: Bool = false) {
     guard let repo = logRepository, !normalized.isEmpty else { return }
     let revision = normalized.split(separator: "\u{1f}", maxSplits: 1).last.map(String.init) ?? normalized
     if !forReflog,
-       let visible = (logList.viewMode == .command ? logCommandEntries : logList.entries).first(where: {
+       let visible = (logList.viewMode == .command ? logRuntime.commandEntries : logList.entries).first(where: {
            let identity = logCommitIdentity($0)
            return identity == normalized || identity.hasPrefix(normalized) || normalized.hasPrefix(identity)
        }) {
