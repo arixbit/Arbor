@@ -15,6 +15,7 @@ mod gpg;
 mod highlight;
 mod hooks;
 mod index;
+mod lfs;
 mod log;
 mod merge;
 mod opstate;
@@ -60,6 +61,9 @@ pub use gitprocess::{
 };
 pub use gpg::{configure_gpg_agent, gpg_agent_status, GpgAgentStatus};
 pub use highlight::{highlight_code, HighlightKind, HighlightSpan};
+pub use lfs::{
+    LfsCapability, LfsCommandResult, LfsFileEntry, LfsHookState, LfsPathState, LfsTrackedPattern,
+};
 pub use log::{
     CommitDiff, CommitInfo, CommitSignatureInfo, LogGraphSortMode, ReflogEntry, SignatureStatus,
 };

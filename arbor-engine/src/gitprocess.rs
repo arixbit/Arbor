@@ -570,6 +570,7 @@ pub enum GitCommandCategory {
     Submodule,
     Worktree,
     Hook,
+    Lfs,
     Other,
 }
 
@@ -595,6 +596,7 @@ impl GitCommandCategory {
             GitCommandCategory::Submodule => "submodule",
             GitCommandCategory::Worktree => "worktree",
             GitCommandCategory::Hook => "hook",
+            GitCommandCategory::Lfs => "lfs",
             GitCommandCategory::Other => "other",
         }
     }
