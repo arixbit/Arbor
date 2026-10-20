@@ -1,6 +1,19 @@
 # IntelliJ Git 对等差距报告
 
-更新时间：2026-08-29
+更新时间：2026-10-20
+
+## 2026-10-20 action 全集审计：31 个未覆盖 id 都是容器
+
+用 `scripts/audit-git-actions.py` 重新对账 `plugins/git4idea` 的全部 174 个
+action/group id（不只看 `Git.*`，也包含 `git.*` 设置项和 IDE 平台 id），矩阵
+覆盖 143 个，未覆盖 31 个，其中**叶子动作 0 个**：全部是 context menu /
+toolbar / gear popup / 空锚点容器。它们引用的子动作要么已有独立 id 且被矩阵
+覆盖，要么是 IDE 平台动作（`Diff.ShowDiff`、`ChangesView.Refresh`、
+`EditorCut`、`LocalHistory`、`ContextHelp`、`Vcs.UpdateProject` 等）。
+
+容器里发现的真实差异只有三处呈现层小项：单 root 分支弹窗齿轮没有暴露
+`filter by repository`（multi-root popover 里有）、没有弹窗内 resize 动作、
+没有「关闭 Stage 工具窗」概念。详见 `docs/rebased-action-audit.md`。
 
 ## 2026-08-29 V1 scope closure
 
