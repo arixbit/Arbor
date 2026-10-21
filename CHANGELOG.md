@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.21 - 2026-10-21
+
+Feature release: wire the dormant "自动检查更新" toggle to real GitHub
+release checks. The toggle previously had no backing implementation, so an
+installed release could never learn that a newer version existed without
+manually browsing the Releases page.
+
+- AppUpdateChecker: read-only `releases/latest` GET, numeric tag comparison
+  against the running `CFBundleShortVersionString`, and at most one automatic
+  check per 24h per install, eight seconds after the first window appears
+- Update availability is surfaced through the existing feedback center with a
+  one-click "打开下载页" action; the automatic path stays silent on failures
+- New "检查更新…" application-menu item and a settings row with an instant
+  re-check; the toggle now defaults to enabled
+- Update checks never run under XCTest hosts; tag comparison, payload
+  parsing, and the 24-hour window are covered by unit tests
+
 ## 1.0.20 - 2026-10-21
 
 Patch release: stop the repository watcher from retriggering its own refresh.
