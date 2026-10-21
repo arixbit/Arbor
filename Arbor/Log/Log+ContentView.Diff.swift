@@ -254,7 +254,6 @@ struct BranchCommitComparisonView: View {
                     commits: commits,
                     selection: selection,
                     selectedIDs: selectedIDs,
-                    commitIdentity: { $0.id },
                     compactReferences: true,
                     showCommitColumns: false,
                     showAuthorColumn: true,

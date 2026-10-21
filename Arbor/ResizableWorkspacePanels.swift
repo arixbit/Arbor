@@ -241,6 +241,11 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
 
         let sidebarHost = NSHostingView(rootView: sidebarContent)
         let mainHost = NSHostingView(rootView: mainContent)
+        // NSSplitView owns the frames and minimum widths. Measuring the full
+        // hosted histories for intrinsic/minimum sizes repeats SwiftUI layout
+        // inside AppKit constraint updates, especially during divider drags.
+        sidebarHost.sizingOptions = []
+        mainHost.sizingOptions = []
         sidebarHost.translatesAutoresizingMaskIntoConstraints = false
         mainHost.translatesAutoresizingMaskIntoConstraints = false
         sidebarHost.setContentHuggingPriority(.defaultLow, for: .horizontal)

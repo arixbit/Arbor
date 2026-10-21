@@ -1,6 +1,83 @@
 import SwiftUI
 import AppKit
 
+/// One immutable result is shared by every render of the same history.
+final class LinearBekGraphSnapshot {
+    let controller: LinearBekGraphController
+    let maxLane: Int
+    let commitIDs: Set<String>
+    let mergeIDs: Set<String>
+
+    init(controller: LinearBekGraphController, maxLane: Int, commitIDs: Set<String>) {
+        self.controller = controller
+        self.maxLane = maxLane
+        self.commitIDs = commitIDs
+        self.mergeIDs = controller.graph.mergeIDs
+    }
+}
+
+final class LinearBekGraphCache {
+    private var commits: [CommitInfo] = []
+    private var rootQualifiedIdentity = false
+    private var snapshot: LinearBekGraphSnapshot?
+
+    func resolve(
+        commits: [CommitInfo],
+        collapseAll: Bool,
+        expandedMergeIDs: Set<String>,
+        collapsedMergeIDs: Set<String>,
+        rootQualifiedIdentity: Bool = false
+    ) -> LinearBekGraphSnapshot {
+        // Array equality also handles equal values supplied in a new buffer.
+        // The shared-buffer path avoids walking large histories on hover.
+        let sameCommits = commits.withUnsafeBufferPointer { incoming in
+            self.commits.withUnsafeBufferPointer { cached in
+                incoming.count == cached.count && incoming.baseAddress == cached.baseAddress
+            }
+        } || self.commits == commits
+        let sameHistory = sameCommits && self.rootQualifiedIdentity == rootQualifiedIdentity
+        let identity: (CommitInfo) -> String = { commit in
+            logCommitDisplayIdentity(
+                repositoryPath: commit.repositoryPath, id: commit.id, aggregate: rootQualifiedIdentity
+            )
+        }
+        let mergeIDs: Set<String>
+        if sameHistory, let snapshot {
+            mergeIDs = snapshot.mergeIDs
+        } else {
+            mergeIDs = Set(commits.filter { $0.parentIds.count == 2 }.map(identity))
+        }
+        let expanded = expandedMergeIDs.intersection(mergeIDs)
+        let collapsed = collapsedMergeIDs.intersection(mergeIDs)
+        if let snapshot, sameHistory,
+           snapshot.controller.collapseAll == collapseAll,
+           snapshot.controller.expandedMergeIDs == expanded,
+           snapshot.controller.collapsedMergeIDs == collapsed {
+            self.commits = commits
+            return snapshot
+        }
+        let controller = LinearBekGraphController(
+            commits: commits,
+            collapseAll: collapseAll,
+            expandedMergeIDs: expanded,
+            collapsedMergeIDs: collapsed,
+            identity: identity
+        )
+        let previous = sameHistory ? snapshot : nil
+        let result = LinearBekGraphSnapshot(
+            controller: controller,
+            maxLane: previous?.maxLane ?? commits.reduce(0) { result, commit in
+                max(result, Int(commit.lane), Int(commit.parentLanes.max() ?? 0))
+            },
+            commitIDs: previous?.commitIDs ?? Set(commits.map(identity))
+        )
+        self.commits = commits
+        self.rootQualifiedIdentity = rootQualifiedIdentity
+        snapshot = result
+        return result
+    }
+}
+
 
 /// The graph table keeps every commit row visible while LinearBek changes
 /// which edges are painted. This is intentionally a value type so the
@@ -89,8 +166,15 @@ struct LinearBekGraphModel {
     let normalEdges: [LinearBekGraphEdge]
     let fragments: [String: LinearBekMergeFragment]
     let collapsedMergeIDs: Set<String>
-    private let collapsedHiddenEdges: Set<LinearBekGraphEdge>
     private let activeCollapsedDottedEdges: [LinearBekDottedEdge]
+    /// Pre-resolved at build time. The graph view reads these for every
+    /// visible row on every render; resolving them lazily walks every
+    /// fragment per row, which is quadratic on merge-heavy histories.
+    let rowActionByRow: [Int: LinearBekRowAction]
+    let nodeActionByRow: [Int: LinearBekRowAction]
+    /// Same contents as the old computed filter, but materialized once in
+    /// `init` instead of allocating a fresh array on every access.
+    let visibleEdges: [LinearBekGraphEdge]
 
     init(
         commits: [CommitInfo],
@@ -131,20 +215,53 @@ struct LinearBekGraphModel {
         normalEdges = edges
         fragments = builtFragments
         let availableMergeIDs = Set(builtFragments.keys)
-        self.collapsedMergeIDs = collapseAll
+        let resolvedCollapsedMergeIDs = collapseAll
             ? availableMergeIDs.subtracting(expandedMergeIDs)
             : collapsedMergeIDs.intersection(availableMergeIDs)
+        self.collapsedMergeIDs = resolvedCollapsedMergeIDs
         let collapsedState = Self.simulateCollapsedState(
             fragments: builtFragments,
             normalEdges: edges,
-            collapsedMergeIDs: self.collapsedMergeIDs
+            collapsedMergeIDs: resolvedCollapsedMergeIDs
         )
-        collapsedHiddenEdges = collapsedState.hiddenNormalEdges
+        let hiddenNormalEdges = collapsedState.hiddenNormalEdges
         activeCollapsedDottedEdges = collapsedState.dottedEdges
+        visibleEdges = edges.filter { !hiddenNormalEdges.contains($0) }
+        let actions = Self.makeRowActions(
+            fragments: builtFragments,
+            collapsedMergeIDs: resolvedCollapsedMergeIDs
+        )
+        rowActionByRow = actions.row
+        nodeActionByRow = actions.node
     }
 
-    var visibleEdges: [LinearBekGraphEdge] {
-        normalEdges.filter { !collapsedHiddenEdges.contains($0) }
+    /// Pre-resolve the per-row collapse/expand actions once during the graph
+    /// build. Collapsed fragments take precedence for both lookups and, among
+    /// nested candidates, the deeper (larger-row) merge wins — mirroring the
+    /// previous iterative resolution order exactly, but deterministically.
+    private static func makeRowActions(
+        fragments: [String: LinearBekMergeFragment],
+        collapsedMergeIDs: Set<String>
+    ) -> (row: [Int: LinearBekRowAction], node: [Int: LinearBekRowAction]) {
+        let sortedFragments = fragments.values.sorted { $0.mergeRow > $1.mergeRow }
+        var rowActions: [Int: LinearBekRowAction] = [:]
+        var nodeActions: [Int: LinearBekRowAction] = [:]
+
+        for fragment in sortedFragments where collapsedMergeIDs.contains(fragment.mergeID) {
+            for row in fragment.affectedRows {
+                if rowActions[row] == nil { rowActions[row] = .expand(fragment.mergeID) }
+                if nodeActions[row] == nil { nodeActions[row] = .expand(fragment.mergeID) }
+            }
+        }
+        for fragment in sortedFragments where !collapsedMergeIDs.contains(fragment.mergeID) {
+            for row in fragment.affectedRows {
+                if nodeActions[row] == nil { nodeActions[row] = .collapse(fragment.mergeID) }
+            }
+            if rowActions[fragment.mergeRow] == nil {
+                rowActions[fragment.mergeRow] = .collapse(fragment.mergeID)
+            }
+        }
+        return (rowActions, nodeActions)
     }
 
     var dottedEdges: [LinearBekDottedEdge] {
@@ -156,28 +273,14 @@ struct LinearBekGraphModel {
     }
 
     func rowAction(at row: Int) -> LinearBekRowAction? {
-        for mergeID in collapsedMergeIDs {
-            if fragments[mergeID]?.affectedRows.contains(row) == true {
-                return .expand(mergeID)
-            }
-        }
-        for (mergeID, fragment) in fragments where fragment.mergeRow == row {
-            return .collapse(mergeID)
-        }
-        return nil
+        rowActionByRow[row]
     }
 
     /// IntelliJ resolves a node click to the nearest LinearBek fragment, not
     /// only to the merge row. This keeps every node in a visible fragment
     /// clickable while leaving the compact row button anchored to the merge.
     func nodeAction(at row: Int) -> LinearBekRowAction? {
-        let candidates = fragments.values
-            .filter { $0.affectedRows.contains(row) }
-            .sorted { $0.mergeRow > $1.mergeRow }
-        if let collapsed = candidates.first(where: { collapsedMergeIDs.contains($0.mergeID) }) {
-            return .expand(collapsed.mergeID)
-        }
-        return candidates.first.map { .collapse($0.mergeID) }
+        nodeActionByRow[row]
     }
 
     func action(for element: LinearBekGraphElement) -> LinearBekRowAction? {

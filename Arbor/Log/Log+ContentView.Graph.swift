@@ -191,7 +191,7 @@ var logGraphHistoryContent: some View {
                 commits: entries,
                 selection: $logSelectionState.selection,
                 selectedIDs: $logSelectionState.selectedIDs,
-                commitIdentity: logCommitIdentity,
+                rootQualifiedIdentity: isLogRootQualified,
                 compactReferences: logCompactReferences,
                 showCommitColumns: logShowCommitColumns,
                 showAuthorColumn: logShowAuthorColumn,

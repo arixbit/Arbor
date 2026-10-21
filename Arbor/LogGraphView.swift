@@ -8,7 +8,11 @@ struct LogGraphView: View {
     let commits: [CommitInfo]
     @Binding var selection: String?
     @Binding var selectedIDs: Set<String>
-    var commitIdentity: (CommitInfo) -> String = { $0.id }
+    var rootQualifiedIdentity = false
+
+    private func commitIdentity(_ commit: CommitInfo) -> String {
+        logCommitDisplayIdentity(repositoryPath: commit.repositoryPath, id: commit.id, aggregate: rootQualifiedIdentity)
+    }
     let compactReferences: Bool
     let showCommitColumns: Bool
     let showAuthorColumn: Bool
@@ -72,6 +76,20 @@ struct LogGraphView: View {
     @State private var hoveredLinearBekHighlight: LinearBekGraphHighlight?
     @State private var resizingColumn: LogColumnID?
     @State private var resizeStartWidth: CGFloat?
+    /// Topmost visible row of the vertical history scroll view. Drives the
+    /// render window for the Canvas and the graph hit-target overlays.
+    @State private var scrolledRowID: Int?
+    @State private var linearBekGraphCache = LinearBekGraphCache()
+
+    private func resolvedLinearBekGraph() -> LinearBekGraphSnapshot {
+        linearBekGraphCache.resolve(
+            commits: commits,
+            collapseAll: collapseGraph,
+            expandedMergeIDs: expandedLinearBekMergeIDs,
+            collapsedMergeIDs: collapsedLinearBekMergeIDs,
+            rootQualifiedIdentity: rootQualifiedIdentity
+        )
+    }
 
     // Rebased keeps the log dense enough to scan dozens of commits at once.
     // The old 58pt rows made the graph look like a card list and diverged
@@ -175,49 +193,35 @@ struct LogGraphView: View {
         let kind: RefKind
     }
 
-    private var maxLane: Int {
-        commits.reduce(0) { result, commit in
-            let ownLane = Int(commit.lane)
-            let parentLane = commit.parentLanes.map(Int.init).max() ?? 0
-            return max(result, ownLane, parentLane)
-        }
-    }
-
     /// 留出左右边距，lane 数增多时只在极端历史上轻微压缩 lane 间距。
-    private var graphWidth: CGFloat {
+    /// `maxLane` 现在随图模型一起缓存，不再每次 body 求值都对全部
+    /// 提交做一次 reduce。
+    private func graphWidth(maxLane: Int) -> CGFloat {
         min(
             maximumGraphWidth,
-            max(120, CGFloat(maxLane + 1) * effectiveLaneWidth + 28)
+            max(120, CGFloat(maxLane + 1) * effectiveLaneWidth(maxLane: maxLane) + 28)
         )
     }
 
-    private var effectiveLaneWidth: CGFloat {
+    private func effectiveLaneWidth(maxLane: Int) -> CGFloat {
         max(
             8,
             min(laneWidth, (maximumGraphWidth - 32) / CGFloat(maxLane + 1))
         )
     }
 
-    private var renderRange: Range<Int> {
-        0..<commits.count
-    }
-
     var body: some View {
-        // Resolve graph metrics once per graph update. Reading the computed
-        // graphWidth from every row makes SwiftUI reduce the entire commit
-        // list once per row, which is very noticeable on a large history.
-        let linearBekController = LinearBekGraphController(
-            commits: commits,
-            collapseAll: collapseGraph,
-            expandedMergeIDs: expandedLinearBekMergeIDs,
-            collapsedMergeIDs: collapsedLinearBekMergeIDs,
-            identity: commitIdentity
-        )
-        let linearBekGraph = linearBekController.graph
+        // The graph model is memoized across body evaluations (see
+        // resolvedLinearBekGraph): it is only rebuilt when the commit list
+        // or the collapse state actually changes, not on every hover,
+        // selection, or scroll tick.
+        let resolvedGraph = resolvedLinearBekGraph()
+        let linearBekGraph = resolvedGraph.controller.graph
         // LinearBek collapses edges, not the graph column. The gutter remains
         // interactive so a merge node or dotted edge can be restored.
-        let layoutGraphWidth = graphWidth
+        let layoutGraphWidth = graphWidth(maxLane: resolvedGraph.maxLane)
         let layoutGraphHeight = max(rowHeight, CGFloat(commits.count) * rowHeight)
+        let laneSpacing = effectiveLaneWidth(maxLane: resolvedGraph.maxLane)
 
         // A ScrollView directly inside the resizable tool window can be
         // measured with an unbounded height. In that case SwiftUI lays out
@@ -259,6 +263,21 @@ struct LogGraphView: View {
             let layoutContentHeight = layoutGraphHeight + (hasMore ? 36 : 0)
             let verticalViewportHeight = max(0, viewport.size.height - columnHeaderHeight)
 
+            // The Canvas and the graph hit-target overlays only cover a
+            // window around the visible rows instead of the entire history.
+            // The old `renderRange` was hardcoded to `0..<commits.count`,
+            // which forced SwiftUI to create one hit-target view per graph
+            // edge and node for the whole repository and made the Canvas
+            // re-stroke every edge on each hover highlight.
+            let visibleRowCount = max(1, Int(ceil(verticalViewportHeight / rowHeight)) + 1)
+            let renderWindowBuffer = max(visibleRowCount, 32)
+            let firstVisibleRow = min(max(0, scrolledRowID ?? 0), max(0, commits.count - 1))
+            let renderWindowLower = max(0, firstVisibleRow - renderWindowBuffer)
+            let renderWindowUpper = min(commits.count, firstVisibleRow + visibleRowCount + renderWindowBuffer)
+            let renderWindow = renderWindowLower..<renderWindowUpper
+            let renderWindowOriginY = CGFloat(renderWindowLower) * rowHeight
+            let renderWindowHeight = max(rowHeight, CGFloat(renderWindow.count) * rowHeight)
+
             ScrollView(.horizontal, showsIndicators: true) {
                 VStack(spacing: 0) {
                     logColumnHeader(
@@ -273,19 +292,22 @@ struct LogGraphView: View {
                             Canvas { context, _ in
                                 drawGraph(
                                     context: &context,
-                                    size: CGSize(width: layoutGraphWidth, height: layoutGraphHeight),
-                                    rows: renderRange,
+                                    size: CGSize(width: layoutGraphWidth, height: renderWindowHeight),
+                                    rows: renderWindow,
+                                    originY: renderWindowOriginY,
+                                    laneSpacing: laneSpacing,
+                                    commitIDs: resolvedGraph.commitIDs,
                                     graph: linearBekGraph,
                                     highlight: hoveredLinearBekHighlight
                                 )
                             }
-                            .frame(width: layoutGraphWidth, height: layoutGraphHeight)
+                            .frame(width: layoutGraphWidth, height: renderWindowHeight)
+                            .offset(y: renderWindowOriginY)
                             .allowsHitTesting(false)
 
                             LazyVStack(spacing: 0) {
                                 ForEach(commits.indices, id: \.self) { index in
                                     graphRow(
-                                        index: index,
                                         commit: commits[index],
                                         graphWidth: layoutGraphWidth,
                                         commitColumnWidth: layoutCommitColumnWidth,
@@ -293,8 +315,8 @@ struct LogGraphView: View {
                                         visibleColumns: visibleColumns,
                                         showTagNames: showTagNames,
                                         alignLabels: alignLabels,
-                                        linearBekGraph: linearBekGraph,
-                                        linearBekController: linearBekController
+                                        rowAction: linearBekGraph.rowAction(at: index),
+                                        onRowGraphAction: applyLinearBekRowAction
                                     )
                                     .onAppear {
                                         // Rebased fetches the next log block as
@@ -327,27 +349,39 @@ struct LogGraphView: View {
                                         Spacer()
                                     }
                                     .frame(width: layoutContentWidth, height: 36)
+                                    // Keep the pagination row inside the
+                                    // Int identity space so the render
+                                    // window stays anchored at the end of
+                                    // the history when it becomes the
+                                    // topmost scroll target.
+                                    .id(commits.count)
                                 }
                             }
+                            .scrollTargetLayout()
 
                             linearBekEdgeHitTargets(
                                 graph: linearBekGraph,
-                                controller: linearBekController,
-                                rows: renderRange,
+                                rows: renderWindow,
+                                originY: renderWindowOriginY,
+                                laneSpacing: laneSpacing,
                                 graphWidth: layoutGraphWidth,
-                                height: layoutGraphHeight
+                                height: renderWindowHeight
                             )
+                            .offset(y: renderWindowOriginY)
 
                             linearBekNodeHitTargets(
                                 graph: linearBekGraph,
-                                controller: linearBekController,
-                                rows: renderRange,
+                                rows: renderWindow,
+                                originY: renderWindowOriginY,
+                                laneSpacing: laneSpacing,
                                 graphWidth: layoutGraphWidth,
-                                height: layoutGraphHeight
+                                height: renderWindowHeight
                             )
+                            .offset(y: renderWindowOriginY)
                         }
                         .frame(width: layoutContentWidth, height: layoutContentHeight, alignment: .topLeading)
                     }
+                    .scrollPosition(id: $scrolledRowID)
                     .frame(width: layoutContentWidth, height: verticalViewportHeight)
                 }
                 .frame(width: layoutContentWidth, height: viewport.size.height, alignment: .top)
@@ -355,12 +389,11 @@ struct LogGraphView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .frame(minHeight: 0, maxHeight: .infinity)
-        .onChange(of: commits.map(\.id)) { _, _ in
+        .onChange(of: ObjectIdentifier(resolvedGraph)) { _, _ in
             hoveredLinearBekHighlight = nil
             hoveredLinearBekElement = nil
-            let mergeIDs = Set(commits.filter { $0.parentIds.count == 2 }.map(\.id))
-            expandedLinearBekMergeIDs.formIntersection(mergeIDs)
-            collapsedLinearBekMergeIDs.formIntersection(mergeIDs)
+            expandedLinearBekMergeIDs.formIntersection(resolvedGraph.mergeIDs)
+            collapsedLinearBekMergeIDs.formIntersection(resolvedGraph.mergeIDs)
         }
         .onChange(of: collapseGraph) { _, _ in
             // The menu toggle is the product's global Collapse Graph action.
@@ -374,13 +407,7 @@ struct LogGraphView: View {
         }
         .onChange(of: graphCommand) { _, command in
             guard let command else { return }
-            let controller = LinearBekGraphController(
-                commits: commits,
-                collapseAll: collapseGraph,
-                expandedMergeIDs: expandedLinearBekMergeIDs,
-                collapsedMergeIDs: collapsedLinearBekMergeIDs,
-                identity: commitIdentity
-            )
+            let controller = resolvedLinearBekGraph().controller
             let answer = controller.perform(
                 LinearBekGraphAction(
                     type: command.action,
@@ -467,7 +494,6 @@ struct LogGraphView: View {
 
     @ViewBuilder
     private func graphRow(
-        index: Int,
         commit: CommitInfo,
         graphWidth: CGFloat,
         commitColumnWidth: CGFloat,
@@ -475,8 +501,8 @@ struct LogGraphView: View {
         visibleColumns: [LogColumnID],
         showTagNames: Bool,
         alignLabels: Bool,
-        linearBekGraph: LinearBekGraphModel,
-        linearBekController: LinearBekGraphController
+        rowAction: LinearBekRowAction?,
+        onRowGraphAction: @escaping (LinearBekRowAction) -> Void
     ) -> some View {
         let identity = commitIdentity(commit)
         let isCherryPicked = isCherryPickedCommitHighlighted(
@@ -519,9 +545,9 @@ struct LogGraphView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("选择提交 \(commit.shortId)")
 
-            if let action = linearBekGraph.rowAction(at: index) {
+            if let action = rowAction {
                 Button {
-                    applyLinearBekAction(action, controller: linearBekController)
+                    onRowGraphAction(action)
                 } label: {
                     Image(systemName: action.isCollapse ? "chevron.down.circle.fill" : "chevron.up.circle.fill")
                         .font(.system(size: 11, weight: .semibold))
@@ -914,11 +940,16 @@ struct LogGraphView: View {
         }
     }
 
+    /// Hit targets only exist for the rows of the current render window, so
+    /// the overlay stays small no matter how large the history is. Point
+    /// coordinates are local to the window (`originY`); the caller positions
+    /// the overlay at the window's vertical offset.
     @ViewBuilder
     private func linearBekNodeHitTargets(
         graph: LinearBekGraphModel,
-        controller: LinearBekGraphController,
         rows: Range<Int>,
+        originY: CGFloat,
+        laneSpacing: CGFloat,
         graphWidth: CGFloat,
         height: CGFloat
     ) -> some View {
@@ -929,19 +960,12 @@ struct LogGraphView: View {
                     .fill(Color.clear)
                     .frame(width: 18, height: 18)
                     .contentShape(Circle())
-                    .position(point(lane: commits[row].lane, row: row))
+                    .position(point(lane: commits[row].lane, row: row, laneSpacing: laneSpacing, originY: originY))
                     .onHover { isHovering in
-                        updateHoveredLinearBekElement(
-                            element,
-                            isHovering: isHovering,
-                            controller: controller
-                        )
+                        updateHoveredLinearBekElement(element, isHovering: isHovering)
                     }
                     .onTapGesture {
-                        applyLinearBekAction(
-                            graph.action(for: element),
-                            controller: controller
-                        )
+                        applyLinearBekElement(element)
                     }
             }
         }
@@ -951,40 +975,44 @@ struct LogGraphView: View {
     @ViewBuilder
     private func linearBekEdgeHitTargets(
         graph: LinearBekGraphModel,
-        controller: LinearBekGraphController,
         rows: Range<Int>,
+        originY: CGFloat,
+        laneSpacing: CGFloat,
         graphWidth: CGFloat,
         height: CGFloat
     ) -> some View {
+        // Keep every edge whose span crosses the window, not only edges with
+        // both endpoints inside it: a long edge must stay clickable while it
+        // passes through the visible gutter.
         ZStack {
-            ForEach(graph.visibleEdges.filter { rows.contains($0.upRow) && rows.contains($0.downRow) }, id: \.self) { edge in
+            ForEach(graph.visibleEdges.filter {
+                edgeSpans($0.upRow, $0.downRow, intersect: rows) && (showLongEdges || rows.contains($0.downRow))
+            }, id: \.self) { edge in
                 graphEdgeHitTarget(
                     element: .normal(edge),
-                    start: point(lane: edge.fromLane, row: edge.upRow),
-                    target: point(lane: edge.toLane, row: edge.downRow),
-                    graph: graph,
-                    controller: controller
+                    start: point(lane: edge.fromLane, row: edge.upRow, laneSpacing: laneSpacing, originY: originY),
+                    target: point(lane: edge.toLane, row: edge.downRow, laneSpacing: laneSpacing, originY: originY)
                 )
             }
-            ForEach(graph.dottedEdges.filter { rows.contains($0.upRow) && rows.contains($0.downRow) }, id: \.self) { edge in
+            ForEach(graph.dottedEdges.filter { edgeSpans($0.upRow, $0.downRow, intersect: rows) }, id: \.self) { edge in
                 graphEdgeHitTarget(
                     element: .dotted(edge),
-                    start: point(lane: edge.fromLane, row: edge.upRow),
-                    target: point(lane: edge.toLane, row: edge.downRow),
-                    graph: graph,
-                    controller: controller
+                    start: point(lane: edge.fromLane, row: edge.upRow, laneSpacing: laneSpacing, originY: originY),
+                    target: point(lane: edge.toLane, row: edge.downRow, laneSpacing: laneSpacing, originY: originY)
                 )
             }
         }
         .frame(width: graphWidth, height: height)
     }
 
+    private func edgeSpans(_ upRow: Int, _ downRow: Int, intersect rows: Range<Int>) -> Bool {
+        min(upRow, downRow) < rows.upperBound && max(upRow, downRow) >= rows.lowerBound
+    }
+
     private func graphEdgeHitTarget(
         element: LinearBekGraphElement,
         start: CGPoint,
-        target: CGPoint,
-        graph: LinearBekGraphModel,
-        controller: LinearBekGraphController
+        target: CGPoint
     ) -> some View {
         let hitStyle = StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round)
         let path = graphEdgePath(start: start, target: target)
@@ -992,24 +1020,21 @@ struct LogGraphView: View {
             .stroke(Color.clear, style: hitStyle)
             .contentShape(path.strokedPath(hitStyle))
             .onHover { isHovering in
-                updateHoveredLinearBekElement(
-                    element,
-                    isHovering: isHovering,
-                    controller: controller
-                )
+                updateHoveredLinearBekElement(element, isHovering: isHovering)
             }
             .onTapGesture {
-                applyLinearBekAction(graph.action(for: element), controller: controller)
+                applyLinearBekElement(element)
             }
     }
 
+    /// Event handlers resolve the cached controller at event time; hover and
+    /// tap must never rebuild the graph just to answer an action.
     private func updateHoveredLinearBekElement(
         _ element: LinearBekGraphElement,
-        isHovering: Bool,
-        controller: LinearBekGraphController
+        isHovering: Bool
     ) {
         if isHovering {
-            let answer = controller.perform(
+            let answer = resolvedLinearBekGraph().controller.perform(
                 LinearBekGraphAction(type: .mouseOver, affectedElement: element)
             )
             hoveredLinearBekElement = element
@@ -1018,6 +1043,15 @@ struct LogGraphView: View {
             hoveredLinearBekElement = nil
             hoveredLinearBekHighlight = nil
         }
+    }
+
+    private func applyLinearBekElement(_ element: LinearBekGraphElement) {
+        let controller = resolvedLinearBekGraph().controller
+        applyLinearBekAction(controller.graph.action(for: element), controller: controller)
+    }
+
+    private func applyLinearBekRowAction(_ action: LinearBekRowAction) {
+        applyLinearBekAction(action, controller: resolvedLinearBekGraph().controller)
     }
 
     private func applyLinearBekAction(
@@ -1255,10 +1289,12 @@ struct LogGraphView: View {
         selection = identity
     }
 
-    private func point(lane: UInt32, row: Int) -> CGPoint {
+    /// Graph-gutter coordinates. `originY` converts absolute row positions
+    /// into render-window-local ones; pass `0` for the full-history space.
+    private func point(lane: UInt32, row: Int, laneSpacing: CGFloat, originY: CGFloat = 0) -> CGPoint {
         CGPoint(
-            x: 16 + CGFloat(lane) * effectiveLaneWidth,
-            y: CGFloat(row) * rowHeight + rowHeight / 2
+            x: 16 + CGFloat(lane) * laneSpacing,
+            y: CGFloat(row) * rowHeight + rowHeight / 2 - originY
         )
     }
 
@@ -1298,24 +1334,26 @@ struct LogGraphView: View {
         return path
     }
 
+    /// Draws only the rows of the current render window. `size` is the
+    /// window height and all points are emitted in window-local coordinates
+    /// (`originY`); edges entering from above or leaving below the window
+    /// are clipped by the Canvas automatically.
     private func drawGraph(
         context: inout GraphicsContext,
         size: CGSize,
         rows: Range<Int>,
+        originY: CGFloat,
+        laneSpacing: CGFloat,
+        commitIDs: Set<String>,
         graph: LinearBekGraphModel,
         highlight: LinearBekGraphHighlight?
     ) {
-        let indexes = Dictionary(uniqueKeysWithValues: rows.map { ($0, commits[$0].id) }.map { ($1, $0) })
-
-        for edge in graph.visibleEdges where rows.contains(edge.upRow) {
+        for edge in graph.visibleEdges where edgeSpans(edge.upRow, edge.downRow, intersect: rows) {
             guard rows.contains(edge.downRow) || showLongEdges else { continue }
-            let start = point(lane: edge.fromLane, row: edge.upRow)
-            let target = rows.contains(edge.downRow)
-                ? point(lane: edge.toLane, row: edge.downRow)
-                : CGPoint(
-                    x: 16 + CGFloat(edge.toLane) * effectiveLaneWidth,
-                    y: size.height
-                )
+            let start = point(lane: edge.fromLane, row: edge.upRow, laneSpacing: laneSpacing, originY: originY)
+            // Preserve the full curve so drawing and hit testing agree as
+            // the render window moves. Canvas clips the offscreen segment.
+            let target = point(lane: edge.toLane, row: edge.downRow, laneSpacing: laneSpacing, originY: originY)
             strokeGraphEdge(
                 context: &context,
                 start: start,
@@ -1332,11 +1370,11 @@ struct LogGraphView: View {
         }
 
         for edge in graph.dottedEdges {
-            guard rows.contains(edge.upRow), rows.contains(edge.downRow) else { continue }
+            guard edgeSpans(edge.upRow, edge.downRow, intersect: rows) else { continue }
             strokeGraphEdge(
                 context: &context,
-                start: point(lane: edge.fromLane, row: edge.upRow),
-                target: point(lane: edge.toLane, row: edge.downRow),
+                start: point(lane: edge.fromLane, row: edge.upRow, laneSpacing: laneSpacing, originY: originY),
+                target: point(lane: edge.toLane, row: edge.downRow, laneSpacing: laneSpacing, originY: originY),
                 color: highlight?.dottedEdges.contains(edge) == true
                     ? .primary
                     : color(for: edge.toLane),
@@ -1353,16 +1391,19 @@ struct LogGraphView: View {
         // page. Keep that continuation lane visible to the viewport edge.
         for index in rows {
             let commit = commits[index]
-            let start = point(lane: commit.lane, row: index)
+            let start = point(lane: commit.lane, row: index, laneSpacing: laneSpacing, originY: originY)
             for (parentIndex, parentId) in commit.parentIds.enumerated() {
-                guard indexes[parentId] == nil else { continue }
+                let parentIdentity = logCommitDisplayIdentity(
+                    repositoryPath: commit.repositoryPath, id: parentId, aggregate: rootQualifiedIdentity
+                )
+                guard !commitIDs.contains(parentIdentity) else { continue }
                 guard parentIndex < commit.parentLanes.count, showLongEdges else { continue }
                 let parentLane = commit.parentLanes[parentIndex]
                 strokeGraphEdge(
                     context: &context,
                     start: start,
                     target: CGPoint(
-                        x: 16 + CGFloat(parentLane) * effectiveLaneWidth,
+                        x: 16 + CGFloat(parentLane) * laneSpacing,
                         y: size.height
                     ),
                     color: color(for: parentLane),

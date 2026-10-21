@@ -881,6 +881,62 @@ final class LinearBekGraphTests: XCTestCase {
         XCTAssertEqual(Set(graph.normalEdges.map(\.downRow)), Set([2, 3]))
     }
 
+    func testGraphCacheReusesSnapshotForUnchangedAndEqualHistory() {
+        let cache = LinearBekGraphCache()
+        let commits = simpleMergeHistory()
+        let first = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [])
+        for _ in 0..<100 {
+            XCTAssertTrue(cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: []) === first)
+        }
+        let copy = commits.map { $0 }
+        XCTAssertTrue(cache.resolve(commits: copy, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: []) === first)
+    }
+
+    func testGraphCacheInvalidatesCollapseAndHistoryChanges() {
+        let cache = LinearBekGraphCache()
+        var commits = simpleMergeHistory()
+        let first = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [])
+        let collapsed = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: ["M"])
+        XCTAssertFalse(first === collapsed)
+        XCTAssertEqual(collapsed.controller.graph.nodeAction(at: 0), .expand("M"))
+        let expanded = cache.resolve(commits: commits, collapseAll: true, expandedMergeIDs: ["M"], collapsedMergeIDs: [])
+        XCTAssertEqual(expanded.controller.graph.nodeAction(at: 0), .collapse("M"))
+        commits[0].lane = 8
+        commits[0].parentLanes = [9, 10]
+        let changed = cache.resolve(commits: commits, collapseAll: true, expandedMergeIDs: ["M"], collapsedMergeIDs: [])
+        XCTAssertFalse(expanded === changed)
+        XCTAssertEqual(changed.maxLane, 10)
+        commits.removeLast()
+        let paged = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [])
+        XCTAssertFalse(paged.commitIDs.contains("B"))
+    }
+
+    func testGraphCacheChangesIdentityAndPrunesStaleMergeActions() {
+        let cache = LinearBekGraphCache()
+        var commits = simpleMergeHistory()
+        for index in commits.indices { commits[index].repositoryPath = "/repo" }
+        let single = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [])
+        let mergeID = logCommitDisplayIdentity(repositoryPath: "/repo", id: "M", aggregate: true)
+        let aggregate = cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [mergeID, "gone"], rootQualifiedIdentity: true)
+        XCTAssertFalse(single === aggregate)
+        XCTAssertEqual(aggregate.controller.graph.nodeAction(at: 0), .expand(mergeID))
+        XCTAssertEqual(aggregate.controller.collapsedMergeIDs, [mergeID])
+        XCTAssertTrue(cache.resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [mergeID], rootQualifiedIdentity: true) === aggregate)
+        XCTAssertEqual(aggregate.controller.perform(rowAction: .expand(mergeID)).collapsedMergeIDs, [])
+    }
+
+    func testGraphCacheSeparatesSameCommitAcrossRoots() {
+        let commits = [
+            makeRootCommit("same", repositoryPath: "/one", parents: ["parent"]),
+            makeRootCommit("same", repositoryPath: "/two", parents: ["parent"]),
+            makeRootCommit("parent", repositoryPath: "/one", parents: []),
+            makeRootCommit("parent", repositoryPath: "/two", parents: [])
+        ]
+        let graph = LinearBekGraphCache().resolve(commits: commits, collapseAll: false, expandedMergeIDs: [], collapsedMergeIDs: [], rootQualifiedIdentity: true)
+        XCTAssertEqual(graph.commitIDs.count, 4)
+        XCTAssertEqual(Set(graph.controller.graph.normalEdges.map(\.downRow)), [2, 3])
+    }
+
     private func simpleMergeHistory() -> [CommitInfo] {
         [
             makeCommit("M", parents: ["L", "R"]),
