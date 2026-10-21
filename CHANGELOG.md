@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.20 - 2026-10-21
+
+Patch release: stop the repository watcher from retriggering its own refresh.
+`git status` creates `.git/index.lock` to refresh stat data; the file watcher
+reported that transient lock as a metadata change, so the refresh that ran the
+status produced the event that scheduled the next refresh. An idle repository
+therefore kept the app at roughly 65-70% CPU with a full SwiftUI re-layout
+twice per second.
+
+- Run read-only status queries with `GIT_OPTIONAL_LOCKS=0` so they cannot write
+  the index (worktree status, ignored-path expansion, conflict probes, and
+  nested submodule checks)
+- Ignore transient Git metadata lock files (`*.lock`) in the repository file
+  watcher as a fallback for external Git versions
+- Add a command-environment unit test and watcher tests for the contract
+
 ## 1.0.19 - 2026-10-21
 
 Feature release: complete the Git LFS integration (track, status marking,

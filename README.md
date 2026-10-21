@@ -116,7 +116,7 @@ signed build is required. If you configured the Team in Xcode, the launcher pres
 setting when regenerating the project; you can also pass it explicitly with
 `ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
 
-For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.18`. The
+For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.20`. The
 default output is explicitly unsigned and arm64; signing and notarization
 require the external Apple Developer credentials described in
 [RELEASE.md](RELEASE.md).
