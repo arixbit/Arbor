@@ -25,9 +25,7 @@ fn lfs_repo() -> Option<TestRepo> {
         return None;
     }
     repo.open().lfs_install().unwrap();
-    repo.open()
-        .lfs_track(vec!["*.bin".to_string()])
-        .unwrap();
+    repo.open().lfs_track(vec!["*.bin".to_string()]).unwrap();
     repo.git(&["add", ".gitattributes"]);
     repo.git(&["commit", "-qm", "track lfs"]);
     Some(repo)
@@ -62,9 +60,7 @@ fn track_and_untrack_rewrite_gitattributes() {
     let attributes = repo.read(".gitattributes");
     assert!(attributes.contains("filter=lfs"), "{attributes}");
 
-    repo.open()
-        .lfs_untrack(vec!["*.bin".to_string()])
-        .unwrap();
+    repo.open().lfs_untrack(vec!["*.bin".to_string()]).unwrap();
     assert!(!repo.read(".gitattributes").contains("*.bin"));
     assert!(repo.open().lfs_tracked_patterns().unwrap().is_empty());
 }
@@ -116,7 +112,10 @@ fn path_states_distinguish_pointer_from_content() {
     assert!(!plain.tracked);
     assert!(!plain.pointer);
 
-    let pending = states.iter().find(|item| item.path == "pending.bin").unwrap();
+    let pending = states
+        .iter()
+        .find(|item| item.path == "pending.bin")
+        .unwrap();
     assert!(pending.tracked);
     assert!(pending.pointer, "unsmudged pointer must be flagged");
 }
@@ -163,7 +162,12 @@ fn push_pull_round_trip_through_local_remote() {
 
     let cancel = GitCancelHandle::new();
     repo.open()
-        .lfs_push(Some("origin".into()), true, CredentialBroker::new(), Arc::clone(&cancel))
+        .lfs_push(
+            Some("origin".into()),
+            true,
+            CredentialBroker::new(),
+            Arc::clone(&cancel),
+        )
         .unwrap();
 
     // 克隆出来的仓库里 pointer 未 smudge，需要显式 pull + checkout。
@@ -173,14 +177,8 @@ fn push_pull_round_trip_through_local_remote() {
         clone_dir.path(),
         &["clone", "-q", &origin_url, clone_path.to_str().unwrap()],
     );
-    common::git(
-        &clone_path,
-        &["config", "user.name", "Arbor Test"],
-    );
-    common::git(
-        &clone_path,
-        &["config", "user.email", "test@arbor.local"],
-    );
+    common::git(&clone_path, &["config", "user.name", "Arbor Test"]);
+    common::git(&clone_path, &["config", "user.email", "test@arbor.local"]);
 
     let cloned = arbor_engine::open_repository(clone_path.to_string_lossy().into_owned()).unwrap();
     let files = cloned.lfs_files(false).unwrap();
@@ -189,7 +187,12 @@ fn push_pull_round_trip_through_local_remote() {
 
     let cancel = GitCancelHandle::new();
     let pulled = cloned
-        .lfs_pull(Some("origin".into()), Vec::new(), CredentialBroker::new(), Arc::clone(&cancel))
+        .lfs_pull(
+            Some("origin".into()),
+            Vec::new(),
+            CredentialBroker::new(),
+            Arc::clone(&cancel),
+        )
         .unwrap();
     // 克隆出来的仓库没有 filter 配置，pull 必须先补一次 install --local，
     // 否则 git-lfs 会静默跳过检出。
@@ -202,7 +205,10 @@ fn push_pull_round_trip_through_local_remote() {
         !states[0].pointer,
         "pull must materialise the working tree file"
     );
-    assert_eq!(std::fs::read(clone_path.join("payload.bin")).unwrap(), payload);
+    assert_eq!(
+        std::fs::read(clone_path.join("payload.bin")).unwrap(),
+        payload
+    );
 }
 
 #[test]
@@ -215,7 +221,13 @@ fn fetch_is_cancellable_and_reports_result() {
     let cancel = GitCancelHandle::new();
     let result = repo
         .open()
-        .lfs_fetch(None, false, Vec::new(), CredentialBroker::new(), Arc::clone(&cancel))
+        .lfs_fetch(
+            None,
+            false,
+            Vec::new(),
+            CredentialBroker::new(),
+            Arc::clone(&cancel),
+        )
         .unwrap_or_else(|error| panic!("fetch failed: {error}"));
     // 没有 remote 时 git-lfs 仍然返回成功（本地对象已存在），结果可以为空。
     let _ = result.output;
@@ -241,7 +253,12 @@ fn pull_single_path_materialises_only_that_file() {
     repo.git(&["push", "-q", "-u", "origin", "main"]);
     let cancel = GitCancelHandle::new();
     repo.open()
-        .lfs_push(Some("origin".into()), true, CredentialBroker::new(), Arc::clone(&cancel))
+        .lfs_push(
+            Some("origin".into()),
+            true,
+            CredentialBroker::new(),
+            Arc::clone(&cancel),
+        )
         .unwrap();
 
     let clone_dir = tempfile::tempdir().unwrap();

@@ -18,10 +18,7 @@ fn write_executable(path: &std::path::Path, body: &str) {
     std::fs::set_permissions(path, permissions).unwrap();
 }
 
-fn find<'a>(
-    hooks: &'a [arbor_engine::GitHookInfo],
-    name: &str,
-) -> &'a arbor_engine::GitHookInfo {
+fn find<'a>(hooks: &'a [arbor_engine::GitHookInfo], name: &str) -> &'a arbor_engine::GitHookInfo {
     hooks.iter().find(|hook| hook.name == name).expect(name)
 }
 
@@ -50,7 +47,10 @@ fn install_sample_then_disable_and_enable() {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     write_executable(&path.with_extension("sample"), "#!/bin/sh\nexit 0\n");
 
-    let installed = repo.open().install_git_hook_sample("pre-commit".into()).unwrap();
+    let installed = repo
+        .open()
+        .install_git_hook_sample("pre-commit".into())
+        .unwrap();
     assert_eq!(installed.state, GitHookState::Enabled);
     assert_eq!(
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o111,
@@ -153,7 +153,9 @@ fn invalid_hook_names_are_rejected() {
         );
     }
     assert!(
-        repo.open().git_hook_contents("../etc/passwd".into()).is_err(),
+        repo.open()
+            .git_hook_contents("../etc/passwd".into())
+            .is_err(),
         "reading outside the hooks directory must fail"
     );
 }

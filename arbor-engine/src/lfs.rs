@@ -133,7 +133,8 @@ fn parse_version(stdout: &str) -> Option<String> {
 
 fn looks_like_missing_lfs(stderr: &str) -> bool {
     let lower = stderr.to_ascii_lowercase();
-    lower.contains("'lfs' is not a git command") || lower.contains("git: 'lfs' is not a git command")
+    lower.contains("'lfs' is not a git command")
+        || lower.contains("git: 'lfs' is not a git command")
 }
 
 /// 探测 `git lfs` 可用性。任何失败都折叠成 `installed = false`，让 UI 能给出
@@ -275,7 +276,8 @@ pub(crate) fn lfs_path_states(
     Ok(attributes
         .into_iter()
         .map(|attribute| {
-            let tracked = matches!(&attribute.filter, AttributeValue::Value { value } if value == "lfs");
+            let tracked =
+                matches!(&attribute.filter, AttributeValue::Value { value } if value == "lfs");
             let pointer = tracked && worktree_file_is_pointer(workdir, &attribute.path);
             LfsPathState {
                 path: attribute.path,
@@ -323,9 +325,7 @@ fn filter_config(workdir: &Path, key: &str) -> bool {
         .args(["--get".to_string(), key.to_string()])
         .working_dir(workdir);
     match gitprocess::run_to_completion(&spec) {
-        Ok(outcome) => {
-            outcome.success() && outcome.stdout.to_ascii_lowercase().contains("git-lfs")
-        }
+        Ok(outcome) => outcome.success() && outcome.stdout.to_ascii_lowercase().contains("git-lfs"),
         Err(_) => false,
     }
 }
@@ -547,7 +547,11 @@ impl Repository {
         if all_revisions {
             args.push("--all".to_string());
         }
-        args.push(remote.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| "origin".into()));
+        args.push(
+            remote
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "origin".into()),
+        );
         run_lfs_action_with_auth(&workdir, args, &broker, Some(cancel.token()))
     }
 

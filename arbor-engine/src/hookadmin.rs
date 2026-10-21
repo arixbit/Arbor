@@ -209,7 +209,11 @@ fn list_hooks(workdir: &Path, git_dir: &Path) -> Result<Vec<GitHookInfo>, Engine
         .collect())
 }
 
-fn hook_contents(workdir: &Path, git_dir: &Path, name: &str) -> Result<GitHookContents, EngineError> {
+fn hook_contents(
+    workdir: &Path,
+    git_dir: &Path,
+    name: &str,
+) -> Result<GitHookContents, EngineError> {
     validate_hook_name(name)?;
     let path = hooks_directory(workdir, git_dir).join(name);
     let metadata = std::fs::metadata(&path).map_err(EngineError::from_gix)?;
@@ -295,19 +299,11 @@ impl Repository {
 
     /// 读取 hook 内容。
     pub fn git_hook_contents(&self, name: String) -> Result<GitHookContents, EngineError> {
-        hook_contents(
-            &hook_workdir(self),
-            &PathBuf::from(self.git_dir()),
-            &name,
-        )
+        hook_contents(&hook_workdir(self), &PathBuf::from(self.git_dir()), &name)
     }
 
     /// 保存 hook 内容；文件不存在时创建并加可执行位。
-    pub fn save_git_hook(
-        &self,
-        name: String,
-        content: String,
-    ) -> Result<GitHookInfo, EngineError> {
+    pub fn save_git_hook(&self, name: String, content: String) -> Result<GitHookInfo, EngineError> {
         validate_hook_name(&name)?;
         let workdir = hook_workdir(self);
         let git_dir = PathBuf::from(self.git_dir());
