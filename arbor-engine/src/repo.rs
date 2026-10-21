@@ -4860,6 +4860,7 @@ fn restore_removed_submodule_post_state(
 
 fn nested_worktree_has_changes(path: &Path) -> Result<bool, EngineError> {
     let output = crate::gitprocess::git_command_for_working_dir(path)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .args([
             "status",
             "--porcelain",
@@ -11511,6 +11512,7 @@ impl Repository {
             // dirty:子模块工作区有未提交变更
             let dirty = workdir.join(&path).join(".git").exists()
                 && crate::gitprocess::git_command_for_working_dir(workdir.join(&path))
+                    .env("GIT_OPTIONAL_LOCKS", "0")
                     .args(["status", "--porcelain"])
                     .current_dir(workdir.join(&path))
                     .output()
@@ -11707,6 +11709,7 @@ impl Repository {
         });
         let dirty = initialized
             && crate::gitprocess::git_command_for_working_dir(&nested_path)
+                .env("GIT_OPTIONAL_LOCKS", "0")
                 .args(["status", "--porcelain"])
                 .current_dir(&nested_path)
                 .output()
@@ -23141,6 +23144,7 @@ fn system_rebase_outcome(
         });
     }
     let status = crate::gitprocess::git_command_for_working_dir(workdir)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .args(["status", "--porcelain=v1", "-z"])
         .current_dir(workdir)
         .output()
@@ -23183,6 +23187,7 @@ fn prepare_continue_system_rebase_command(
     // native continue requires the resolved tree in the index, so stage the
     // explicit edit result; unresolved conflict entries are left untouched.
     let status = crate::gitprocess::git_command_for_working_dir(workdir)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .args(["status", "--porcelain=v1"])
         .current_dir(workdir)
         .output()

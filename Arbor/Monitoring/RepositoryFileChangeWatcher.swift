@@ -281,6 +281,11 @@ private func repositoryFileChangeCallback(
             oldPath: dirtyPath.oldPath
         )
     }.filter { dirtyPath in
+        !repositoryShouldIgnoreGitMetadataEvent(
+            scope: context.scope,
+            path: dirtyPath.path
+        )
+    }.filter { dirtyPath in
         !context.excludedRootPaths.contains { excludedPath in
             let prefix = excludedPath.hasSuffix("/") ? excludedPath : "\(excludedPath)/"
             return dirtyPath.path == excludedPath || dirtyPath.path.hasPrefix(prefix)

@@ -401,6 +401,21 @@ pub(crate) fn git_command_for_working_dir(
     std::process::Command::new(git_executable_for_working_dir(Some(working_dir.as_ref())))
 }
 
+/// Creates a read-only Git command that must not take optional locks.
+///
+/// `git status` normally takes `.git/index.lock` to persist refreshed stat
+/// information, even when nothing changed. The repository watcher treats that
+/// transient lock as an external metadata change, so an ordinary refresh would
+/// start the next refresh and keep the app busy forever. Queries that only read
+/// repository state must therefore opt out of optional locks.
+pub(crate) fn read_only_git_command_for_working_dir(
+    working_dir: impl AsRef<std::path::Path>,
+) -> std::process::Command {
+    let mut command = git_command_for_working_dir(working_dir);
+    command.env("GIT_OPTIONAL_LOCKS", "0");
+    command
+}
+
 /// 创建一个使用当前配置 Git 可执行文件的 argv 命令。
 /// 统一入口避免各模块悄悄绕过 Git executable 设置。
 pub(crate) fn git_command() -> std::process::Command {
@@ -1973,5 +1988,21 @@ mod tests {
     fn git_version_detected() {
         let version = git_version().expect("git version");
         assert!(version.starts_with("git version"), "unexpected: {version}");
+    }
+
+    /// The repository watcher treats a transient `.git/index.lock` as a
+    /// metadata change. A read-only status query must therefore opt out of
+    /// optional locks or every refresh would schedule the next one.
+    #[test]
+    fn read_only_status_command_disables_optional_index_locks() {
+        let command = read_only_git_command_for_working_dir(std::env::temp_dir());
+        let value = command
+            .get_envs()
+            .find_map(|(key, value)| {
+                (key.to_string_lossy() == "GIT_OPTIONAL_LOCKS").then_some(value)
+            })
+            .flatten()
+            .map(|value| value.to_string_lossy().into_owned());
+        assert_eq!(value.as_deref(), Some("0"));
     }
 }

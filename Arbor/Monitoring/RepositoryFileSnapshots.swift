@@ -78,6 +78,19 @@ func repositoryShouldIgnoreGeneratedWorktreeEvent(
     return repositoryIsGeneratedWorktreePath(oldPath, rootPath: rootPath)
 }
 
+/// Git's transient lock files never contain user-visible repository state.
+/// A read-only query such as `git status` may briefly create
+/// `.git/index.lock`; delivering that event as a metadata change would start
+/// the same refresh that produced it, again and again. Lock files are only
+/// coordination artifacts, so the watcher drops them.
+func repositoryShouldIgnoreGitMetadataEvent(
+    scope: RepositoryChangeScope,
+    path: String
+) -> Bool {
+    guard scope.contains(.gitMetadata) else { return false }
+    return URL(fileURLWithPath: path).pathExtension == "lock"
+}
+
 /// Captures stable filesystem identities without reading file contents. The
 /// device/inode pair survives an ordinary rename, while independently created
 /// files do not share it. This lets the watcher recover the old endpoint that

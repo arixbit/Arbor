@@ -190,4 +190,77 @@ final class RepositoryFileChangeMonitorTests: XCTestCase {
         try Data("1111111\n".utf8).write(to: refPath)
         await fulfillment(of: [metadataChange], timeout: 5)
     }
+
+    func testGitMetadataLockFilesAreIgnored() {
+        XCTAssertTrue(
+            repositoryShouldIgnoreGitMetadataEvent(
+                scope: .gitMetadata,
+                path: "/tmp/repository/.git/index.lock"
+            )
+        )
+        XCTAssertTrue(
+            repositoryShouldIgnoreGitMetadataEvent(
+                scope: .gitMetadata,
+                path: "/tmp/repository/.git/refs/heads/main.lock"
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGitMetadataEvent(
+                scope: .gitMetadata,
+                path: "/tmp/repository/.git/index"
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGitMetadataEvent(
+                scope: .gitMetadata,
+                path: "/tmp/repository/.git/HEAD"
+            )
+        )
+        XCTAssertFalse(
+            repositoryShouldIgnoreGitMetadataEvent(
+                scope: .worktree,
+                path: "/tmp/repository/notes.lock"
+            )
+        )
+    }
+
+    /// `git status` creates and removes `.git/index.lock` even when it does
+    /// not change the repository. The watcher must not report that transient
+    /// coordination file, or a refresh would keep triggering itself.
+    func testGitLockFileChangesAreNotDeliveredAsMetadataChanges() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ArborGitLockWatcher-\(UUID().uuidString)")
+        let workdir = root.appendingPathComponent("worktree")
+        let gitDir = root.appendingPathComponent("git")
+        try FileManager.default.createDirectory(at: workdir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let lockEvent = expectation(description: #function)
+        lockEvent.isInverted = true
+        var metadataPaths: [String] = []
+        let watcher = RepositoryFileChangeWatcher(
+            workdir: workdir.path,
+            gitDir: gitDir.path
+        ) { event in
+            guard event.scopes.contains(.gitMetadata) else { return }
+            let paths = event.dirtyPaths.map(\.path)
+            metadataPaths.append(contentsOf: paths)
+            if paths.contains(where: { $0.hasSuffix("/index.lock") }) {
+                lockEvent.fulfill()
+            }
+        }
+        watcher.start()
+        defer { watcher.stop() }
+
+        let lock = gitDir.appendingPathComponent("index.lock")
+        try Data().write(to: lock)
+        try await Task.sleep(for: .milliseconds(500))
+        try FileManager.default.removeItem(at: lock)
+        await fulfillment(of: [lockEvent], timeout: 1.5)
+        XCTAssertFalse(
+            metadataPaths.contains { $0.hasSuffix("/index.lock") },
+            "lock path was delivered: \(metadataPaths)"
+        )
+    }
 }

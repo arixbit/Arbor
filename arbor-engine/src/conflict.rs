@@ -474,6 +474,7 @@ pub(crate) fn revert_resolved(repo: &gix::Repository, path: &str) -> Result<(), 
             "status",
         )
         .args(["--porcelain=v1".to_string()])
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .working_dir(workdir);
         let status = crate::gitprocess::run_to_completion(&status_spec)
             .map(|result| format!("{}{}", result.stdout, result.stderr))
@@ -630,6 +631,7 @@ fn has_unmerged_path(repo: &gix::Repository, path: &str) -> Result<bool, EngineE
         "--".to_string(),
         path.to_string(),
     ])
+    .env("GIT_OPTIONAL_LOCKS", "0")
     .working_dir(workdir);
     let outcome = crate::gitprocess::run_to_completion(&spec)?;
     if !outcome.success() {

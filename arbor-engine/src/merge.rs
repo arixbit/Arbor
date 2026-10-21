@@ -442,6 +442,7 @@ pub(crate) fn preflight_gitlink_worktrees(
             "status",
         )
         .args(["--porcelain", "--untracked-files=all"])
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .working_dir(&path);
         let outcome = crate::gitprocess::run_to_completion(&spec)?;
         if !outcome.success() {

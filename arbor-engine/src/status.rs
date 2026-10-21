@@ -130,7 +130,7 @@ fn compute_status_git(
     let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
         message: "status requires a non-bare worktree".into(),
     })?;
-    let mut command = crate::gitprocess::git_command_for_working_dir(workdir);
+    let mut command = crate::gitprocess::read_only_git_command_for_working_dir(workdir);
     command.args([
         "status",
         // Matching mode collapses ignored directories, avoiding an expensive
@@ -177,7 +177,7 @@ fn compute_status_git(
             if !ignored_directory_is_small(workdir, &directory) {
                 continue;
             }
-            let mut expansion = crate::gitprocess::git_command_for_working_dir(workdir);
+            let mut expansion = crate::gitprocess::read_only_git_command_for_working_dir(workdir);
             expansion.args([
                 "status",
                 "--ignored",
@@ -283,7 +283,7 @@ fn map_porcelain_kind(code: u8) -> ChangeKind {
 /// compatibility bridge: gix exposes the normal status stream, but does not
 /// currently expose ignored entries in that stream.
 fn ignored_paths(workdir: &Path) -> Result<Vec<String>, EngineError> {
-    let output = crate::gitprocess::git_command_for_working_dir(workdir)
+    let output = crate::gitprocess::read_only_git_command_for_working_dir(workdir)
         .args([
             "status",
             "--ignored=matching",
