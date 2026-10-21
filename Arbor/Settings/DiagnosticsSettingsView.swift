@@ -9,7 +9,9 @@ struct DiagnosticsSettingsView: View {
     @State private var status = ""
     @State private var showReportConfirmation = false
     @State private var showGpgAgentSettings = false
-    @AppStorage("arbor.autoCheckForUpdates") private var autoCheckForUpdates = false
+    @State private var updateCheckStatus: String?
+    @State private var updateCheckReleaseURL: URL?
+    @StateObject private var updateChecker = AppUpdateChecker.shared
     @AppStorage("arbor.git.useCredentialHelper") private var useCredentialHelper = false
     @AppStorage("arbor.git.autoFetch.v1") private var gitAutoFetch = false
     @AppStorage("arbor.git.externalConversion.v1") private var gitExternalConversionEnabled = false
@@ -197,11 +199,36 @@ struct DiagnosticsSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section("Updates") {
-                Toggle("自动检查更新", isOn: $autoCheckForUpdates)
-                    .disabled(true)
-                Text("更新检查将在 v0.14 接入。")
+                Toggle(
+                    "自动检查更新",
+                    isOn: Binding(
+                        get: { AppUpdateChecker.autoCheckEnabled },
+                        set: { AppUpdateChecker.setAutoCheckEnabled($0) }
+                    )
+                )
+                Text("每天最多联网检查一次 GitHub Releases；也可以随时手动检查。检查只读取最新版本号，不上传任何数据。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                HStack {
+                    Button("立即检查更新") {
+                        runManualUpdateCheck()
+                    }
+                    .disabled(updateChecker.isChecking)
+                    if updateChecker.isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                if let updateCheckStatus {
+                    Text(updateCheckStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let updateCheckReleaseURL {
+                    Button("打开下载页") {
+                        NSWorkspace.shared.open(updateCheckReleaseURL)
+                    }
+                }
             }
             Section("Diagnostics") {
                 Text("Arbor records operation names, version, repository basename, and error codes only.")
@@ -223,6 +250,23 @@ struct DiagnosticsSettingsView: View {
         }
         .sheet(isPresented: $showGpgAgentSettings) {
             GpgAgentSettingsView()
+        }
+    }
+
+    private func runManualUpdateCheck() {
+        updateCheckReleaseURL = nil
+        updateChecker.checkNow { outcome in
+            switch outcome {
+            case .updateAvailable(let info, let current):
+                updateCheckStatus = "发现新版本 \(info.version)（当前 \(current)）"
+                updateCheckReleaseURL = info.releaseURL
+            case .upToDate(let current):
+                updateCheckStatus = "已是最新版本（\(current)）"
+            case .failed(let reason):
+                updateCheckStatus = "检查失败：\(reason)"
+            case .skipped:
+                break
+            }
         }
     }
 

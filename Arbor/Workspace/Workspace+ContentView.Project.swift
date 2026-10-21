@@ -44,6 +44,9 @@ func handleContentViewAppearAndLoadRoots() {
     // startup work cannot compete with the first usable Changes rows.
     handleContentViewAppear()
     credentialAuth.ensureInstalled()
+    // The update check is already delayed and rate-limited; scheduling it
+    // here keeps it out of the per-window lifecycle body.
+    scheduleAutomaticUpdateCheck()
 }
 
 func handleProjectDrop(_ providers: [NSItemProvider]) -> Bool {
