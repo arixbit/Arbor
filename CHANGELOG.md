@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.19 - 2026-10-21
+
+Feature release: complete the Git LFS integration (track, status marking,
+fetch/pull/push/prune/checkout with cancellation and credential-broker
+authentication), add a Git hooks manager, and make the branches popup
+resizable. The codebase was restructured into feature directories with the
+workspace state extracted into observable models; behavior is covered by the
+full Swift and Rust test suites.
+
+- Git LFS: capability probe, tracked patterns, file list, per-path downloads,
+  pointer badges in the changes list, download button in the file viewer,
+  push coverage warning when hooks are missing, and network commands routed
+  through the credential broker
+- Git hooks manager: list, enable/disable, edit, install sample, delete,
+  honoring `core.hooksPath`; non-executable hooks are now ignored like Git
+  does instead of failing the commit
+- Branches popup: drag-to-resize with per-project persistence and
+  "Restore Default Size"
+- Maintenance: feature-directory restructure, workspace state models, dead and
+  duplicated code removal, and a pull stash restore fix that now uses the
+  captured preservation message
+
 ## 1.0.18 - 2026-08-31
 
 V1 patch release: align the Git workbench with the JetBrains Git workflow

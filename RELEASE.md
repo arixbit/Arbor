@@ -10,7 +10,7 @@ UniFFI bindings before invoking Xcode, so the command also works from a clean
 clone.
 
 ```sh
-ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.18
+ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.19
 ```
 
 Unsigned artifacts are named `Arbor-VERSION-unsigned-arm64.dmg` and
