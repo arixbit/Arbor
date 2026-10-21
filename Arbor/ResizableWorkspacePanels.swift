@@ -91,49 +91,6 @@ struct WorkspacePanelResizeHandle: View {
     }
 }
 
-/// IntelliJ/rebased 主工作区的左右分隔线：左侧工具窗与右侧内容区共享一个
-/// 可持久化比例，分隔线本身只有很窄的视觉宽度，但保留足够大的命中区域。
-struct WorkspaceColumnResizeHandle: View {
-    @Binding var leftWidth: Double
-    let minimumLeftWidth: Double
-    let maximumLeftWidth: Double
-    var onEnded: (Double) -> Void = { _ in }
-    @State private var dragOrigin: Double?
-    @State private var isHovering = false
-
-    var body: some View {
-        Color.clear
-            .frame(width: 12)
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                isHovering = hovering
-                if hovering {
-                    NSCursor.resizeLeftRight.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let origin = dragOrigin ?? leftWidth
-                        if dragOrigin == nil { dragOrigin = origin }
-                        leftWidth = min(
-                            max(origin + Double(value.translation.width), minimumLeftWidth),
-                            maximumLeftWidth
-                        )
-                    }
-                    .onEnded { _ in
-                        dragOrigin = nil
-                        onEnded(leftWidth)
-                    }
-            )
-            .help("Drag to resize left and right workspaces")
-            .accessibilityLabel("Resize left and right workspaces")
-    }
-}
-
 /// The native divider owns the live drag. Updating a SwiftUI/AppStorage value
 /// for every mouse event makes the entire ContentView participate in the drag
 /// and is especially expensive while the log graph is mounted. NSSplitView

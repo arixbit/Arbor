@@ -23,17 +23,6 @@ enum GitPullDialogOption: String, CaseIterable, Codable, Hashable, Identifiable 
         }
     }
 
-    var flag: String {
-        switch self {
-        case .rebase: "--rebase"
-        case .ffOnly: "--ff-only"
-        case .noFF: "--no-ff"
-        case .squash: "--squash"
-        case .noCommit: "--no-commit"
-        case .noVerify: "--no-verify"
-        }
-    }
-
     func isSuitable(with selected: Set<GitPullDialogOption>) -> Bool {
         let other = selected.subtracting([self])
         switch self {

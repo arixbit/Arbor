@@ -453,41 +453,6 @@ final class FeedbackCenter: ObservableObject {
         publish(message, autoDismiss: false)
     }
 
-    /// Bridges legacy operation-specific feedback into the unified channel.
-    /// Existing inline messages remain in their tool window; this is the global
-    /// status/toast path restored after the v0.14 layout migration.
-    func publishLegacy(_ text: String) {
-        let lowercased = text.lowercased()
-        let isError = lowercased.contains("失败")
-            || lowercased.contains("错误")
-            || lowercased.contains("冲突")
-            || lowercased.contains("error")
-            || lowercased.contains("failed")
-        let isWarning = lowercased.contains("请先")
-            || lowercased.contains("未推送")
-            || lowercased.contains("暂停")
-        let message: FeedbackMessage
-        let autoDismiss: Bool
-        if isError {
-            message = .raw(
-                "Operation failed",
-                level: .error,
-                detail: text,
-                nextStep: nextStep(for: text),
-                notificationGroup: .important
-            )
-            autoDismiss = false
-        } else if isWarning {
-            message = .raw(text, level: .warning, notificationGroup: .toolWindow)
-            autoDismiss = false
-        } else {
-            message = .raw(text, level: .success, notificationGroup: .toolWindow)
-            autoDismiss = true
-        }
-        finish(with: message, historyDetail: text)
-        publish(message, autoDismiss: autoDismiss)
-    }
-
     func clearHistory() {
         if let activeOperationID {
             history.removeAll { $0.id != activeOperationID }
@@ -609,31 +574,6 @@ final class FeedbackCenter: ObservableObject {
                 : items
         )
         persistHistory()
-    }
-
-    private func nextStep(for text: String) -> String {
-        let lowercased = text.lowercased()
-        if lowercased.contains("ssh host key changed")
-            || lowercased.contains("remote host identification has changed")
-        {
-            return "The connection was blocked because the remote SSH host key changed. Verify the server identity, review Known Hosts in Git SSH Settings, then retry."
-        }
-        if lowercased.contains("auth") || lowercased.contains("认证") || lowercased.contains("credential") {
-            return "Check the remote credentials in Settings, then retry."
-        }
-        if lowercased.contains("untracked") || lowercased.contains("未跟踪") {
-            return "These local files will not be committed; preserve them temporarily and retry the operation."
-        }
-        if lowercased.contains("conflict") || lowercased.contains("冲突") {
-            return "Open Merge Revisions, resolve the files, then continue the operation."
-        }
-        if lowercased.contains("upstream") || lowercased.contains("tracking") || lowercased.contains("pull") {
-            return "Check the branch upstream and remote-tracking branch, then retry."
-        }
-        if lowercased.contains("dirty") || lowercased.contains("未跟踪") || lowercased.contains("stash") {
-            return "Commit or stash the local changes, then retry."
-        }
-        return "Open the details button for the full error, then retry after fixing the cause."
     }
 
     func dismissToast() {
