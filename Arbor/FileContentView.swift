@@ -116,6 +116,7 @@ func codeLineChanges(for diff: FileDiff, lineCount: Int) -> [Int: CodeLineChange
 /// 只读工作区文件查看器：行号 + tree-sitter 语法高亮 + 截断/二进制提示。
 struct FileContentView: View {
     let repo: Repository?
+    var broker: CredentialBroker? = nil
     let path: String?
     var version: FileContentVersion = .local
     var availableVersions: [FileContentVersion] = [.local]
@@ -291,9 +292,14 @@ struct FileContentView: View {
         lfsDownloading = true
         lfsError = nil
         let handle = GitCancelHandle()
+        guard let downloadBroker = broker else {
+            lfsDownloading = false
+            lfsError = "credential broker unavailable"
+            return
+        }
         Task.detached(priority: .userInitiated) {
             do {
-                _ = try repo.lfsPull(remote: nil, paths: [path], cancel: handle)
+                _ = try repo.lfsPull(remote: nil, paths: [path], broker: downloadBroker, cancel: handle)
                 await MainActor.run {
                     lfsDownloading = false
                     load()

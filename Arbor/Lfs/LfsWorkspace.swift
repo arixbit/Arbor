@@ -116,7 +116,7 @@ extension ContentView {
         let remote = lfsRemote
         let paths = Array(lfsWorkspace.selectedPaths)
         runLfsAction("Fetch LFS objects") { repo, handle in
-            try repo.lfsFetch(remote: remote, allRevisions: false, paths: paths, cancel: handle)
+            try repo.lfsFetch(remote: remote, allRevisions: false, paths: paths, broker: credentialAuth.broker, cancel: handle)
         }
     }
 
@@ -124,14 +124,14 @@ extension ContentView {
         let remote = lfsRemote
         let paths = Array(lfsWorkspace.selectedPaths)
         runLfsAction("Pull LFS objects") { repo, handle in
-            try repo.lfsPull(remote: remote, paths: paths, cancel: handle)
+            try repo.lfsPull(remote: remote, paths: paths, broker: credentialAuth.broker, cancel: handle)
         }
     }
 
     func lfsPushObjects() {
         let remote = lfsRemote
         runLfsAction("Push LFS objects") { repo, handle in
-            try repo.lfsPush(remote: remote, allRevisions: true, cancel: handle)
+            try repo.lfsPush(remote: remote, allRevisions: true, broker: credentialAuth.broker, cancel: handle)
         }
     }
 

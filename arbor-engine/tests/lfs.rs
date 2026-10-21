@@ -7,7 +7,7 @@ mod common;
 
 use std::sync::Arc;
 
-use arbor_engine::GitCancelHandle;
+use arbor_engine::{CredentialBroker, GitCancelHandle};
 use common::TestRepo;
 
 fn lfs_available(repo: &TestRepo) -> bool {
@@ -163,7 +163,7 @@ fn push_pull_round_trip_through_local_remote() {
 
     let cancel = GitCancelHandle::new();
     repo.open()
-        .lfs_push(Some("origin".into()), true, Arc::clone(&cancel))
+        .lfs_push(Some("origin".into()), true, CredentialBroker::new(), Arc::clone(&cancel))
         .unwrap();
 
     // 克隆出来的仓库里 pointer 未 smudge，需要显式 pull + checkout。
@@ -189,7 +189,7 @@ fn push_pull_round_trip_through_local_remote() {
 
     let cancel = GitCancelHandle::new();
     let pulled = cloned
-        .lfs_pull(Some("origin".into()), Vec::new(), Arc::clone(&cancel))
+        .lfs_pull(Some("origin".into()), Vec::new(), CredentialBroker::new(), Arc::clone(&cancel))
         .unwrap();
     // 克隆出来的仓库没有 filter 配置，pull 必须先补一次 install --local，
     // 否则 git-lfs 会静默跳过检出。
@@ -215,7 +215,7 @@ fn fetch_is_cancellable_and_reports_result() {
     let cancel = GitCancelHandle::new();
     let result = repo
         .open()
-        .lfs_fetch(None, false, Vec::new(), Arc::clone(&cancel))
+        .lfs_fetch(None, false, Vec::new(), CredentialBroker::new(), Arc::clone(&cancel))
         .unwrap_or_else(|error| panic!("fetch failed: {error}"));
     // 没有 remote 时 git-lfs 仍然返回成功（本地对象已存在），结果可以为空。
     let _ = result.output;
@@ -241,7 +241,7 @@ fn pull_single_path_materialises_only_that_file() {
     repo.git(&["push", "-q", "-u", "origin", "main"]);
     let cancel = GitCancelHandle::new();
     repo.open()
-        .lfs_push(Some("origin".into()), true, Arc::clone(&cancel))
+        .lfs_push(Some("origin".into()), true, CredentialBroker::new(), Arc::clone(&cancel))
         .unwrap();
 
     let clone_dir = tempfile::tempdir().unwrap();
@@ -257,6 +257,7 @@ fn pull_single_path_materialises_only_that_file() {
         .lfs_pull(
             Some("origin".into()),
             vec!["one.bin".to_string()],
+            CredentialBroker::new(),
             Arc::clone(&cancel),
         )
         .unwrap();

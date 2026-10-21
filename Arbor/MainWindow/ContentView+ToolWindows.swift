@@ -738,6 +738,7 @@ extension ContentView {
             ) ?? fileWorkspace.version
             FileContentView(
                 repo: repo,
+                broker: credentialAuth.broker,
                 path: fileSelection,
                 version: effectiveVersion,
                 availableVersions: versionOptions,

@@ -45,10 +45,16 @@ Arbor 不实现 LFS 协议，而是驱动用户安装的 `git-lfs`（与 Intelli
 - **文件内容视图**：`.local` 版本是 pointer 时显示横幅与 `Download` 按钮，
   下载完成后自动重载内容。
 
+## 认证
+
+fetch / pull / push 三个网络命令通过 `auth::run_with_askpass` 执行：git-lfs
+拉凭证时执行 `git credential fill`（尊重 `GIT_ASKPASS`），SSH 认证走 `ssh`
+（尊重 `SSH_ASKPASS`），两者都由 `CredentialBroker` 托管 —— 与 fetch/push 的
+凭证对话框、Keychain 记忆和一次重试共用同一套链路。文件内容视图的
+「Download」与面板的按路径下载同样带 broker。
+
 ## 已知边界
 
-- LFS 认证走 `git-lfs` 自己的 credential/netrc 链路，没有接入 Arbor 的
-  credential broker；HTTPS 需要凭据时会在终端提示层失败，错误会原样上报。
 - 只扫描仓库根 `.gitattributes` 之外的规则由 `git lfs track` 的 listing 提供，
   不做自己的属性文件遍历。
 - 大文件 diff 仍按文本处理；LFS 文件下载后按普通文件查看。

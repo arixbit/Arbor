@@ -347,13 +347,30 @@ fn run_lfs_action(
     Ok(output_result(&outcome))
 }
 
-/// 检出方向的 LFS 命令（pull / checkout）在没有 filter 配置时会被 git-lfs
+/// 网络方向的 LFS 命令走 askpass 桥：git-lfs 拉凭证时执行
+/// `git credential fill`（尊重 GIT_ASKPASS），SSH 认证走 `ssh`
+/// （尊重 SSH_ASKPASS），两者都由 `CredentialBroker` 托管，认证失败沿用
+/// 统一的重试与错误分类。
+fn run_lfs_action_with_auth(
+    workdir: &Path,
+    args: Vec<String>,
+    broker: &crate::auth::CredentialBroker,
+    cancel: Option<&GitCancelToken>,
+) -> Result<LfsCommandResult, EngineError> {
+    let spec = lfs_spec(workdir, &args);
+    let outcome = crate::auth::run_with_askpass(&spec, broker, cancel)?;
+    if !outcome.success() {
+        return Err(lfs_failure(workdir, &args, outcome));
+    }
+    Ok(output_result(&outcome))
+}
 /// 静默跳过（退出码 0，只打印 "Skipping object checkout"）。这里在运行前
 /// 补一次仓库级 `git lfs install --local`，并在仍然跳过时把结果折叠成错误，
 /// 避免 UI 报告「已下载」而工作区仍是 pointer。
 fn run_lfs_checkout_action(
     workdir: &Path,
     args: Vec<String>,
+    broker: Option<&crate::auth::CredentialBroker>,
     cancel: Option<&GitCancelToken>,
 ) -> Result<LfsCommandResult, EngineError> {
     let mut installed_filters = false;
@@ -365,7 +382,12 @@ fn run_lfs_checkout_action(
         }
         installed_filters = true;
     }
-    let outcome = run_lfs(workdir, &args, cancel)?;
+    let outcome = match broker {
+        // pull 有网络段，走 askpass 桥
+        Some(broker) => crate::auth::run_with_askpass(&lfs_spec(workdir, &args), broker, cancel)?,
+        // checkout 只读本地产物，不需要凭证
+        None => run_lfs(workdir, &args, cancel)?,
+    };
     if !outcome.success() {
         return Err(lfs_failure(workdir, &args, outcome));
     }
@@ -475,6 +497,7 @@ impl Repository {
         remote: Option<String>,
         all_revisions: bool,
         paths: Vec<String>,
+        broker: std::sync::Arc<crate::auth::CredentialBroker>,
         cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
     ) -> Result<LfsCommandResult, EngineError> {
         let workdir = workdir_of(self)?;
@@ -488,7 +511,7 @@ impl Repository {
         if let Some(remote) = remote.filter(|value| !value.trim().is_empty()) {
             args.push(remote);
         }
-        run_lfs_action(&workdir, args, Some(cancel.token()))
+        run_lfs_action_with_auth(&workdir, args, &broker, Some(cancel.token()))
     }
 
     /// 下载并检出 LFS 对象（`git lfs pull`）。
@@ -497,6 +520,7 @@ impl Repository {
         &self,
         remote: Option<String>,
         paths: Vec<String>,
+        broker: std::sync::Arc<crate::auth::CredentialBroker>,
         cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
     ) -> Result<LfsCommandResult, EngineError> {
         let workdir = workdir_of(self)?;
@@ -507,7 +531,7 @@ impl Repository {
         if let Some(remote) = remote.filter(|value| !value.trim().is_empty()) {
             args.push(remote);
         }
-        run_lfs_checkout_action(&workdir, args, Some(cancel.token()))
+        run_lfs_checkout_action(&workdir, args, Some(&broker), Some(cancel.token()))
     }
 
     /// 上传对象到远端；`all_revisions` 对应 `git lfs push --all`。
@@ -515,6 +539,7 @@ impl Repository {
         &self,
         remote: Option<String>,
         all_revisions: bool,
+        broker: std::sync::Arc<crate::auth::CredentialBroker>,
         cancel: std::sync::Arc<crate::gitprocess::GitCancelHandle>,
     ) -> Result<LfsCommandResult, EngineError> {
         let workdir = workdir_of(self)?;
@@ -523,7 +548,7 @@ impl Repository {
             args.push("--all".to_string());
         }
         args.push(remote.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| "origin".into()));
-        run_lfs_action(&workdir, args, Some(cancel.token()))
+        run_lfs_action_with_auth(&workdir, args, &broker, Some(cancel.token()))
     }
 
     /// 清理本地不再被引用的 LFS 对象（`git lfs prune --force`）。
@@ -551,6 +576,6 @@ impl Repository {
             args.push("--".to_string());
             args.extend(paths);
         }
-        run_lfs_checkout_action(&workdir, args, Some(cancel.token()))
+        run_lfs_checkout_action(&workdir, args, None, Some(cancel.token()))
     }
 }
