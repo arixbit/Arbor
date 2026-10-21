@@ -42,6 +42,12 @@ and do not disable Gatekeeper globally. A correctly signed and notarized
 production package should not require this step. See the full
 [macOS installation guide](docs/macos-installation.md) for the complete flow.
 
+The quarantine flag is applied to every freshly downloaded file, so this
+command must be repeated after each upgrade — running it once on an older
+version does not protect the next download. To avoid the step entirely,
+download the DMG with `curl -LO <release asset URL>` (curl does not set the
+quarantine flag), or install with `brew install --cask --no-quarantine arbor`.
+
 ### Homebrew
 
 Homebrew can download and install the same unsigned release without opening a

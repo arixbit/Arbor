@@ -36,13 +36,20 @@ rm -f -- \
   "$release_dir/SHA256SUMS" \
   "$release_dir/CHANGELOG.md"
 cargo fmt --manifest-path "$repo_root/arbor-engine/Cargo.toml" --check
-cargo test --manifest-path "$repo_root/arbor-engine/Cargo.toml" --all-targets
+# Tag builds reuse the validation already performed on main by ci-test.yml;
+# set ARBOR_SKIP_TESTS=1 to skip the two full test suites. Local release runs
+# keep the default (tests on) so the packaged artifact is the tested one.
+if [[ "${ARBOR_SKIP_TESTS:-0}" != "1" ]]; then
+  cargo test --manifest-path "$repo_root/arbor-engine/Cargo.toml" --all-targets
+fi
 cargo build --manifest-path "$repo_root/arbor-engine/Cargo.toml" --release
 "$repo_root/scripts/generate-swift-bindings.sh" >/dev/null
 "$repo_root/scripts/generate-xcode-project.sh"
-xcodebuild -project "$repo_root/Arbor/Arbor.xcodeproj" -scheme Arbor \
-  -destination 'platform=macOS' \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
+if [[ "${ARBOR_SKIP_TESTS:-0}" != "1" ]]; then
+  xcodebuild -project "$repo_root/Arbor/Arbor.xcodeproj" -scheme Arbor \
+    -destination 'platform=macOS' \
+    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
+fi
 
 CONFIGURATION=Release MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$version" \
   ARBOR_UNSIGNED="${ARBOR_UNSIGNED:-1}" \
@@ -65,7 +72,13 @@ fi
 
 "$repo_root/scripts/make-dmg.sh" "$app_path" "$dmg_path"
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
-cp "$repo_root/CHANGELOG.md" "$release_dir/CHANGELOG.md"
+# Release notes must show only the current version's section; shipping the
+# full historical changelog made every release page several screens long.
+awk -v header="## $version" '
+  $0 == header || index($0, header " ") == 1 { found = 1; next }
+  found && /^## / { exit }
+  found { print }
+' "$repo_root/CHANGELOG.md" > "$release_dir/CHANGELOG.md"
 
 if [[ "${ARBOR_UNSIGNED:-1}" != "1" ]]; then
   notary_profile=${NOTARY_KEYCHAIN_PROFILE:-}

@@ -39,13 +39,20 @@ Apple-trusted release.
 
 ## Public unsigned release checklist
 
+The split between the two workflows: `ci-test.yml` runs the full Rust and
+Swift suites on every main push, while `release.yml` packages a tagged commit
+with `ARBOR_SKIP_TESTS=1` (tests already ran) plus a shared Rust cache. Run
+`./scripts/release.sh VERSION` locally without the flag when you want the
+full local validation before tagging.
+
 1. Review `CHANGELOG.md`, `DEPENDENCY_LICENSES.md`, and the generated
    `SHA256SUMS`.
 2. Confirm the app bundle version matches the tag and the artifacts are named
    `Arbor-VERSION-unsigned-arm64.*`.
-3. Update `Casks/arbor.rb` and `distribution/Casks/arbor.rb.template` with the
-   release version and DMG SHA256.
-4. Push the tag; GitHub Actions publishes the release and its checksums.
+3. Push the tag; GitHub Actions publishes the release and its checksums.
+4. Update `Casks/arbor.rb` with the release version and the sha256 from the
+   published `SHA256SUMS` (the CI-built DMG hash differs from a local build),
+   then push the Cask bump.
 5. Copy the updated Cask into the `homebrew-arbor` tap when that repository is
    available.
 

@@ -1,0 +1,53 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Every main push runs the full Rust and Swift suites here, so the tag
+    # build in release.yml can skip them (ARBOR_SKIP_TESTS=1) and only
+    # package an already-validated commit.
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arbor-engine
+          shared-key: arbor-cargo
+          cache-on-failure: true
+
+      - name: Install Xcode project generator
+        run: brew install xcodegen
+
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = arm64
+
+      - name: Run the full Rust and Swift suites
+        run: |
+          cargo fmt --manifest-path arbor-engine/Cargo.toml --check
+          cargo test --manifest-path arbor-engine/Cargo.toml --all-targets
+          ./scripts/generate-swift-bindings.sh >/dev/null
+          ./scripts/generate-xcode-project.sh
+          xcodebuild -project Arbor/Arbor.xcodeproj -scheme Arbor \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
