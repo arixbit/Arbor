@@ -513,7 +513,10 @@ func beginMultiRootPushDialog(rootPath: String, branch: String) {
             let selectedBranch = branches.contains(where: { $0.name == branch })
                 ? branch
                 : branches.first(where: { $0.isCurrent })?.name
-            let configuredTarget = branchWorkspace.syncStatuses
+            // branchWorkspace 是 @MainActor 隔离的：detached 任务里必须 await，
+            // Xcode 15.4 (Swift 5.10) 下直接读取是编译错误。
+            let branchStatuses = await branchWorkspace.syncStatuses
+            let configuredTarget = branchStatuses
                 .first(where: { $0.branch == selectedBranch && $0.trackingExists })
                 .flatMap {
                     remoteBranchTargetForConfiguredUpstream($0.upstream, remotes: remotes)
