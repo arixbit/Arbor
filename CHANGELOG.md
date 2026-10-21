@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.22 - 2026-10-21
+
+Performance release: keep the VCS Log usable on large histories. A sampled
+run on a big repository showed the main thread spending most of its time in
+SwiftUI layout and equality checks while the process footprint grew to tens of
+gigabytes, because the commit graph was rebuilt and fully re-laid-out on every
+UI update.
+
+- The LinearBek graph model is now memoized outside the SwiftUI body and only
+  rebuilt when the commit list or the collapse state actually changes, instead
+  of on every hover, selection, and scroll tick; commit-list change detection
+  uses a copy-on-write buffer fast path and no longer maps and compares the
+  whole ID list on each body evaluation
+- The graph Canvas and the edge/node hit-target overlays only cover the visible
+  rows plus a buffer window rather than the entire history, so hovering no
+  longer re-strokes every edge and SwiftUI no longer creates one hit-target
+  view per graph edge and node in the repository
+- Collapse/expand actions are pre-resolved per row during the graph build,
+  which replaces an O(rows x fragments) scan on every render; `visibleEdges`
+  is materialized once instead of being refiltered on every access
+- Commit rows no longer receive the whole graph model, and the workspace split
+  view hosts stop reporting intrinsic sizes so divider drags no longer repeat
+  full SwiftUI layout inside AppKit constraint updates
+- Root-qualified commit identity is passed as a flag instead of a generic
+  closure; new unit tests cover graph cache reuse, invalidation, identity, and
+  stale merge action pruning
+
 ## 1.0.21 - 2026-10-21
 
 Feature release: wire the dormant "自动检查更新" toggle to real GitHub
