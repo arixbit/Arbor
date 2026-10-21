@@ -110,13 +110,6 @@ func replacePendingProject() {
     openProjectPath(next)
 }
 
-func openPendingProjectInNewWindow() {
-    guard let pendingProjectPath = projectWorkspace.pendingPath else { return }
-    let next = pendingProjectPath
-    self.projectWorkspace.pendingPath = nil
-    openWindow(value: next)
-}
-
 func openProjectPath(_ projectPath: String) {
     expireOperationRecoveryNotifications()
     repositoryStatus.changeDeliveryTask?.cancel()

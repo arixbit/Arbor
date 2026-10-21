@@ -236,25 +236,6 @@ func scanPendingApplyRestores() {
     }
 }
 
-nonisolated static func restoreLocalChangesAfterPull(
-    repo: Repository,
-    preservation: PullLocalChangesPreservation
-) throws {
-    if let shelfName = preservation.shelfName {
-        try repo.shelvePopPreservation(name: shelfName)
-    } else if preservation.stashID != nil || preservation.stashMessage != nil {
-        let reference = try pullStashReference(
-            repo: repo,
-            stashID: preservation.stashID,
-            message: preservation.stashMessage
-        )
-        try repo.stashPopWithIndex(
-            index: try currentStashIndex(repo: repo, stashID: reference.stash.id),
-            restoreIndex: true
-        )
-    }
-}
-
 /// Restore the persisted batch spec after project reopen. An active Git
 /// operation is never replayed; it is handed to the project-level resolver.
 func restorePersistedMultiRootRebaseSession(for projectPath: String) {

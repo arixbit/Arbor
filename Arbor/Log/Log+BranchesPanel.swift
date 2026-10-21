@@ -919,22 +919,11 @@ struct LogBranchesPanel: View {
 
     @ViewBuilder
     func directoryGroupRow(_ row: BranchDirectoryRow) -> some View {
-        Button {
-            if collapsedDirectoryGroups.contains(row.id) {
-                collapsedDirectoryGroups.remove(row.id)
-            } else {
-                collapsedDirectoryGroups.insert(row.id)
-            }
-        } label: {
-            Label(
-                row.name,
-                systemImage: collapsedDirectoryGroups.contains(row.id) ? "chevron.right" : "chevron.down"
-            )
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.leading, CGFloat(row.depth) * 14)
-        }
-        .buttonStyle(.plain)
+        BranchDirectoryGroupRow(
+            row: row,
+            collapsedGroups: $collapsedDirectoryGroups,
+            style: .log
+        )
     }
 
     func branchDirectoryRefNameForLog(_ row: BranchDirectoryRow) -> String? {
@@ -1011,14 +1000,7 @@ struct LogBranchesPanel: View {
     }
 
     func toggleFavorites(_ selection: [BranchDashboardReference]) {
-        var updated = favoriteReferenceIDs
-        for reference in selection {
-            if updated.contains(reference.favoriteID) {
-                updated.remove(reference.favoriteID)
-            } else {
-                updated.insert(reference.favoriteID)
-            }
-        }
+        let updated = toggledBranchFavoriteIDs(selection, current: favoriteReferenceIDs)
         favoriteReferenceIDs = updated
         GitBranchesPopupSettings.saveFavorites(updated, for: projectPath)
     }

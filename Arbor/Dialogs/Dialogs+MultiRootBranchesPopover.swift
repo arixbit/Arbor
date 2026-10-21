@@ -456,7 +456,7 @@ struct MultiRootBranchesPopover: View {
             }
             : []
         let remoteGroups = includeBranches
-            ? remoteGroupNames(snapshot).map { name in
+            ? branchRemoteGroupNames(snapshot).map { name in
                 BranchTreeTarget(
                     id: remoteGroupTargetID(rootPath: snapshot.rootPath, name: name),
                     value: name,
@@ -933,7 +933,7 @@ struct MultiRootBranchesPopover: View {
                 preserving: selectedBranchTargetID
             )
             let visibleRemoteGroupIDs = Set(filteredSnapshots.flatMap { snapshot in
-                remoteGroupNames(snapshot).map {
+                branchRemoteGroupNames(snapshot).map {
                     remoteGroupTargetID(rootPath: snapshot.rootPath, name: $0)
                 }
             })
@@ -948,7 +948,7 @@ struct MultiRootBranchesPopover: View {
                 leaveRepositoryScope()
             }
             let validRemoteGroupIDs = Set(newSnapshots.flatMap { snapshot in
-                remoteGroupNames(snapshot).map {
+                branchRemoteGroupNames(snapshot).map {
                     remoteGroupTargetID(rootPath: snapshot.rootPath, name: $0)
                 }
             })
@@ -1225,7 +1225,7 @@ struct MultiRootBranchesPopover: View {
         .padding(.horizontal, 6)
         .padding(.top, 6)
 
-        ForEach(remoteGroupNames(snapshot), id: \.self) { remoteName in
+        ForEach(branchRemoteGroupNames(snapshot), id: \.self) { remoteName in
             remoteGroupRow(
                 rootPath: snapshot.rootPath,
                 name: remoteName,
@@ -1261,16 +1261,6 @@ struct MultiRootBranchesPopover: View {
                     )
                 }
             }
-        }
-    }
-
-    private func remoteGroupNames(_ snapshot: GitRootBranchSnapshot) -> [String] {
-        var names = snapshot.remotes.map(\.name)
-        for remote in snapshot.remoteBranches.map(\.remote) where !names.contains(remote) {
-            names.append(remote)
-        }
-        return names.sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
         }
     }
 
@@ -1607,23 +1597,11 @@ struct MultiRootBranchesPopover: View {
     }
 
     private func directoryGroupRow(_ row: BranchDirectoryRow) -> some View {
-        Button {
-            if collapsedDirectoryGroups.contains(row.id) {
-                collapsedDirectoryGroups.remove(row.id)
-            } else {
-                collapsedDirectoryGroups.insert(row.id)
-            }
-        } label: {
-            Label(
-                row.name,
-                systemImage: collapsedDirectoryGroups.contains(row.id) ? "chevron.right" : "chevron.down"
-            )
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, CGFloat(row.depth) * 14 + 6)
-                .padding(.top, 4)
-        }
-        .buttonStyle(.plain)
+        BranchDirectoryGroupRow(
+            row: row,
+            collapsedGroups: $collapsedDirectoryGroups,
+            style: .popup
+        )
     }
 
     private func remoteGroupRow(
@@ -1666,27 +1644,12 @@ struct MultiRootBranchesPopover: View {
 
     @ViewBuilder
     private func remoteGroupActionMenu(for selection: [BranchDashboardRemoteGroup]) -> some View {
-        let availability = BranchDashboardRemoteGroupActionAvailability.resolve(selection: selection)
-        if availability.contains(.editRemote), let group = selection.first {
-            Button("Edit Remote…") {
-                onEditRemote(group.rootPath, group.name)
-            }
-        }
-        if availability.contains(.removeRemote) {
-            if availability.contains(.editRemote) {
-                Divider()
-            }
-            Button(
-                selection.count == 1 ? "Remove Remote…" : "Remove Selected Remotes…",
-                role: .destructive
-            ) {
-                if selection.count == 1, let group = selection.first {
-                    onRemoveRemote(group.rootPath, group.name)
-                } else {
-                    onRemoveRemoteSelected(selection)
-                }
-            }
-        }
+        BranchDashboardRemoteGroupActionMenu(
+            selection: selection,
+            onEditRemote: onEditRemote,
+            onRemoveRemote: onRemoveRemote,
+            onRemoveRemoteSelected: onRemoveRemoteSelected
+        )
     }
 
     private func popupReference(
@@ -2166,15 +2129,11 @@ struct MultiRootBranchesPopover: View {
         selectedBranchTargetID = id
         selectedBranchTargetIDs = []
         branchSelectionAnchorID = nil
-        if flags.contains(.command) {
-            if selectedRemoteGroupIDs.contains(id) {
-                selectedRemoteGroupIDs.remove(id)
-            } else {
-                selectedRemoteGroupIDs.insert(id)
-            }
-            return
-        }
-        selectedRemoteGroupIDs = [id]
+        selectedRemoteGroupIDs = toggledBranchTreeSelection(
+            current: selectedRemoteGroupIDs,
+            id: id,
+            command: flags.contains(.command)
+        )
     }
 
     private func selectBranchTarget(id: String) {

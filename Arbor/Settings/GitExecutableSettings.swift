@@ -8,9 +8,7 @@ enum GitExecutableSettings {
     private static let projectKeyPrefix = "arbor.git.executable.project.v1:"
 
     private static func projectKey(for projectPath: String) -> String {
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return "\(projectKeyPrefix)\(data.base64EncodedString())"
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func projectOverride(

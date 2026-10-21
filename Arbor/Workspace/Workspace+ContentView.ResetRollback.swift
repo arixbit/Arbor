@@ -17,16 +17,6 @@ func multiRootResetRollbackRequest(
     )
 }
 
-func multiRootResetRollbackAction(
-    targets: [PersistedMultiRootResetRollbackTarget]
-) -> FeedbackAction? {
-    guard !targets.isEmpty else { return nil }
-    let request = multiRootResetRollbackRequest(targets: targets)
-    return FeedbackAction(title: "Rollback Soft Reset", semanticAction: request) {
-        self.handleVCSActionRequest(request)
-    }
-}
-
 /// Roll back only soft-reset roots whose expected HEAD and branch still match.
 /// The engine operation is ref-only, so user edits made after the reset remain
 /// untouched. Failed roots stay as retryable semantic targets.

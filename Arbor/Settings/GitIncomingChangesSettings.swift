@@ -100,9 +100,7 @@ enum GitIncomingCheckStrategySettings {
 
     static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        guard let data = normalized.data(using: .utf8) else { return nil }
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     private static func suggestionCountKey(for projectPath: String?) -> String? {

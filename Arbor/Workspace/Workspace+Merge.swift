@@ -44,11 +44,7 @@ func mergeRootOperationResults(
     retry: [RootOperationResult],
     rootOrder: [String]
 ) -> [RootOperationResult] {
-    var byRoot = Dictionary(uniqueKeysWithValues: preserved.map { ($0.rootPath, $0) })
-    retry.forEach { byRoot[$0.rootPath] = $0 }
-    var orderedPaths = rootOrder
-    orderedPaths.append(contentsOf: byRoot.keys.filter { !orderedPaths.contains($0) }.sorted())
-    return orderedPaths.compactMap { byRoot[$0] }
+    mergeResultsByRoot(preserved: preserved, retry: retry, rootOrder: rootOrder, rootPath: \.rootPath)
 }
 /// Multi-root Merge needs to retain more than the display row when Smart
 /// retrying: initial/final HEAD and pending/conflict state drive the rollback
@@ -59,8 +55,17 @@ func mergeMultiRootMergeResults(
     retry: [MultiRootMergeResult],
     rootOrder: [String]
 ) -> [MultiRootMergeResult] {
-    var byRoot = Dictionary(uniqueKeysWithValues: preserved.map { ($0.rootPath, $0) })
-    retry.forEach { byRoot[$0.rootPath] = $0 }
+    mergeResultsByRoot(preserved: preserved, retry: retry, rootOrder: rootOrder, rootPath: \.rootPath)
+}
+
+private func mergeResultsByRoot<Result>(
+    preserved: [Result],
+    retry: [Result],
+    rootOrder: [String],
+    rootPath: KeyPath<Result, String>
+) -> [Result] {
+    var byRoot = Dictionary(uniqueKeysWithValues: preserved.map { ($0[keyPath: rootPath], $0) })
+    retry.forEach { byRoot[$0[keyPath: rootPath]] = $0 }
     var orderedPaths = rootOrder
     orderedPaths.append(contentsOf: byRoot.keys.filter { !orderedPaths.contains($0) }.sorted())
     return orderedPaths.compactMap { byRoot[$0] }

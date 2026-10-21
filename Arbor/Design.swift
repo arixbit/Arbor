@@ -14,7 +14,6 @@ enum Design {
     enum Radius {
         static let small: CGFloat = 6
         static let medium: CGFloat = 10
-        static let large: CGFloat = 14
     }
 
     enum Colors {

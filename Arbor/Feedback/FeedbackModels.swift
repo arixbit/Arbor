@@ -3,6 +3,14 @@ import UserNotifications
 import Foundation
 import AppKit
 
+func arborNotificationIDComponent(_ value: String) -> String {
+    value
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: ":", with: "_")
+        .replacingOccurrences(of: "|", with: "_")
+        .replacingOccurrences(of: " ", with: "_")
+}
+
 
 enum FeedbackLevel: Equatable {
     case info

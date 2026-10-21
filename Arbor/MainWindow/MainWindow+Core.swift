@@ -125,24 +125,6 @@ enum ChangeBadge {
     }
 }
 
-struct Legend: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            legendItem(.added, "新增")
-            legendItem(.modified, "修改")
-            legendItem(.deleted, "删除")
-            legendItem(.untracked, "未跟踪")
-        }
-    }
-    @ViewBuilder
-    func legendItem(_ kind: ChangeKind, _ text: String) -> some View {
-        HStack(spacing: 3) {
-            StatusBadge(kind: kind)
-            Text(text).font(.caption2).foregroundStyle(.secondary)
-        }
-    }
-}
-
 // MARK: - 工具
 
 func dateStr(_ seconds: Int64) -> String {

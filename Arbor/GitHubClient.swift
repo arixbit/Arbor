@@ -55,9 +55,6 @@ struct GitHubClient {
         self.rateLimit = rateLimit
     }
 
-    var remainingLimit: Int? { rateLimit.remaining }
-    var rateLimitResetDate: Date? { rateLimit.resetDate }
-
     func storedToken(for repository: HostingRepository) throws -> String? {
         try keychain.token(for: repository) ?? keychain.token(forOwner: repository.owner)
     }
@@ -534,10 +531,6 @@ struct GitHubClient {
 
     private struct GitHubProtectionRule: Decodable {
         let pattern: String?
-    }
-
-    private struct GitHubErrorPayload: Decodable {
-        let message: String?
     }
 }
 

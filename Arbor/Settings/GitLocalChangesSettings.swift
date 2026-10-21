@@ -94,9 +94,7 @@ enum GitProjectLocalChangesSavePolicySettings {
 
     private static func key(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return keyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(keyPrefix, for: projectPath)
     }
 
     static func choice(

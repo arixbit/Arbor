@@ -183,7 +183,7 @@ extension ContentView {
     }
     var selectedReflogEntry: ReflogEntry? {
         guard let selection = reflog.selection else { return nil }
-        return reflog.entries.first { reflogEntryIdentifier($0) == reflog.selection }
+        return reflog.entries.first { reflogEntryIdentifier($0) == selection }
     }
     var selectedReflogEntries: [ReflogEntry] {
         orderedReflogSelection(entries: reflog.entries, selectedIDs: reflog.selectedIDs)
@@ -199,9 +199,6 @@ extension ContentView {
             }), seen.insert(commit.id).inserted else { return nil }
             return commit
         }
-    }
-    var selectedReflogCommit: CommitInfo? {
-        selectedReflogCommits.first
     }
 
     func reflogCommit(for entry: ReflogEntry) -> CommitInfo? {

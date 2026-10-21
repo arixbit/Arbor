@@ -11,9 +11,7 @@ enum GitSignOffCommitSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func projectValue(
@@ -112,9 +110,7 @@ enum GitResetModeSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func mode(
@@ -166,9 +162,7 @@ enum GitCommitWarningSettings {
         for projectPath: String?
     ) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return "\(projectKeyPrefix)\(data.base64EncodedString()):\(setting.rawValue)"
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath) + ":\(setting.rawValue)"
     }
 
     private static func limitKey(for projectPath: String?) -> String? {
@@ -237,9 +231,7 @@ enum GitIdentityScopeSettings {
 
     private static func key(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return "\(keyPrefix)\(data.base64EncodedString()):setNameEmailGlobally"
+        return gitProjectSettingsKey(keyPrefix, for: projectPath) + ":setNameEmailGlobally"
     }
 
     static func setNameEmailGlobally(
@@ -271,9 +263,7 @@ enum GitCommitAuthorHistorySettings {
 
     private static func key(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return "\(keyPrefix)\(data.base64EncodedString())"
+        return gitProjectSettingsKey(keyPrefix, for: projectPath)
     }
 
     static func authors(

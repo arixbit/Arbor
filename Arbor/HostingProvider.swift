@@ -86,14 +86,6 @@ struct HostingRepository: Hashable, Sendable {
             return webURL.appendingPathComponent("pull-requests")
         }
     }
-
-    func issuesURL() -> URL {
-        webURL.appendingPathComponent("issues")
-    }
-
-    func pullRequestURL(number: Int) -> URL {
-        pullRequestsURL().appendingPathComponent(String(number))
-    }
 }
 
 enum HostingProvider {

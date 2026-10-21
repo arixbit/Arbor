@@ -62,42 +62,6 @@ struct MultiRootChangeGroup: Identifiable {
     }
 }
 
-// MARK: - 侧栏行 + 徽标
-
-struct StatusRow: View {
-    let entry: FileEntry
-    let onStage: () -> Void
-    let onUnstage: () -> Void
-    let onPartial: () -> Void
-    var body: some View {
-        HStack(spacing: 4) {
-            if entry.unstaged != .unchanged {
-                Button("暂存", action: onStage).buttonStyle(.bordered).controlSize(.mini)
-            }
-            if entry.staged != .unchanged {
-                Button("取消", action: onUnstage).buttonStyle(.bordered).controlSize(.mini)
-            }
-            StatusBadge(kind: entry.staged)
-            StatusBadge(kind: entry.unstaged)
-            Text(entry.path).font(.system(.body, design: .monospaced))
-            if let oldPath = entry.oldPath {
-                Text("← \(oldPath)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help("Renamed from \(oldPath)")
-            }
-            Spacer()
-            Button("逐行…", action: onPartial)
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .help("逐行/逐 hunk 暂存")
-        }
-        .padding(.vertical, 1)
-    }
-}
-
 struct StatusBadge: View {
     let kind: ChangeKind
     var body: some View {

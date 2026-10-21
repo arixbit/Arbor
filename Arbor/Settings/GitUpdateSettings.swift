@@ -44,9 +44,7 @@ enum GitRootSyncSettings {
 
     private static func key(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return "\(projectKeyPrefix)\(data.base64EncodedString())"
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func choice(
@@ -125,9 +123,7 @@ enum GitFetchTagsSettings {
     private static let projectKeyPrefix = "arbor.git.fetchTagsMode.project.v1:"
 
     private static func key(for projectPath: String) -> String {
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func mode(
@@ -181,9 +177,7 @@ enum GitUpdateMethodSettings {
     private static let projectKeyPrefix = "arbor.git.updateMethod.project.v1:"
 
     private static func key(for projectPath: String) -> String {
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func method(
@@ -218,9 +212,7 @@ enum GitUpdateInfoPathFilterSettings {
     private static let projectKeyPrefix = "arbor.git.updateInfoPathFilter.project.v1:"
 
     private static func key(for projectPath: String) -> String {
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func selections(
@@ -289,9 +281,7 @@ enum GitUpdateOptionsDialogSettings {
     private static let projectKeyPrefix = "arbor.git.updateOptionsDialog.show.project.v1:"
 
     private static func key(for projectPath: String) -> String {
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func shouldShow(

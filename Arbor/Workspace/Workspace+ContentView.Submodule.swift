@@ -372,14 +372,6 @@ func submoduleOperationDetail(_ retry: PersistedSubmoduleRetry) -> String? {
     }
 }
 
-func submoduleNotificationComponent(_ value: String) -> String {
-    value
-        .replacingOccurrences(of: "/", with: "_")
-        .replacingOccurrences(of: ":", with: "_")
-        .replacingOccurrences(of: "|", with: "_")
-        .replacingOccurrences(of: " ", with: "_")
-}
-
 func submoduleNotificationID(
     _ retry: PersistedSubmoduleRetry,
     rootPath: String
@@ -394,11 +386,11 @@ func submoduleNotificationID(
     return [
         "git.submodule",
         retry.operation.rawValue,
-        submoduleNotificationComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
-        submoduleNotificationComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
-        submoduleNotificationComponent(retry.path ?? "all"),
-        submoduleNotificationComponent(retry.branch ?? ""),
-        submoduleNotificationComponent(options)
+        arborNotificationIDComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
+        arborNotificationIDComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
+        arborNotificationIDComponent(retry.path ?? "all"),
+        arborNotificationIDComponent(retry.branch ?? ""),
+        arborNotificationIDComponent(options)
     ].joined(separator: ".")
 }
 
@@ -459,10 +451,10 @@ func submoduleUndoNotificationID(
     return [
         "git.submodule.undo",
         context.operation.rawValue,
-        submoduleNotificationComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
-        submoduleNotificationComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
-        submoduleNotificationComponent(context.path),
-        submoduleNotificationComponent(context.expectedHeadID)
+        arborNotificationIDComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
+        arborNotificationIDComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
+        arborNotificationIDComponent(context.path),
+        arborNotificationIDComponent(context.expectedHeadID)
     ].joined(separator: ".")
 }
 
@@ -950,14 +942,6 @@ func submoduleUpdatePath(_ path: String) {
 
 func submoduleSync() {
     runSubmoduleOperation(PersistedSubmoduleRetry(operation: .sync))
-}
-
-func loadSubmodules() {
-    guard let repo else { return }
-    Task.detached(priority: .userInitiated) {
-        let modules = (try? repo.submoduleList()) ?? []
-        await MainActor.run { self.submoduleWorkspace.submodules = modules }
-    }
 }
 
 /// 在嵌套子模块仓库中打开提交日志；父仓库的 gitlink 只代表固定提交，不是日志数据源。

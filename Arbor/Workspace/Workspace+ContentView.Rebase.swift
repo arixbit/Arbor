@@ -297,13 +297,6 @@ func rebaseCurrentInRoot(rootPath: String, onto: String) {
     }
 }
 
-func rebaseActionBinding(_ index: Int) -> Binding<RebaseAction> {
-    Binding(
-        get: { self.rebaseWorkspace.actions[index] },
-        set: { self.rebaseWorkspace.actions[index] = $0 }
-    )
-}
-
 func loadRebaseRange() {
     rebaseWorkspace.rangeGeneration += 1
     let generation = rebaseWorkspace.rangeGeneration

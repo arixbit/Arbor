@@ -23,7 +23,6 @@ targets:
       - path: FileContentView.swift
       - path: Log
       - path: SubmoduleChangeView.swift
-      - path: RepoSidebar.swift
       - path: Panels
       - path: Dialogs
       - path: CommitDetailView.swift

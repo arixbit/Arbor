@@ -137,7 +137,6 @@ struct RebasedCommitWorkspace: View {
     var onUnshelveShelvesSilently: ([String], Bool) -> Void = { _, _ in }
     var onUnshelveDeletedShelvesSilently: ([String], Bool) -> Void = { _, _ in }
     var onUnshelveDeletedPathsWithOptions: (String, [String], Bool) -> Void = { _, _, _ in }
-    var onUnshelveDeletedPathsWithBase: (String, [String], Bool, String, UInt32) -> Void = { _, _, _, _, _ in }
     var onPopShelve: (String) -> Void = { _ in }
     var onPopShelves: ([String]) -> Void = { _ in }
     let onUnshelveIntoChangeList: (String, [String]?, String) -> Void
@@ -1486,20 +1485,6 @@ struct RebasedCommitWorkspace: View {
         }
     }
 
-    func visibleDeletedShelfRows(for shelf: ShelveInfo) -> [ShelfTreeRow] {
-        let rows = shelfTreeRows(paths: shelf.paths, groupByDirectory: shelfGroupByDirectory)
-        guard shelfGroupByDirectory else { return rows }
-        return rows.filter { row in
-            !rows.contains { folder in
-                folder.isFolder
-                    && row.path.hasPrefix(folder.path + "/")
-                    && collapsedShelfFolders.contains(
-                        shelfFolderID(shelfID: shelf.id, path: folder.path)
-                    )
-            }
-        }
-    }
-
     func selectedDeletedShelfPaths(for shelf: ShelveInfo) -> [String] {
         shelf.paths.filter {
             selectedDeletedShelfMemberIDs.contains(
@@ -1968,7 +1953,7 @@ struct RebasedCommitWorkspace: View {
                     .padding(.leading, 20)
 
                     if expandedShelfIDs.contains(shelf.id) {
-                        ForEach(visibleDeletedShelfRows(for: shelf)) { row in
+                        ForEach(visibleShelfRows(for: shelf)) { row in
                             deletedShelfTreeRowView(row, shelf: shelf)
                         }
                     }

@@ -350,25 +350,6 @@ func confirmAndDeleteMultiRootMergedBranch(
     )
 }
 
-func postMergeRollbackAction(
-    repo: Repository,
-    initialHead: String,
-    expectedHead: String,
-    branch: String
-) -> (() -> Void) {
-    {
-        NotificationCenter.default.post(
-            name: .arborRollbackMerge,
-            object: MergeRollbackRequest(
-                repo: repo,
-                initialHead: initialHead,
-                expectedHead: expectedHead,
-                branch: branch
-            )
-        )
-    }
-}
-
 func postMergeDeleteAction(
     repo: Repository,
     branch: String,

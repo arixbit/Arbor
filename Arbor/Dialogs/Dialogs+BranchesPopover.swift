@@ -896,23 +896,11 @@ struct RebasedBranchesPopover: View {
 
     @ViewBuilder
     private func branchDirectoryGroupRow(_ row: BranchDirectoryRow) -> some View {
-        Button {
-            if collapsedDirectoryGroups.contains(row.id) {
-                collapsedDirectoryGroups.remove(row.id)
-            } else {
-                collapsedDirectoryGroups.insert(row.id)
-            }
-        } label: {
-            Label(
-                row.name,
-                systemImage: collapsedDirectoryGroups.contains(row.id) ? "chevron.right" : "chevron.down"
-            )
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, CGFloat(row.depth) * 14 + 6)
-                .padding(.top, 4)
-        }
-        .buttonStyle(.plain)
+        BranchDirectoryGroupRow(
+            row: row,
+            collapsedGroups: $collapsedDirectoryGroups,
+            style: .popup
+        )
     }
 
     @ViewBuilder

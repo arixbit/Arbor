@@ -310,8 +310,6 @@ struct RepositoryDirtyFileManager: Equatable, Sendable {
     private var pending: [String: [String: RepositoryDirtyFileRecord]] = [:]
     private var inProgress: [String: [UInt64: [String: RepositoryDirtyFileRecord]]] = [:]
     private var nextGeneration: UInt64 = 0
-
-    var hasDirtyFiles: Bool { pending.values.contains { !$0.isEmpty } }
     var hasInProgressFiles: Bool {
         inProgress.values.contains { !$0.isEmpty }
     }

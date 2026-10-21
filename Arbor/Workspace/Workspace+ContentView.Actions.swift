@@ -191,7 +191,7 @@ func confirmAndPerformExternalVCSActions(
     )
     let notificationID = externalVCSActionNotificationID(repositoryPath: rootPath)
     beginFeedbackOperation("Update Git files", notificationID: notificationID)
-    Task.detached(priority: .userInitiated) { [addPaths, stageAddPaths, removePaths] in
+    Task.detached(priority: .userInitiated) {
         do {
             let completedDetail = try runRepositoryExternalVCSActions(repo: repo, action: action)
             await MainActor.run {

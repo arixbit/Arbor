@@ -96,14 +96,6 @@ func presentLogSelectedChangesRestoreConflict(rootPath: String) {
     }
 }
 
-func restoreSelectedFile() {
-    // The Commit workspace keeps its selected row in `commitPreviewPath` so the
-    // main Log selection can remain independent.  Fall back to the older
-    // selection channels for Project/Conflict workspaces.
-    guard let path = fileWorkspace.previewPath ?? fileWorkspace.selection ?? fileWorkspace.fileSelection else { return }
-    restoreFileFromHead(path)
-}
-
 /// Restore is a tree action in GitStagePanel, not a global toolbar action.
 /// Keep the selected-file wrapper for keyboard/legacy callers, but let the
 /// tree context menu pass its path directly so a context-menu click cannot

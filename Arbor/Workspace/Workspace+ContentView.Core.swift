@@ -76,11 +76,6 @@ func handleContentViewAppear() {
     }
 }
 
-/// 打开当前窗口中的项目。
-func openRepo() {
-    requestOpenProject(projectWorkspace.inputPath)
-}
-
 /// 文件夹选择器：NSOpenPanel 选目录后填入 path 并打开（C1）。
 func showOpenPanel() {
     let panel = NSOpenPanel()
@@ -180,15 +175,6 @@ func loadTemplate() {
     }
 }
 
-/// 加载最近提交信息（供「最近信息」下拉）。
-func loadRecentMessages() {
-    guard let repo else { return }
-    Task.detached(priority: .userInitiated) {
-        let msgs = (try? repo.recentCommitMessages(limit: 10)) ?? []
-        await MainActor.run { self.commitWorkspace.recentMessages = msgs }
-    }
-}
-
 /// IDX-001「Exclude」入口：追加路径到 .git/info/exclude（不入库）。
 func excludePathFromRepo(_ path: String) {
     guard let repo else { return }
@@ -249,22 +235,6 @@ func parseCoAuthors(_ text: String) -> [String] {
     text.split(whereSeparator: \.isNewline)
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
-}
-
-func promptReword(index: Int, defaultMessage: String) {
-    guard rebaseWorkspace.actions.indices.contains(index) else { return }
-    let alert = NSAlert()
-    alert.messageText = "修改提交信息"
-    alert.informativeText = "请输入新的提交标题。"
-    let field = NSTextField(string: defaultMessage)
-    field.frame = NSRect(x: 0, y: 0, width: 360, height: 24)
-    alert.accessoryView = field
-    alert.addButton(withTitle: "确定")
-    alert.addButton(withTitle: "取消")
-    guard alert.runModal() == .alertFirstButtonReturn else { return }
-    let message = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !message.isEmpty else { return }
-    rebaseWorkspace.actions[index] = .reword(message: message)
 }
 
 nonisolated func errorMessage(_ error: Error) -> String {

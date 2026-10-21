@@ -29,9 +29,7 @@ enum GitPushAutoUpdateSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func value(
@@ -150,9 +148,7 @@ enum GitPushAfterCommitSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let encoded = Data(normalized.utf8).base64EncodedString()
-        return projectKeyPrefix + encoded
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 }
 
@@ -161,9 +157,7 @@ enum GitPushTagSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        let data = normalized.data(using: .utf8) ?? Data()
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 
     static func hasProjectOverride(

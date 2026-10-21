@@ -270,21 +270,13 @@ func stashBranchInRoot(rootPath: String, stashID: String) {
     stashBranchInRoot(rootPath: rootPath, stashID: stashID, branch: branch)
 }
 
-func stashBranchNotificationComponent(_ value: String) -> String {
-    value
-        .replacingOccurrences(of: "/", with: "_")
-        .replacingOccurrences(of: ":", with: "_")
-        .replacingOccurrences(of: "|", with: "_")
-        .replacingOccurrences(of: " ", with: "_")
-}
-
 func stashBranchNotificationID(rootPath: String, branch: String) -> String? {
     guard let projectPath = projectWorkspace.path, !projectPath.isEmpty else { return nil }
     return [
         "git.stash.branch",
-        stashBranchNotificationComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
-        stashBranchNotificationComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
-        stashBranchNotificationComponent(branch)
+        arborNotificationIDComponent(URL(fileURLWithPath: projectPath).standardizedFileURL.path),
+        arborNotificationIDComponent(URL(fileURLWithPath: rootPath).standardizedFileURL.path),
+        arborNotificationIDComponent(branch)
     ].joined(separator: ".")
 }
 
@@ -1146,11 +1138,11 @@ func popPendingPullStash() {
         do {
             if let shelfName {
                 try repo.shelvePopWithCancel(name: shelfName, cancel: restoreCancel)
-            } else if stashID != nil || stashUI.message != nil {
+            } else if stashID != nil || stashMessage != nil {
                 let reference = try Self.pullStashReference(
                     repo: repo,
                     stashID: stashID,
-                    message: stashUI.message
+                    message: stashMessage
                 )
                 stashRestoreID = reference.stash.id
                 try repo.stashPopWithIndexAndCancel(

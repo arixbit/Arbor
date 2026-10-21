@@ -83,13 +83,6 @@ struct LinearBekMergeFragment: Hashable {
     let tailEdges: Set<LinearBekGraphEdge>
     let mergeWithOldCommit: Bool
     let dottedEdges: [LinearBekDottedEdge]
-
-    /// Kept as a compatibility convenience for callers that only need the
-    /// common single-tail case. IntelliJ can produce several dotted tails for
-    /// one merge fragment.
-    var dottedEdge: LinearBekDottedEdge? {
-        dottedEdges.first
-    }
 }
 
 struct LinearBekGraphModel {

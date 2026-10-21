@@ -76,9 +76,7 @@ enum GitProtectedBranchRules {
         for projectPath: String?
     ) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        guard let data = normalized.data(using: .utf8) else { return nil }
-        return prefix + data.base64EncodedString()
+        return gitProjectSettingsKey(prefix, for: projectPath)
     }
 
     static func projectRawValue(
@@ -239,9 +237,7 @@ enum GitBranchesPopupSettings {
         for projectPath: String?
     ) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        guard let data = normalized.data(using: .utf8) else { return nil }
-        return "\(keyPrefix)\(data.base64EncodedString()):\(setting)"
+        return gitProjectSettingsKey(keyPrefix, for: projectPath) + ":\(setting)"
     }
 
     static func value(
@@ -431,9 +427,7 @@ enum GitCompareBranchesSettings {
 
     private static func projectKey(for projectPath: String?) -> String? {
         guard let projectPath, !projectPath.isEmpty else { return nil }
-        let normalized = URL(fileURLWithPath: projectPath).standardizedFileURL.path
-        guard let data = normalized.data(using: .utf8) else { return nil }
-        return projectKeyPrefix + data.base64EncodedString()
+        return gitProjectSettingsKey(projectKeyPrefix, for: projectPath)
     }
 }
 

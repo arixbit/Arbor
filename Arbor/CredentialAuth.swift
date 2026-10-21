@@ -126,16 +126,6 @@ final class GitRememberedUsernameStore: @unchecked Sendable {
         defaults.set(values, forKey: storageKey)
     }
 
-    func removeUsername(for remoteURL: String) {
-        let key = Self.normalizedRemoteURL(remoteURL)
-        guard !key.isEmpty else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        var values = defaults.dictionary(forKey: storageKey) as? [String: String] ?? [:]
-        values.removeValue(forKey: key)
-        defaults.set(values, forKey: storageKey)
-    }
-
     func removeAll() {
         lock.lock()
         defer { lock.unlock() }

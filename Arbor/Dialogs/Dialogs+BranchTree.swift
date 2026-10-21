@@ -179,6 +179,21 @@ func toggledBranchTreeSelection(
     }
     return next
 }
+
+func toggledBranchFavoriteIDs(
+    _ selection: [BranchDashboardReference],
+    current: Set<String>
+) -> Set<String> {
+    var updated = current
+    for reference in selection {
+        if updated.contains(reference.favoriteID) {
+            updated.remove(reference.favoriteID)
+        } else {
+            updated.insert(reference.favoriteID)
+        }
+    }
+    return updated
+}
 /// Applies a branch-tree click while keeping the anchor root-qualified.
 /// Shift extends from the last non-range click; Shift-Command adds the range
 /// to the existing selection, which is the useful desktop-tree behavior for

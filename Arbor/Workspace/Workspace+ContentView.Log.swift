@@ -479,7 +479,7 @@ func loadLog(reset: Bool = true) {
 
 func isActiveLogRepository(_ candidate: Repository) -> Bool {
     if let activeRepo = logList.activeRepo {
-        return logList.activeRepo === candidate
+        return activeRepo === candidate
     }
     return projectWorkspace.repository === candidate
 }

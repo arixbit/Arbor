@@ -84,19 +84,7 @@ func projectFileTreeCanCompareWithSameVersion(path: String, entries: [FileEntry]
 /// revision to describe.  Clean tracked files are absent from `status()` and
 /// remain eligible.
 func projectFileTreeCanShowCurrentRevision(path: String, entries: [FileEntry]) -> Bool {
-    let matching = entries.filter { $0.path == path }
-    guard !matching.isEmpty else { return true }
-    for entry in matching {
-        let kinds = [entry.staged, entry.unstaged]
-        if kinds.contains(where: {
-            $0 == .untracked
-                || $0 == .ignored
-                || $0 == .conflicted
-        }) {
-            return false
-        }
-    }
-    return true
+    projectFileTreeCanCompareWithSameVersion(path: path, entries: entries)
 }
 
 /// `Compare.Selected` needs a committed history side.  Untracked, ignored and

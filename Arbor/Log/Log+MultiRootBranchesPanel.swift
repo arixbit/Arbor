@@ -208,7 +208,7 @@ struct MultiRootLogBranchesPanel: View {
                     rootPath: snapshot.rootPath
                 )
             }
-            let remoteGroups = remoteGroupNames(snapshot).map { name in
+            let remoteGroups = branchRemoteGroupNames(snapshot).map { name in
                 BranchTreeTarget(
                     id: remoteGroupTargetID(rootPath: snapshot.rootPath, name: name),
                     value: name,
@@ -735,7 +735,7 @@ struct MultiRootLogBranchesPanel: View {
             self.branchSelectionAnchorID = nil
         }
         let visibleRemoteGroupIDs = Set(filteredSnapshots.flatMap { snapshot in
-            remoteGroupNames(snapshot).map {
+            branchRemoteGroupNames(snapshot).map {
                 remoteGroupTargetID(rootPath: snapshot.rootPath, name: $0)
             }
         })
@@ -761,14 +761,7 @@ struct MultiRootLogBranchesPanel: View {
     }
 
     func toggleFavorites(_ selection: [BranchDashboardReference]) {
-        var updated = favoriteReferenceIDs
-        for reference in selection {
-            if updated.contains(reference.favoriteID) {
-                updated.remove(reference.favoriteID)
-            } else {
-                updated.insert(reference.favoriteID)
-            }
-        }
+        let updated = toggledBranchFavoriteIDs(selection, current: favoriteReferenceIDs)
         favoriteReferenceIDs = updated
         GitBranchesPopupSettings.saveFavorites(updated, for: projectPath)
     }
@@ -944,7 +937,7 @@ struct MultiRootLogBranchesPanel: View {
 
     @ViewBuilder
     func remoteBranchRows(_ snapshot: GitRootBranchSnapshot) -> some View {
-        ForEach(remoteGroupNames(snapshot), id: \.self) { remoteName in
+        ForEach(branchRemoteGroupNames(snapshot), id: \.self) { remoteName in
             remoteGroupRow(
                 rootPath: snapshot.rootPath,
                 name: remoteName,
@@ -960,16 +953,6 @@ struct MultiRootLogBranchesPanel: View {
                 snapshot: snapshot,
                 scopeSuffix: remoteName
             )
-        }
-    }
-
-    func remoteGroupNames(_ snapshot: GitRootBranchSnapshot) -> [String] {
-        var names = snapshot.remotes.map(\.name)
-        for remote in snapshot.remoteBranches.map(\.remote) where !names.contains(remote) {
-            names.append(remote)
-        }
-        return names.sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
         }
     }
 
@@ -1367,46 +1350,20 @@ struct MultiRootLogBranchesPanel: View {
 
     @ViewBuilder
     func remoteGroupActionMenu(for selection: [BranchDashboardRemoteGroup]) -> some View {
-        let availability = BranchDashboardRemoteGroupActionAvailability.resolve(selection: selection)
-        if availability.contains(.editRemote), let group = selection.first {
-            Button("Edit Remote…") {
-                onEditRemote(group.rootPath, group.name)
-            }
-        }
-        if availability.contains(.removeRemote) {
-            if availability.contains(.editRemote) {
-                Divider()
-            }
-            Button(
-                selection.count == 1 ? "Remove Remote…" : "Remove Selected Remotes…",
-                role: .destructive
-            ) {
-                if selection.count == 1, let group = selection.first {
-                    onRemoveRemote(group.rootPath, group.name)
-                } else {
-                    onRemoveRemoteSelected(selection)
-                }
-            }
-        }
+        BranchDashboardRemoteGroupActionMenu(
+            selection: selection,
+            onEditRemote: onEditRemote,
+            onRemoveRemote: onRemoveRemote,
+            onRemoveRemoteSelected: onRemoveRemoteSelected
+        )
     }
 
     func directoryGroupRow(_ row: BranchDirectoryRow) -> some View {
-        Button {
-            if collapsedDirectoryGroups.contains(row.id) {
-                collapsedDirectoryGroups.remove(row.id)
-            } else {
-                collapsedDirectoryGroups.insert(row.id)
-            }
-        } label: {
-            Label(
-                row.name,
-                systemImage: collapsedDirectoryGroups.contains(row.id) ? "chevron.right" : "chevron.down"
-            )
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.leading, CGFloat(row.depth) * 14)
-        }
-        .buttonStyle(.plain)
+        BranchDirectoryGroupRow(
+            row: row,
+            collapsedGroups: $collapsedDirectoryGroups,
+            style: .log
+        )
     }
 
     func selectBranchTarget(id: String, rootPath: String, branch: String) {
@@ -1431,15 +1388,11 @@ struct MultiRootLogBranchesPanel: View {
         selectedBranchTargetID = id
         selectedBranchTargetIDs = []
         branchSelectionAnchorID = nil
-        if flags.contains(.command) {
-            if selectedRemoteGroupIDs.contains(id) {
-                selectedRemoteGroupIDs.remove(id)
-            } else {
-                selectedRemoteGroupIDs.insert(id)
-            }
-            return
-        }
-        selectedRemoteGroupIDs = [id]
+        selectedRemoteGroupIDs = toggledBranchTreeSelection(
+            current: selectedRemoteGroupIDs,
+            id: id,
+            command: flags.contains(.command)
+        )
     }
 
     func branchReferenceName(_ row: BranchDirectoryRow) -> String? {

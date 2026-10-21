@@ -250,28 +250,6 @@ func exportShelve(_ name: String, rootPath: String? = nil) {
     }
 }
 
-func loadShelves() {
-    guard let repo else { return }
-    Task.detached(priority: .userInitiated) {
-        do {
-            let ss = try repo.shelveList()
-            let dsh = (try? repo.shelveDeletedList()) ?? []
-            await MainActor.run {
-                self.shelfWorkspace.shelves = ss
-                self.shelfWorkspace.deletedShelves = dsh
-                if let name = self.shelfWorkspace.previewName,
-                   !ss.contains(where: { $0.name == name }),
-                   !dsh.contains(where: { $0.name == name }) {
-                    self.shelfWorkspace.previewName = nil
-                    self.shelfWorkspace.previewIsDeleted = false
-                    self.shelfWorkspace.previewText = nil
-                    self.shelfWorkspace.showPreview = false
-                }
-            }
-        } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
-    }
-}
-
 /// shelve 当前激活仓库的全部变更。
 func doShelve(
     paths selectedPaths: [String]? = nil,
