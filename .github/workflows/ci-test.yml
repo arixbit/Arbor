@@ -46,6 +46,9 @@ jobs:
         run: |
           cargo fmt --manifest-path arbor-engine/Cargo.toml --check
           cargo test --manifest-path arbor-engine/Cargo.toml --all-targets
+          # The Xcode target links the release dylib, so the Swift build
+          # needs it even when only the tests are being run.
+          cargo build --release --manifest-path arbor-engine/Cargo.toml
           ./scripts/generate-swift-bindings.sh >/dev/null
           ./scripts/generate-xcode-project.sh
           xcodebuild -project Arbor/Arbor.xcodeproj -scheme Arbor \
