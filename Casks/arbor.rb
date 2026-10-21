@@ -1,6 +1,6 @@
 cask "arbor" do
-  version "1.0.18"
-  sha256 "9cf88db00c98d48f054f1a216fb37c22186dfaf8f99f954b3f7c6ed1980b8996"
+  version "1.0.19"
+  sha256 "ba1cd6a923327c2ff4cd15e1096883b13d6cf381377cd7e602577c98040f279f"
 
   url "https://github.com/arixbit/Arbor/releases/download/v#{version}/Arbor-#{version}-unsigned-arm64.dmg"
   name "Arbor"
