@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.23 - 2026-10-22
+
+Performance release: keep worktrees with large change lists responsive. A
+sampled 1.0.22 run on a big repository showed the main thread spending most of
+its time inside SwiftUI layout while the window kept every changed file
+materialized as a row, and the Log Changes tree rebuilt and re-sorted itself on
+every body evaluation.
+
+- The Commit panel change list is now a lazy stack: rows, checkboxes, drag
+  sources and context menus are only built for the visible range, so a worktree
+  with thousands of edits no longer allocates a view per file (measured with
+  2,000 changes: 1.4 GB footprint and 65% CPU before, 363 MB and 0% after)
+- Change rows no longer resolve their name and parent folder through
+  `URL(fileURLWithPath:)`, which ran a `getcwd` syscall for every row of every
+  render and displayed the checkout's absolute prefix (`/Users/you/repo/dir`)
+  instead of the repository-relative folder
+- The change tree rows are memoized against the status snapshot and the
+  grouping mode instead of being re-sorted and rebuilt on every body evaluation
+- The Log Changes tree sorts each directory once instead of on every insert,
+  and its context-menu selection snapshot is computed once per render instead
+  of once per row; a 4,080-file commit now scrolls in 0.48s instead of 2.46s
+- The Project tool window resolves a file or directory status from a
+  per-snapshot index instead of scanning every changed entry for every visible
+  row, and file icons no longer resolve relative names against the working
+  directory
+- New unit tests pin the project-tree status aggregation rules (a conflict
+  wins, otherwise the first notable kind)
+
 ## 1.0.22 - 2026-10-21
 
 Performance release: keep the VCS Log usable on large histories. A sampled
