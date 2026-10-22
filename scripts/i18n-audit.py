@@ -59,6 +59,27 @@ def scan_file(path: Path) -> list[tuple[str, int]]:
     return matches
 
 
+CJK_PATTERN = re.compile(r"[\u3400-\u9fff]")
+
+
+def hardcoded_chinese(path: Path) -> list[tuple[str, int]]:
+    """Literals that hand Chinese text to a user-facing API.
+
+    A Chinese literal is not a translation: it is untranslated English UI
+    showing Chinese text (or the reverse) and it never passes through the
+    string catalog. `--update-hardcoded-baseline` records the current debt so
+    the count can only go down.
+    """
+    source = path.read_text(encoding="utf-8")
+    hits: list[tuple[str, int]] = []
+    for pattern in (CALL_PATTERN, HELP_PATTERN, ARGUMENT_PATTERN):
+        for match in pattern.finditer(source):
+            value = decode_swift_string(match.group(1))
+            if value and "\\(" not in value and CJK_PATTERN.search(value):
+                hits.append((value, line_number(source, match.start())))
+    return hits
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -68,6 +89,21 @@ def main() -> int:
         nargs="*",
         default=["Arbor"],
         help="relative files/directories to scan (default: Arbor)",
+    )
+    parser.add_argument(
+        "--hardcoded-baseline",
+        type=Path,
+        help="baseline file of accepted Chinese literals (default: scripts/i18n-hardcoded-baseline.txt)",
+    )
+    parser.add_argument(
+        "--only-hardcoded",
+        action="store_true",
+        help="exit non-zero only for newly introduced Chinese literals",
+    )
+    parser.add_argument(
+        "--update-hardcoded-baseline",
+        action="store_true",
+        help="rewrite the baseline with the current Chinese literals",
     )
     args = parser.parse_args()
     root = args.root.resolve()
@@ -85,6 +121,36 @@ def main() -> int:
                     f"{swift_file.relative_to(root)}:{line}"
                 )
 
+    hardcoded: list[tuple[str, str, int]] = []
+    for raw_path in args.paths:
+        path = (root / raw_path).resolve()
+        files = [path] if path.is_file() else sorted(path.rglob("*.swift"))
+        for swift_file in files:
+            if "Tests" in swift_file.parts:
+                continue
+            for value, line in hardcoded_chinese(swift_file):
+                hardcoded.append((str(swift_file.relative_to(root)), value, line))
+
+    baseline_path = (
+        args.hardcoded_baseline
+        if args.hardcoded_baseline is not None
+        else root / "scripts/i18n-hardcoded-baseline.txt"
+    )
+    hardcoded_entries = sorted({f"{path}\t{value}" for path, value, _ in hardcoded})
+
+    if args.update_hardcoded_baseline:
+        baseline_path.write_text("\n".join(hardcoded_entries) + "\n", encoding="utf-8")
+        print(f"wrote {len(hardcoded_entries)} hardcoded entries to {baseline_path}")
+
+    baseline: set[str] = set()
+    if baseline_path.exists():
+        baseline = {
+            line for line in baseline_path.read_text(encoding="utf-8").splitlines() if line
+        }
+
+    introduced = sorted(set(hardcoded_entries) - baseline)
+    retired = sorted(baseline - set(hardcoded_entries))
+
     missing = sorted(set(occurrences) - catalog_keys)
     untranslated = sorted(
         key
@@ -94,6 +160,17 @@ def main() -> int:
         is None
     )
 
+    if args.only_hardcoded:
+        print(f"Hardcoded Chinese UI literals: {len(hardcoded_entries)} (baseline {len(baseline)})")
+        for entry in introduced:
+            print(f"HARDCODED\t{entry}")
+        if retired:
+            print(
+                f"Note: {len(retired)} baseline entries no longer exist; "
+                "rerun with --update-hardcoded-baseline to ratchet the baseline down."
+            )
+        return 1 if introduced else 0
+
     print(f"Scanned literals: {len(occurrences)}")
     print(f"Missing catalog keys: {len(missing)}")
     for key in missing:
@@ -101,7 +178,16 @@ def main() -> int:
     print(f"Missing zh-Hans translations: {len(untranslated)}")
     for key in untranslated:
         print(f"UNTRANSLATED\t{key}\t{' / '.join(occurrences[key])}")
-    return 1 if missing or untranslated else 0
+
+    print(f"Hardcoded Chinese UI literals: {len(hardcoded_entries)} (baseline {len(baseline)})")
+    for entry in introduced:
+        print(f"HARDCODED\t{entry}")
+    if retired and not args.update_hardcoded_baseline:
+        print(
+            f"Note: {len(retired)} baseline entries no longer exist; "
+            "rerun with --update-hardcoded-baseline to ratchet the baseline down."
+        )
+    return 1 if missing or untranslated or introduced else 0
 
 
 if __name__ == "__main__":

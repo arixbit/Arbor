@@ -1,0 +1,109 @@
+Arbor/App/ProjectCommands.swift	检查更新…
+Arbor/CredentialAuth.swift	SSH 私钥需要解锁口令（passphrase）。
+Arbor/Dialogs/Dialogs+BranchesPopover.swift	已同步
+Arbor/Dialogs/Dialogs+BranchesPopover.swift	未跟踪
+Arbor/Dialogs/Dialogs+BranchesPopover.swift	绿色表示本地待推送提交，蓝色表示远程有更新
+Arbor/Dialogs/Dialogs+BranchesPopover.swift	蓝色表示远程有更新，绿色表示本地有待推送提交
+Arbor/Dialogs/Dialogs+BranchesPopover.swift	远程有更新
+Arbor/Dialogs/Dialogs+Core.swift	⌘O 动作 · 回车在 Log 中定位
+Arbor/Dialogs/Dialogs+Core.swift	无匹配结果
+Arbor/Dialogs/Dialogs+Core.swift	输入以搜索分支、提交、Tag 或 Git 动作
+Arbor/Dialogs/Dialogs+Project.swift	当前项目目录不包含 Git 仓库。
+Arbor/Dialogs/Dialogs+Project.swift	正在逐 root 执行…
+Arbor/Dialogs/Dialogs+Remote.swift	Push URL (可选)
+Arbor/Dialogs/Dialogs+Remote.swift	Push refspec (可选)
+Arbor/Dialogs/Dialogs+Remote.swift	先 Fetch 远程分支，再设置 upstream。
+Arbor/Dialogs/Dialogs+Remote.swift	选择一个远程进行编辑
+Arbor/Dialogs/Dialogs+Stash.swift	保存后保留当前已暂存的内容；未暂存的修改会被收进 stash。
+Arbor/Dialogs/Dialogs+Worktree.swift	留空将直接检出来源引用；填写后会从来源引用创建新分支。
+Arbor/DiffDetailView.swift	CRLF 敏感
+Arbor/DiffDetailView.swift	与剪贴板比较
+Arbor/DiffDetailView.swift	二进制文件，无法显示 diff
+Arbor/DiffDetailView.swift	任意版本比较
+Arbor/DiffDetailView.swift	工作区
+Arbor/DiffDetailView.swift	已暂存
+Arbor/DiffDetailView.swift	忽略空白
+Arbor/DiffDetailView.swift	点击变更行选择（变更组不可拆分）
+Arbor/DiffDetailView.swift	点击打开该提交详情
+Arbor/DiffDetailView.swift	该维度无变更
+Arbor/DiffDetailView.swift	选择一个文件查看 diff / 冲突
+Arbor/DiffDetailView.swift	选择模式
+Arbor/FileContentView.swift	Git LFS pointer（内容未下载）
+Arbor/FileContentView.swift	内容已截断
+Arbor/Hooks/HooksPanelView.swift	保存后会创建该文件并加上可执行位。
+Arbor/Hooks/HooksPanelView.swift	有 .sample 模板可安装
+Arbor/Hooks/HooksPanelView.swift	未保存
+Arbor/Lfs/LfsPanelView.swift	安装后重新打开该面板：`brew install git-lfs`，然后在终端执行 `git lfs install`。
+Arbor/Lfs/LfsPanelView.swift	没有 LFS 文件。
+Arbor/Lfs/LfsPanelView.swift	还没有跟踪规则。输入模式（如 `*.psd`）后点 Track，git-lfs 会写入 .gitattributes。
+Arbor/Log/Log+ChangesBrowser.swift	Root commit — 与空 tree 比较
+Arbor/Log/Log+ChangesBrowser.swift	多选 Changes 最多加载 50 个提交，避免阻塞 Log 工作区
+Arbor/Log/Log+ContentView.Commit.swift	选择一个提交查看 Changes
+Arbor/Log/Log+ContentView.Graph.swift	tag 名称
+Arbor/Log/Log+ContentView.Graph.swift	创建
+Arbor/Log/Log+ContentView.Graph.swift	删除
+Arbor/Log/Log+ContentView.Graph.swift	指向 rev（空=HEAD）
+Arbor/Log/Log+ContentView.Graph.swift	新版本 / 分支
+Arbor/Log/Log+ContentView.Graph.swift	旧版本 / 分支
+Arbor/Log/Log+ContentView.Graph.swift	比较
+Arbor/Log/Log+ContentView.Push.swift	推送
+Arbor/Log/TreeCompareDetailView.swift	选择一个文件查看比较结果
+Arbor/LogGraphView.swift	加载更多提交
+Arbor/MainWindow/ContentView+Presentation.swift	取消
+Arbor/MainWindow/ContentView+Presentation.swift	新窗口
+Arbor/MainWindow/ContentView+Presentation.swift	替换当前窗口
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	Base（共同祖先）
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	上一个冲突块
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	下一个冲突块
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	两者
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	从 index stages 重新生成冲突 marker，并清理当前文件的 hunk 决策
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	保留双方内容（ours 在上）
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	全部接受本地
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	全部接受远程
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	关闭
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	刷新
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	将结果或 Patch 编辑器选中的 patch changes 应用到结果编辑器
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	忽略选中的 patch hunk，并保留当前结果
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	本地
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	查看共同祖先版本
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	查看当前 Apply Patch 冲突的实际补丁
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	比较本地冲突阶段与当前结果编辑器
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	跳到上一个未解决 patch hunk
+Arbor/MainWindow/MainWindow+ConflictDetail.swift	跳到下一个未解决 patch hunk
+Arbor/MainWindow/MainWindow+MergeEditor.swift	Patch（只读）
+Arbor/MainWindow/MainWindow+MergeEditor.swift	本地 (ours)
+Arbor/MainWindow/MainWindow+MergeEditor.swift	结果（可编辑）
+Arbor/MainWindow/MainWindow+MergeEditor.swift	远程 (theirs)
+Arbor/MainWindow/MainWindow+Project.swift	在 Finder 中显示项目根目录
+Arbor/MainWindow/MainWindow+Project.swift	打开项目
+Arbor/MainWindow/MainWindow+Project.swift	项目
+Arbor/Panels/Panels+Core.swift	二进制文件：diff/行级暂存按降级策略处理
+Arbor/Panels/Panels+Core.swift	打开项目…
+Arbor/Panels/Panels+Worktree.swift	revision（可选）
+Arbor/Panels/Panels+Worktree.swift	分支 (branch) 已被其他 worktree 占用；请换一个分支或只填写 revision。
+Arbor/Panels/Panels+Worktree.swift	创建
+Arbor/Panels/Panels+Worktree.swift	删除
+Arbor/Panels/Panels+Worktree.swift	强制
+Arbor/Panels/Panels+Worktree.swift	打开
+Arbor/Panels/Panels+Worktree.swift	新 worktree 路径
+Arbor/Panels/Panels+Worktree.swift	新分支（可选）
+Arbor/Panels/Panels+Worktree.swift	解锁
+Arbor/Panels/Panels+Worktree.swift	锁定
+Arbor/ProjectFileTreeView.swift	Arbor 每个窗口只显示一个项目
+Arbor/ProjectFileTreeView.swift	克隆 Git 仓库…
+Arbor/ProjectFileTreeView.swift	初始化 Git 仓库…
+Arbor/ProjectFileTreeView.swift	打开一个项目
+Arbor/ProjectFileTreeView.swift	打开项目后显示文件树
+Arbor/ProjectFileTreeView.swift	无法打开 Git 项目
+Arbor/ProjectFileTreeView.swift	最近项目
+Arbor/ProjectFileTreeView.swift	选择其他项目…
+Arbor/ProjectFileTreeView.swift	选择项目文件夹…
+Arbor/ProjectFileTreeView.swift	重试
+Arbor/PushDialogView.swift	取消
+Arbor/PushDialogView.swift	请选择 remote 后再推送。
+Arbor/Settings/DiagnosticsSettingsView.swift	关闭时，Arbor 不执行 .gitattributes 中的外部 filter、非 UTF-8 编码或 textconv；开启后通过 system Git 执行，并受单次转换超时保护。Diff Viewer 的 External Diff 仍需用户显式触发，并使用 Git 配置的 difftool。
+Arbor/Settings/DiagnosticsSettingsView.swift	打开下载页
+Arbor/Settings/DiagnosticsSettingsView.swift	每个窗口只围绕一个项目；新项目可从工具栏打开并选择替换或新窗口。
+Arbor/Settings/DiagnosticsSettingsView.swift	每天最多联网检查一次 GitHub Releases；也可以随时手动检查。检查只读取最新版本号，不上传任何数据。
+Arbor/Settings/DiagnosticsSettingsView.swift	立即检查更新
+Arbor/Settings/DiagnosticsSettingsView.swift	自动检查更新
