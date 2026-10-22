@@ -2565,6 +2565,9 @@ struct PatchDiffPreviewView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+        // Same reason as the header toolbar: without an explicit label the
+        // accessibility label is the SF Symbol name ("Go Down").
+        .accessibilityLabel(help)
         .help(help)
     }
 

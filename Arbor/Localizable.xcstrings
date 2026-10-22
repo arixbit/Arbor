@@ -16470,7 +16470,348 @@
           }
         }
       }
+    },
+    "Commands run as argument vectors, never through a shell; quote complex arguments." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令按参数执行，不经过 shell；复杂参数请使用引号。"
+          }
+        }
+      }
+    },
+    "Committer" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交者"
+          }
+        }
+      }
+    },
+    "Git Tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 任务"
+          }
+        }
+      }
+    },
+    "Invalid signature (BAD signature)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名无效 (BAD signature)"
+          }
+        }
+      }
+    },
+    "No Git task is running" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无运行中的 Git 任务"
+          }
+        }
+      }
+    },
+    "No command result" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无命令结果"
+          }
+        }
+      }
+    },
+    "No operations recorded" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无操作记录"
+          }
+        }
+      }
+    },
+    "None" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（无）"
+          }
+        }
+      }
+    },
+    "Nothing finished yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无已完成任务"
+          }
+        }
+      }
+    },
+    "Open Merge Revisions…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Merge Revisions…"
+          }
+        }
+      }
+    },
+    "Open Project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目"
+          }
+        }
+      }
+    },
+    "Open in Browser" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器中打开"
+          }
+        }
+      }
+    },
+    "Operation History" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作历史"
+          }
+        }
+      }
+    },
+    "Operations view" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作视图"
+          }
+        }
+      }
+    },
+    "Parents" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "父提交"
+          }
+        }
+      }
+    },
+    "Recently finished" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近完成"
+          }
+        }
+      }
+    },
+    "Refs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引用"
+          }
+        }
+      }
+    },
+    "Results of pull, fetch, push, commit and branch operations appear here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行 pull、fetch、push、commit 或分支操作后，结果会显示在这里。"
+          }
+        }
+      }
+    },
+    "Reveal Project Root in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Finder 中显示项目根目录"
+          }
+        }
+      }
+    },
+    "Root commit — compared with an empty tree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Root commit — 与空 tree 比较"
+          }
+        }
+      }
+    },
+    "Run a Git subcommand to see it here; full stdout/stderr is kept in the operation history." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 Git 子命令后运行，完整 stdout/stderr 会保留在操作历史中。"
+          }
+        }
+      }
+    },
+    "Running" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进行中"
+          }
+        }
+      }
+    },
+    "Select a commit to see its details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个提交查看详情"
+          }
+        }
+      }
+    },
+    "Select a context from the project tree or the tool window below" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从左侧项目树或底部工具窗选择上下文"
+          }
+        }
+      }
+    },
+    "Signature" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名"
+          }
+        }
+      }
+    },
+    "Signed, but the verifier cannot decide" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存在签名，验证器无法判定"
+          }
+        }
+      }
+    },
+    "Signed, verifying…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存在签名，验证中…"
+          }
+        }
+      }
+    },
+    "Start a fetch, pull, push, commit or other Git operation and its progress and cancel control appear here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始 fetch、pull、push、commit 或其它 Git 操作后，进度和取消入口会显示在这里。"
+          }
+        }
+      }
+    },
+    "Tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务"
+          }
+        }
+      }
+    },
+    "The conflicted file is open in Merge Revisions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "冲突文件已进入 Merge Revisions"
+          }
+        }
+      }
+    },
+    "Verified (good signature)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已验证 (Good signature)"
+          }
+        }
+      }
+    },
+    "Nothing to fetch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可拉取的内容"
+          }
+        }
+      }
+    },
+    "No remotes are configured for this repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该仓库尚未配置 remote。"
+          }
+        }
+      }
+    },
+    "No updates" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无更新"
+          }
+        }
+      }
     }
+
   },
   "version" : "1.0"
 }

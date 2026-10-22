@@ -28,8 +28,8 @@ enum OperationsViewMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .tasks: "任务"
-        case .history: "操作历史"
+        case .tasks: "Tasks"
+        case .history: "Operation History"
         case .console: "Git Console"
         case .worktrees: "Worktrees"
         case .submodules: "Submodules"

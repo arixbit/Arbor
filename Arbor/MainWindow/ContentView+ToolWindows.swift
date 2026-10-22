@@ -338,7 +338,7 @@ extension ContentView {
             )
         case .operations:
             VStack(spacing: 0) {
-                Picker("操作视图", selection: $operationRecovery.viewMode) {
+                Picker("Operations view", selection: $operationRecovery.viewMode) {
                     ForEach(OperationsViewMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -503,13 +503,13 @@ extension ContentView {
                                     Image(systemName: "folder.badge.plus")
                                 }
                                 .buttonStyle(.plain)
-                                .help("打开项目")
+                                .help("Open Project")
                                 if repo != nil {
                                     Button(action: { if let repo { showInFinder(repo) } }) {
                                         Image(systemName: "arrow.up.forward.app")
                                     }
                                     .buttonStyle(.plain)
-                                    .help("在 Finder 中显示项目根目录")
+                                    .help("Reveal Project Root in Finder")
                                 }
                             }
                         )
@@ -599,13 +599,13 @@ extension ContentView {
                                     Image(systemName: "folder.badge.plus")
                                 }
                                 .buttonStyle(.plain)
-                                .help("打开项目")
+                                .help("Open Project")
                                 if repo != nil {
                                     Button(action: { if let repo { showInFinder(repo) } }) {
                                         Image(systemName: "arrow.up.forward.app")
                                     }
                                     .buttonStyle(.plain)
-                                    .help("在 Finder 中显示项目根目录")
+                                    .help("Reveal Project Root in Finder")
                                 }
                             }
                         )
@@ -704,9 +704,9 @@ extension ContentView {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.system(size: 34, weight: .light))
                     .foregroundStyle(.orange)
-                Text("冲突文件已进入 Merge Revisions")
+                Text("The conflicted file is open in Merge Revisions")
                     .foregroundStyle(.secondary)
-                Button("打开 Merge Revisions…") { operationRecovery.showConflictResolver = true }
+                Button("Open Merge Revisions…") { operationRecovery.showConflictResolver = true }
                     .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -768,7 +768,7 @@ extension ContentView {
                 Image(systemName: "rectangle.center.inset.filled")
                     .font(.system(size: 34, weight: .light))
                     .foregroundStyle(Design.Colors.accent)
-                Text("从左侧项目树或底部工具窗选择上下文")
+                Text("Select a context from the project tree or the tool window below")
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

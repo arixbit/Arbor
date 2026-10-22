@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+UI correctness: clicks that changed nothing now fail a test instead of shipping.
+
+- Added `ui-smoke/`: an XCUITest suite that clicks every visible control on the
+  Commit workbench, Log workbench, project tree, branches popover and Settings,
+  and requires an observable change. A control that reacts with nothing is a
+  `DEAD` failure, with the coordinate and a screenshot. Runs locally with
+  `./scripts/ui-smoke.sh` and in CI via `.github/workflows/ui-smoke.yml`
+- Toolbar icon buttons exposed their SF Symbol name as the accessibility label
+  (`Arrow Down Circle`, `Selected`), so VoiceOver read the icon instead of the
+  action and the controls could not be addressed by name. Update, Commit, Push,
+  Fetch, Refresh and Search now carry explicit labels
+- Operation Log "Clear" stayed enabled when the only remaining entry was the
+  running operation, which `clearHistory()` deliberately keeps: the button was
+  clickable and did nothing. It is now disabled when there is nothing to remove
+- The commit inspector, Operation Log, Git Console, tasks view and Operations
+  picker rendered hardcoded Chinese inside an English interface (commit
+  metadata, action buttons, empty states). They now use catalog keys with
+  `zh-Hans` translations
+- Commit action feedback no longer infers success by string-prefix matching on
+  a Chinese message; the level travels with the message
+- `scripts/i18n-audit.py --only-hardcoded` records the remaining Chinese
+  literals in `scripts/i18n-hardcoded-baseline.txt` and fails on new ones, so
+  the count can only go down
+
 ## 1.0.23 - 2026-10-22
 
 Performance release: keep worktrees with large change lists responsive. A

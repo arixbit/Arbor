@@ -72,8 +72,11 @@ struct GitExecutableSettingsSection: View {
                 Button("Save Git executable", action: saveExecutable)
                     .keyboardShortcut(.defaultAction)
                     .disabled(isBusy)
+                // Resetting to the PATH default clears both the draft and the
+                // saved override. When neither holds a value the button cannot
+                // do anything, so it must not look available.
                 Button("Reset to PATH default", action: resetExecutable)
-                    .disabled(isBusy)
+                    .disabled(isBusy || (path.isEmpty && savedPath.isEmpty))
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)

@@ -1,6 +1,13 @@
 import SwiftUI
 import AppKit
 
+/// Result of a commit action in the inspector. Carrying the level avoids
+/// inferring success from the text of a message.
+struct CommitActionFeedback: Equatable {
+    let text: String
+    let isSuccess: Bool
+}
+
 // MARK: - 提交详情（日志模式）
 
 struct CommitDetailView: View {
@@ -27,7 +34,7 @@ struct CommitDetailView: View {
     /// separate splitter components.  The metadata component reuses this
     /// view, but must not start a second hidden changes/diff loader.
     var showsChanges: Bool = true
-    @State private var feedback: String?
+    @State private var feedback: CommitActionFeedback?
     @State private var changedFiles: [TreeChange] = []
     @State private var selectedPath: String?
     @State private var fileDiff: FileDiff?
@@ -72,7 +79,7 @@ struct CommitDetailView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
-                Text("选择一个提交查看详情").foregroundStyle(.secondary)
+                Text("Select a commit to see its details").foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -102,7 +109,7 @@ struct CommitDetailView: View {
     private func inspectorActions(_ commit: CommitInfo) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button("还原此提交 (revert)") {
+                Button("Revert Commit") {
                     if let onRevertRequested {
                         onRevertRequested(commit)
                     } else {
@@ -118,7 +125,7 @@ struct CommitDetailView: View {
                     }
                 }
                     .disabled(repo == nil)
-                Button("从此提交创建分支") { onCreateBranch(commit) }
+                Button("Create Branch from Commit") { onCreateBranch(commit) }
                     .disabled(repo == nil)
                 hostedCommitAction(commit)
             }
@@ -135,9 +142,9 @@ struct CommitDetailView: View {
         switch hostedRemoteActionPresentation(for: candidates.count) {
         case .direct where candidates.count == 1:
             let remote = candidates[0]
-            Button("在浏览器中打开") { openInBrowser(commit, remote: remote) }
+            Button("Open in Browser") { openInBrowser(commit, remote: remote) }
         case .submenu:
-            Menu("在浏览器中打开") {
+            Menu("Open in Browser") {
                 ForEach(candidates, id: \.name) { remote in
                     Button(remote.name) {
                         openInBrowser(commit, remote: remote)
@@ -165,18 +172,18 @@ struct CommitDetailView: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
         }
-        infoRow("提交", commit.id)
-        infoRow("作者", "\(commit.authorName) <\(commit.authorEmail)>")
-        infoRow("提交者", "\(commit.committerName) <\(commit.committerEmail)>")
-        infoRow("时间", dateStr(commit.time))
+        infoRow("Commit", commit.id)
+        infoRow("Author", "\(commit.authorName) <\(commit.authorEmail)>")
+        infoRow("Committer", "\(commit.committerName) <\(commit.committerEmail)>")
+        infoRow("Date", dateStr(commit.time))
         if commit.hasSignature {
-            infoRow("签名", signatureBadge)
+            infoRow("Signature", signatureBadge)
         }
-        infoRow("父提交", commit.parentIds.isEmpty ? "（无）" : commit.parentIds.joined(separator: "\n"))
+        infoRow("Parents", commit.parentIds.isEmpty ? "None" : commit.parentIds.joined(separator: "\n"))
         feedbackRow
         let refs = commit.refs + commit.tagRefs + commit.remoteRefs
         if !refs.isEmpty {
-            infoRow("引用", refs.joined(separator: ", "))
+            infoRow("Refs", refs.joined(separator: ", "))
         }
     }
 
@@ -191,7 +198,10 @@ struct CommitDetailView: View {
     @ViewBuilder
     private var feedbackRow: some View {
         if let feedback {
-            Text(feedback).foregroundStyle(feedback.hasPrefix("已还原") ? .green : .red)
+            // The level travels with the message instead of being inferred
+            // from its text: a localized or reworded message must not turn a
+            // success into a red error line.
+            Text(feedback.text).foregroundStyle(feedback.isSuccess ? .green : .red)
         } else {
             EmptyView()
         }
@@ -201,16 +211,16 @@ struct CommitDetailView: View {
         Group {
             switch signatureStatus {
             case .valid:
-                Label("已验证 (Good signature)", systemImage: "checkmark.seal")
+                Label("Verified (good signature)", systemImage: "checkmark.seal")
                     .foregroundStyle(.green)
             case .invalid:
-                Label("签名无效 (BAD signature)", systemImage: "exclamationmark.triangle")
+                Label("Invalid signature (BAD signature)", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
             case .unknown:
-                Text("存在签名，验证器无法判定")
+                Text("Signed, but the verifier cannot decide")
                     .foregroundStyle(.orange)
             default:
-                Text("存在签名，验证中…")
+                Text("Signed, verifying…")
                     .foregroundStyle(.secondary)
             }
         }
@@ -270,7 +280,7 @@ struct CommitDetailView: View {
                     .controlSize(.small)
                     .frame(width: 200)
                 } else if commit.parentIds.isEmpty {
-                    Text("Root commit — 与空 tree 比较")
+                    Text("Root commit — compared with an empty tree")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -413,7 +423,7 @@ struct CommitDetailView: View {
             .onTapGesture { selectedPath = change.path }
             .onTapGesture(count: 2) { selectedPath = change.path }
             .contextMenu {
-                Button("查看差异") {
+                Button("View Diff") {
                     selectedPath = change.path
                 }
             }
@@ -529,11 +539,16 @@ struct CommitDetailView: View {
                 let newId = try repo.revert(commitId: id)
                 await MainActor.run {
                     guard self.commit?.id == id else { return }
-                    self.feedback = "已还原：\(String(newId.prefix(7)))"
+                    self.feedback = CommitActionFeedback(
+                        text: "Reverted as \(String(newId.prefix(7)))",
+                        isSuccess: true
+                    )
                     self.onReverted()
                 }
             } catch {
-                await MainActor.run { self.feedback = "\(error)" }
+                await MainActor.run {
+                    self.feedback = CommitActionFeedback(text: "\(error)", isSuccess: false)
+                }
             }
         }
     }
@@ -545,11 +560,16 @@ struct CommitDetailView: View {
                 let newId = try repo.cherryPick(commitId: commit.id)
                 await MainActor.run {
                     guard self.commit?.id == commit.id else { return }
-                    self.feedback = "已 Cherry-pick：\(String(newId.prefix(7)))"
+                    self.feedback = CommitActionFeedback(
+                        text: "Cherry-picked as \(String(newId.prefix(7)))",
+                        isSuccess: true
+                    )
                     self.onCherryPicked()
                 }
             } catch {
-                await MainActor.run { self.feedback = "\(error)" }
+                await MainActor.run {
+                    self.feedback = CommitActionFeedback(text: "\(error)", isSuccess: false)
+                }
             }
         }
     }
@@ -563,7 +583,10 @@ struct CommitDetailView: View {
             let link = repo.permalink(remoteUrl: url, commitId: id)
             await MainActor.run {
                 guard let link else {
-                    self.feedback = "该远程不支持 permalink"
+                    self.feedback = CommitActionFeedback(
+                    text: "This remote does not support commit permalinks",
+                    isSuccess: false
+                )
                     return
                 }
                 if let nsUrl = URL(string: link) {

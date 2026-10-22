@@ -25,15 +25,15 @@ struct GitTasksView: View {
             HStack(spacing: 10) {
                 Image(systemName: "checklist")
                     .foregroundStyle(Design.Colors.accent)
-                Text("Git 任务")
+                Text("Git Tasks")
                     .font(.system(size: 15, weight: .semibold))
                 if feedbackCenter.isRunning {
-                    Text("进行中")
+                    Text("Running")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                Button("操作历史") { onOpenHistory() }
+                Button("Operation History") { onOpenHistory() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -48,9 +48,9 @@ struct GitTasksView: View {
                 Divider()
             } else {
                 ContentUnavailableView(
-                    "暂无运行中的 Git 任务",
+                    "No Git task is running",
                     systemImage: "checklist",
-                    description: Text("开始 fetch、pull、push、commit 或其它 Git 操作后，进度和取消入口会显示在这里。")
+                    description: Text("Start a fetch, pull, push, commit or other Git operation and its progress and cancel control appear here.")
                 )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
@@ -58,7 +58,7 @@ struct GitTasksView: View {
             }
 
             HStack {
-                Text("最近完成")
+                Text("Recently finished")
                     .font(.headline)
                 Text("\(recentEntries.count)")
                     .font(.caption)
@@ -70,7 +70,7 @@ struct GitTasksView: View {
             .padding(.bottom, 6)
 
             if recentEntries.isEmpty {
-                Text("暂无已完成任务")
+                Text("Nothing finished yet")
                     .foregroundStyle(.secondary)
                     .padding(16)
             } else {
@@ -105,7 +105,7 @@ struct GitTasksView: View {
                     .font(.headline)
                 Spacer()
                 if feedbackCenter.canCancel {
-                    Button("取消") { feedbackCenter.cancel() }
+                    Button("Cancel") { feedbackCenter.cancel() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -202,16 +202,16 @@ struct OperationLogView: View {
             HStack(spacing: 10) {
                 Image(systemName: "list.bullet.rectangle")
                     .foregroundStyle(Design.Colors.accent)
-                Text("操作日志")
+                Text("Operation Log")
                     .font(.system(size: 15, weight: .semibold))
                 Text("\(feedbackCenter.history.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("清空") { feedbackCenter.clearHistory(); selectedID = nil }
+                Button("Clear") { feedbackCenter.clearHistory(); selectedID = nil }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(feedbackCenter.history.isEmpty)
+                    .disabled(!feedbackCenter.hasClearableHistory)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -220,9 +220,9 @@ struct OperationLogView: View {
 
             if feedbackCenter.history.isEmpty {
                 ContentUnavailableView(
-                    "暂无操作记录",
+                    "No operations recorded",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("执行 pull、fetch、push、commit 或分支操作后，结果会显示在这里。")
+                    description: Text("Results of pull, fetch, push, commit and branch operations appear here.")
                 )
             } else {
                 VStack(spacing: 0) {
@@ -292,7 +292,7 @@ struct OperationLogView: View {
                 HStack(spacing: 12) {
                     Text(Self.dateFormatter.string(from: entry.startedAt))
                     if let duration = entry.durationText { Text(duration) }
-                    if entry.isRunning { Text("进行中") }
+                    if entry.isRunning { Text("Running") }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

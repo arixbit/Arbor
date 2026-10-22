@@ -211,11 +211,13 @@ func doFetchAll(rootPaths: [String]? = nil) {
         var updated: [String] = []
         var failures: [String] = []
         var successfulRemoteCount = 0
+        var configuredRemoteCount = 0
         for rootPath in paths {
             guard !cancel.isCancelled() else { break }
             do {
                 let rootRepo = try openRepository(path: rootPath)
                 let rootRemotes = try rootRepo.remoteList()
+                configuredRemoteCount += rootRemotes.count
                 for remote in rootRemotes {
                     guard !cancel.isCancelled() else { break }
                     do {
@@ -240,7 +242,8 @@ func doFetchAll(rootPaths: [String]? = nil) {
         let result = (
             updated: updated,
             failures: failures,
-            successfulRemoteCount: successfulRemoteCount
+            successfulRemoteCount: successfulRemoteCount,
+            configuredRemoteCount: configuredRemoteCount
         )
         await MainActor.run {
             self.loadRepoData()
@@ -250,9 +253,19 @@ func doFetchAll(rootPaths: [String]? = nil) {
             if result.successfulRemoteCount > 0 {
                 self.synchronizeRemoteProtectedBranchPatternsForAllRoots()
             }
-            if result.failures.isEmpty {
+            // A repository without remotes has nothing to fetch. Reporting
+            // "Fetch all completed" there tells the user the operation
+            // succeeded when it never ran, so say what is actually missing.
+            if result.failures.isEmpty, result.configuredRemoteCount == 0 {
+                self.feedbackCenter.success(
+                    "Nothing to fetch",
+                    detail: "No remotes are configured for this repository.",
+                    actionTitle: "Configure Remotes…",
+                    action: { self.beginConfigureRemotes() }
+                )
+            } else if result.failures.isEmpty {
                 self.publishFetchCompletion(
-                    detail: result.updated.isEmpty ? "无更新" : result.updated.joined(separator: ", "),
+                    detail: result.updated.isEmpty ? "No updates" : result.updated.joined(separator: ", "),
                     title: "Fetch all completed"
                 )
             } else {

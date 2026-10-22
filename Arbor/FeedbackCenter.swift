@@ -453,6 +453,15 @@ final class FeedbackCenter: ObservableObject {
         publish(message, autoDismiss: false)
     }
 
+    /// `clearHistory()` keeps the entry of the operation that is still
+    /// running, so a history that contains nothing else cannot be cleared.
+    /// The button must be disabled in that case: an enabled “Clear” that
+    /// silently does nothing is exactly the dead control this UI does not
+    /// ship.
+    var hasClearableHistory: Bool {
+        history.contains { $0.id != activeOperationID }
+    }
+
     func clearHistory() {
         if let activeOperationID {
             history.removeAll { $0.id != activeOperationID }

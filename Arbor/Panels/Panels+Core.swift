@@ -526,6 +526,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .disabled(!hasRepository || isLoading)
+            .accessibilityLabel("Refresh")
             .help("Refresh")
 
             AppLanguageMenu()
@@ -537,6 +538,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Search")
             .help("Search")
         }
         .padding(.leading, 70)
@@ -556,6 +558,10 @@ struct RebasedTopBar<BranchMenu: View>: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+        // Without an explicit label macOS exposes the SF Symbol name
+        // (“Arrow Down Circle”), so VoiceOver reads the icon instead of the
+        // action and the control cannot be addressed by name.
+        .accessibilityLabel(title)
         .help(title)
     }
 }

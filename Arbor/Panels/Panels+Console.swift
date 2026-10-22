@@ -17,7 +17,7 @@ struct GitConsoleView: View {
                 Text("Git Console")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Button("清除", action: onClear)
+                Button("Clear", action: onClear)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -32,11 +32,11 @@ struct GitConsoleView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .onSubmit(run)
-                Button("运行", action: run)
+                Button("Run", action: run)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(14)
-            Text("命令按参数执行，不经过 shell；复杂参数请使用引号。")
+            Text("Commands run as argument vectors, never through a shell; quote complex arguments.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 14)
@@ -71,9 +71,9 @@ struct GitConsoleView: View {
                 }
             } else {
                 ContentUnavailableView(
-                    "暂无命令结果",
+                    "No command result",
                     systemImage: "terminal",
-                    description: Text("输入 Git 子命令后运行，完整 stdout/stderr 会保留在操作历史中。")
+                    description: Text("Run a Git subcommand to see it here; full stdout/stderr is kept in the operation history.")
                 )
             }
         }
