@@ -1,0 +1,60 @@
+name: UI smoke
+
+# Clicks every visible control on the main surfaces and requires an observable
+# change, so a control that reacts with nothing fails instead of shipping.
+#
+# This is a separate workflow from ci-test.yml on purpose: the suite drives a
+# real window through XCUITest, which needs a logged-in GUI session and takes
+# longer than the unit suite. It runs on pull requests and on demand, and the
+# unit suite stays the fast gate on every push.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ui-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  click-and-assert:
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arbor-engine
+          shared-key: arbor-cargo
+          cache-on-failure: true
+
+      - name: Install Xcode project generator
+        run: brew install xcodegen
+
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = arm64
+
+      - name: Reject newly hardcoded Chinese UI literals
+        run: python3 scripts/i18n-audit.py --only-hardcoded
+
+      - name: Build and run the click-and-assert suite
+        run: ./scripts/ui-smoke.sh --report build/ui-smoke-results
+
+      - name: Upload screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-results
+          path: build/ui-smoke-results
+          if-no-files-found: warn

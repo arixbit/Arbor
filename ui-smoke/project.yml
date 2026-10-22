@@ -1,0 +1,28 @@
+name: ArborUISmoke
+options:
+  bundleIdPrefix: com.arbor.smoke
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  ArborUISmokeUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ArborUISmokeUITests.swift
+      - path: ArborUIDiagnosticsUITests.swift
+      - path: Support
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: YES
+schemes:
+  ArborUISmoke:
+    build:
+      targets:
+        ArborUISmokeUITests: [test]
+    test:
+      targets:
+        - ArborUISmokeUITests
