@@ -14,6 +14,13 @@ Commit layout: the window no longer empties out while committing.
 - The project tree rendered hardcoded Chinese ("项目", "项目文件", "重试", the
   empty-project and error states) inside an English interface; those strings
   are catalog keys with zh-Hans translations now
+- The left tool-window column was 386 pt wide at a 1642 pt window. It is now
+  628 pt (52 rail + 564 panel + 12 divider), the exact figure measured from
+  the reference window, with the details inspector widened to 460 pt so the
+  commit actions and the changes browser stop clipping
+- The selected Log row now carries the accessibility "selected" trait and a
+  localized label, so VoiceOver announces the current commit and automation
+  can tell an already-selected row from a dead one
 
 UI correctness: clicks that changed nothing now fail a test instead of shipping.
 

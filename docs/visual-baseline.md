@@ -10,8 +10,8 @@ repository (`scripts/make-ui-fixture.sh`) with the window dragged to exactly
 | Commit | `docs/images/baseline/arbor-commit.png` | `docs/images/baseline/rebased-commit.png` |
 | Log | `docs/images/baseline/arbor-log.png` | `docs/images/baseline/rebased-log.png` |
 
-Status: the Commit layout difference (C1/C2) is fixed; the remaining rows are
-open.
+Status: the Commit layout difference (C1/C2) is fixed, and so is the left
+column width; the remaining rows are open.
 
 Recapture with:
 
@@ -31,7 +31,7 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 
 | | Arbor | Rebased |
 | --- | --- | --- |
-| Left column width | 386 pt (23.5%) | 628 pt (38%) |
+| Left column width | 628 pt (38%), measured | 628 pt (38%) |
 | Commit mode | Commit panel + project tree, Log in the centre | Commit panel **+** project tree **+** log |
 | Log mode | Project tree + Log + commit detail | Project tree + Log + two detail panes |
 | Tool windows | Commit and Log are both on screen; Operations replaces the editor | independent; any combination |
@@ -43,7 +43,8 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 | ~~C1~~ | ~~Window use~~ | Fixed: the Log editor fills the centre in Commit mode | The same area carries the Log and the project tree |
 | ~~C2~~ | ~~Left column content~~ | Fixed: Commit/Stash tabs with the Project tree below them, expanded by default | Commit/Stash tabs, then the Project tree below them |
 | C2b | Tool-window title | An extra `Commit` row above the Commit/Stash tabs | No such row; the tab strip is the title |
-| C2c | Left column width | 386 pt | 628 pt |
+| ~~C2c~~ | ~~Left column width~~ | Fixed: 628 pt — 52 pt rail + 564 pt panel + 12 pt divider, measured from the accessibility tree, matching the reference exactly | 628 pt |
+| C2d | Left column split | Commit 626 pt / Project 441 pt | Commit 510 pt / Project 505 pt |
 | C3 | Change list header | Changelist row `● Default 5` | `Changes 2 files` with a select-all checkbox |
 | C4 | Ignored files | `Ignored Files 2 files` expanded by default, taking two rows among real changes | Not shown |
 | C5 | Untracked files | Listed inside `Unstaged Files` | Separate collapsed `Unversioned Files 5 files` group with a tri-state checkbox |

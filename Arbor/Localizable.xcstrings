@@ -16900,6 +16900,16 @@
           }
         }
       }
+    },
+    "Select commit %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择提交 %@"
+          }
+        }
+      }
     }
 
   },

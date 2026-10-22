@@ -15,9 +15,9 @@ var logWorkspace: some View {
         persistedLeftWidth: $savedLogGraphWidth,
         minimumLeftWidth: 420,
         // The details inspector must remain wide enough for its compact
-        // changes-tree/diff split. Rebased never lets that inspector collapse
-        // into a single unusable strip while the graph is still open.
-        minimumRightWidth: 340
+        // changes-tree/diff split *and* for the commit action row (Revert
+        // Commit, Cherry-pick, Create Branch), which clips below ~400pt.
+        minimumRightWidth: 460
     ) {
         // MainFrame's graph toolbar belongs to the graph/table side of the
         // split. Keeping it outside the inspector prevents the right commit

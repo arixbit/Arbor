@@ -13,6 +13,7 @@ struct ScreenState: Equatable {
     let sheets: Int
     let windows: Int
     let menus: Int
+    let popovers: Int
 
     var hasModal: Bool { sheets > 0 }
 
@@ -41,7 +42,7 @@ struct ScreenState: Equatable {
     }
 
     func summary() -> String {
-        "windows=\(windows) sheets=\(sheets) menus=\(menus) lines=\(lineCount)"
+        "windows=\(windows) sheets=\(sheets) menus=\(menus) popovers=\(popovers) lines=\(lineCount)"
     }
 }
 
@@ -224,7 +225,10 @@ final class ArborUISession {
             // A MenuButton click opens an NSMenu outside the window's own
             // accessibility subtree; without this the sweep would report
             // every menu as dead.
-            menus: app.menus.count
+            menus: app.menus.count,
+            // Popovers (Changelist editor, filter settings) are their own
+            // element type and swallow clicks aimed at the surface behind them.
+            popovers: app.popovers.count
         )
     }
 
@@ -372,7 +376,7 @@ final class ArborUISession {
 
             // A modal that survived the previous dismissal swallows every
             // click. That is a stuck dialog, not a dead control.
-            if app.sheets.count > 0 || app.windows.count > expectedWindowCount {
+            if app.sheets.count > 0 || app.popovers.count > 0 || app.windows.count > expectedWindowCount {
                 closeFrontmostSheet()
                 if app.sheets.count > 0 {
                     findings.append(
@@ -471,6 +475,7 @@ final class ArborUISession {
         var parts: [String] = []
         if after.sheets != before.sheets { parts.append("sheet \(before.sheets)→\(after.sheets)") }
         if after.windows != before.windows { parts.append("window \(before.windows)→\(after.windows)") }
+        if after.popovers != before.popovers { parts.append("popover \(before.popovers)→\(after.popovers)") }
         if after.menus != before.menus { parts.append("menu \(before.menus)→\(after.menus)") }
         if after.lineCount != before.lineCount { parts.append("tree \(before.lineCount)→\(after.lineCount) lines") }
         return parts.isEmpty ? "tree content" : parts.joined(separator: ", ")
@@ -524,8 +529,14 @@ final class ArborUISession {
     /// evaluated against the same screen.
     func dismissModalIfNeeded(reference: ScreenState) {
         closeFrontmostSheet()
+        // Transient surfaces (popovers, inline editors, menus) are not always
+        // typed as an XCUI popover or menu, and they swallow the next click.
+        // Escape after every surface-changing click dismisses them; ordinary
+        // views ignore it.
+        app.typeKey(.escape, modifierFlags: [])
+        Thread.sleep(forTimeInterval: 0.2)
         let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline, app.menus.count > reference.menus {
+        while Date() < deadline, app.menus.count > reference.menus || app.popovers.count > 0 {
             app.typeKey(.escape, modifierFlags: [])
             Thread.sleep(forTimeInterval: 0.2)
         }
