@@ -23,6 +23,7 @@ final class LogSelectionState: ObservableObject {
 
     // MARK: - 详情
 
+    @Published var inspectorPresented = false
     @Published var detailCommit: CommitInfo?
     @Published var detailLoadTask: Task<Void, Never>?
 

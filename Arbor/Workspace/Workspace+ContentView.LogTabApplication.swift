@@ -126,11 +126,6 @@ func applyLogTabRootContext(_ rootPath: String?) {
     logRuntime.activeRemotes = (try? rootRepo.remoteList()) ?? []
 }
 
-func applyManualLogPathFilter() {
-    let roots = logStructureFilterRootPaths + availableReflogRootPaths
-    setLogPathFilterSelections(parseLogPathFilterEditorText(logList.pathFilter, roots: roots))
-}
-
 func applyLogPathsEditor() {
     logList.pathsEditorPresented = false
     let roots = logStructureFilterRootPaths + availableReflogRootPaths

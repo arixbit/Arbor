@@ -28,6 +28,7 @@ final class LogListState: ObservableObject {
     @Published var messageMatchCase = false
     @Published var since = ""
     @Published var until = ""
+    @Published var advancedFiltersPresented = false
 
     // MARK: - 路径过滤
 

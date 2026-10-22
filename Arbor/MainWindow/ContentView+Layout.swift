@@ -87,6 +87,7 @@ extension ContentView {
                 // therefore a second workspace, not a replacement for the
                 // Commit/Stash column.
                 sidebarVisible: true,
+                minimumMainWidth: repo != nil && showsLogWorkspace ? 540 : 420,
                 onSelectToolWindow: { mode in
                     projectWorkspace.toolWindowMode = mode
                     toolWindowExpanded = true

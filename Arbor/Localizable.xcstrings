@@ -16910,8 +16910,28 @@
           }
         }
       }
-    }
+    },
 
+    "Author and Date" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作者与日期"
+          }
+        }
+      }
+    },
+    "Author and date filters" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作者与日期过滤"
+          }
+        }
+      }
+    }
   },
   "version" : "1.0"
 }

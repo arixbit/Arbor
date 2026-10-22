@@ -164,6 +164,7 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
         var rootUpdateScheduled = false
         var lastAppliedSidebarWidth: Double?
         var lastAppliedAvailableWidth: CGFloat?
+        var lastAppliedMinimumMainWidth: CGFloat?
 
         init(parent: NativeWorkspaceColumns) {
             self.parent = parent
@@ -211,9 +212,11 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
             let containerChanged = lastAppliedAvailableWidth.map {
                 abs($0 - availableWidth) > 0.5
             } ?? true
-            guard widthChanged || containerChanged else { return }
+            let minimumChanged = lastAppliedMinimumMainWidth != parent.minimumMainWidth
+            guard widthChanged || containerChanged || minimumChanged else { return }
             lastAppliedSidebarWidth = parent.sidebarWidth
             lastAppliedAvailableWidth = availableWidth
+            lastAppliedMinimumMainWidth = parent.minimumMainWidth
             let maximumSidebarWidth = max(0, availableWidth - parent.minimumMainWidth)
             let minimumSidebarWidth = min(parent.minimumSidebarWidth, maximumSidebarWidth)
             let target = min(
@@ -335,6 +338,7 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
     @Binding var persistedSidebarWidth: Double
     let selectedToolWindow: ToolWindowMode
     let sidebarVisible: Bool
+    let minimumMainWidth: CGFloat
     let onSelectToolWindow: (ToolWindowMode) -> Void
     let onOpenProject: () -> Void
     let sidebarContent: SidebarContent
@@ -343,6 +347,7 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
         persistedSidebarWidth: Binding<Double>,
         selectedToolWindow: ToolWindowMode,
         sidebarVisible: Bool = true,
+        minimumMainWidth: CGFloat = 420,
         onSelectToolWindow: @escaping (ToolWindowMode) -> Void,
         onOpenProject: @escaping () -> Void,
         @ViewBuilder sidebarContent: () -> SidebarContent,
@@ -351,6 +356,7 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
         _persistedSidebarWidth = persistedSidebarWidth
         self.selectedToolWindow = selectedToolWindow
         self.sidebarVisible = sidebarVisible
+        self.minimumMainWidth = minimumMainWidth
         self.onSelectToolWindow = onSelectToolWindow
         self.onOpenProject = onOpenProject
         self.sidebarContent = sidebarContent()
@@ -372,7 +378,7 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
                     sidebarContent: sidebarContent,
                     mainContent: mainContent,
                     minimumSidebarWidth: 280,
-                    minimumMainWidth: 420
+                    minimumMainWidth: minimumMainWidth
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

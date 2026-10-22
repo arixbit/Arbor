@@ -7,26 +7,71 @@ extension ContentView {
 
 @ViewBuilder
 var logWorkspace: some View {
-    // MainFrame keeps the Changes browser in the right-hand details splitter
-    // even when commit metadata and the diff preview are toggled off. Only the
-    // corresponding child component disappears; the graph must not suddenly
-    // take over the entire editor and make the existing selection appear lost.
-    WorkspaceHorizontalSplit(
-        persistedLeftWidth: $savedLogGraphWidth,
-        minimumLeftWidth: 420,
-        // The details inspector must remain wide enough for its compact
-        // changes-tree/diff split *and* for the commit action row (Revert
-        // Commit, Cherry-pick, Create Branch), which clips below ~400pt.
-        minimumRightWidth: 460
-    ) {
-        // MainFrame's graph toolbar belongs to the graph/table side of the
-        // split. Keeping it outside the inspector prevents the right commit
-        // details workspace from acquiring a stray blank header row.
+    GeometryReader { geometry in
+        // Both columns need their minimum plus the native 12pt divider.
+        // Below that width, drill into details without sacrificing the list
+        // or persisting a temporary, compressed divider position.
+        let showsInlineInspector = geometry.size.width >= 420 + 12 + 460
+        Group {
+            if showsInlineInspector {
+                WorkspaceHorizontalSplit(
+                    persistedLeftWidth: $savedLogGraphWidth,
+                    minimumLeftWidth: 420,
+                    minimumRightWidth: 460
+                ) {
+                    logGraphPanel
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } rightContent: {
+                    logInspector
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                compactLogWorkspace
+            }
+        }
+        .onChange(of: showsInlineInspector) { _, inline in
+            if inline { logSelectionState.inspectorPresented = false }
+        }
+    }
+}
+
+var compactLogWorkspace: some View {
+    ZStack {
         logGraphPanel
-            .frame(minWidth: 300, idealWidth: 940, maxWidth: .infinity, maxHeight: .infinity)
-    } rightContent: {
-        logInspector
-            .frame(minWidth: 240, idealWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    logSelectionState.inspectorPresented = true
+                } label: {
+                    Label("View Commit Details", systemImage: "sidebar.right")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("log-open-inspector")
+                .padding(.trailing, 12)
+                .frame(height: 46)
+            }
+            .opacity(logSelectionState.inspectorPresented ? 0 : 1)
+            .allowsHitTesting(!logSelectionState.inspectorPresented)
+            .accessibilityHidden(logSelectionState.inspectorPresented)
+
+        if logSelectionState.inspectorPresented {
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        logSelectionState.inspectorPresented = false
+                    } label: {
+                        Label("Log", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("log-close-inspector")
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(Design.Colors.chrome)
+                Divider()
+                logInspector
+            }
+        }
     }
 }
 

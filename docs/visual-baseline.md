@@ -10,8 +10,8 @@ repository (`scripts/make-ui-fixture.sh`) with the window dragged to exactly
 | Commit | `docs/images/baseline/arbor-commit.png` | `docs/images/baseline/rebased-commit.png` |
 | Log | `docs/images/baseline/arbor-log.png` | `docs/images/baseline/rebased-log.png` |
 
-Status: the Commit layout difference (C1/C2) is fixed, and so is the left
-column width; the remaining rows are open.
+Status: the Commit layout difference (C1/C2), left column width, and Log filter
+bar overflow (L1) are fixed; the remaining rows are open.
 
 Recapture with:
 
@@ -57,7 +57,7 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 
 | # | Difference | Arbor | Rebased |
 | --- | --- | --- | --- |
-| L1 | Filter bar | Always-visible fields (`Text or hash`, `Paths`, `User`, `Since`, `Until`) overflow the pane: the `Branch` control is clipped at the pane edge | One row that fits: text field, `Cc`, `Branch ⌄`, `User ⌄`, `Date ⌄`, `Paths ⌄` |
+| ~~L1~~ | ~~Filter bar~~ | Fixed: flexible text field, Regex/Match Case chips, bounded Paths/Branch menus, and an author/date popover. Follow and Refresh remain visible while filters scroll in narrower columns | One row that fits: text field, `Cc`, `Branch ⌄`, `User ⌄`, `Date ⌄`, `Paths ⌄` |
 | L2 | Log columns | Commit message + ref badges | Commit, Author, Date, ref badges |
 | L3 | Graph | 2 px blue line, 8 pt filled nodes | 1 px line, hollow nodes |
 | L4 | Right pane | Commit detail is auto-populated for the selected row, and the Changes panel with the Side-by-side/Unified toggle sits below it | Both right panes stay at their empty states until the user selects a commit |
@@ -71,9 +71,10 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 1. ~~**C1/C2 — Commit mode wastes the window.**~~ Fixed: the Log loads and
    stays on screen in Commit mode, and the Project tool window starts expanded
    below the Commit surface, matching the reference.
-2. **L1 — the Log filter bar does not fit.** The `Branch` control is clipped at
-   1642×1015. The reference fits the same controls by folding `User`, `Date`
-   and `Paths` into dropdowns instead of always-visible fields.
+2. ~~**L1 — the Log filter bar does not fit.**~~ Fixed: Paths and author/date
+   fields use compact controls; right-hand actions stay visible. UI tests
+   verify 1642, 1540, 1440, 1200, and 980 pt windows, long branch/path names,
+   horizontal scrolling, and applying/clearing author and path filters.
 3. **C4 — ignored files are on by default.** They occupy the change list next
    to real work; the reference does not show them at all.
 4. **L2 — the Log has no Author/Date columns**, so identities and timestamps
@@ -94,3 +95,12 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 - Text is not compared glyph by glyph: the goal is layout and element
   inventory, which is what makes one screenshot recognisably “the same app” as
   the other.
+- Narrow windows reserve at least 540 pt for the Log workspace. Below the
+  892 pt needed for graph + divider + inspector, the list fills that space;
+  `View Commit Details` opens the inspector in place, and `Log` returns to the
+  list. The Project/Commit sidebar stays accessible. Widening restores the
+  side-by-side layout, selection, and saved divider widths.
+- Narrow-window captures: [1200 pt](images/baseline/arbor-log-1200.png),
+  [980 pt](images/baseline/arbor-log-980.png), and
+  [980 pt details](images/baseline/arbor-log-details-980.png). The last two use
+  the minimum window height (540 pt content plus the title bar).
