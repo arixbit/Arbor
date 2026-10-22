@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+Commit layout: the window no longer empties out while committing.
+
+- Commit mode kept its change list on the left and replaced the rest of the
+  window with an empty placeholder. The Log editor now stays in the centre, the
+  same way the reference application keeps history visible while committing,
+  and the Project tool window starts expanded below the Commit surface
+- The Log now loads whenever it is on screen instead of only in Log mode, so
+  branch, tag, commit and push operations refresh it from the Commit surface
+  too
+- The project tree rendered hardcoded Chinese ("项目", "项目文件", "重试", the
+  empty-project and error states) inside an English interface; those strings
+  are catalog keys with zh-Hans translations now
+
 UI correctness: clicks that changed nothing now fail a test instead of shipping.
 
 - Added `ui-smoke/`: an XCUITest suite that clicks every visible control on the

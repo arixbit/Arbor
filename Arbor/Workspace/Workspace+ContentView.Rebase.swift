@@ -169,7 +169,7 @@ func branchCreateAndRebase(
                 }
                 self.branchWorkspace.newName = ""
                 self.branchWorkspace.newBase = ""
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
                 self.checkoutAndRebaseOntoCurrent(repo: targetRepo, name: name)
             }
         } catch {

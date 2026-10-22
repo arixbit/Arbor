@@ -368,7 +368,7 @@ func branchRename() {
                 self.branchWorkspace.branches = bs; self.branchWorkspace.renameOld = ""; self.branchWorkspace.renameNew = ""
                 self.feedbackCenter.success("Branch renamed", detail: "\(old) → \(new)")
                 self.loadRepoData()
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
             }
         } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }

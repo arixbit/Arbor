@@ -310,7 +310,7 @@ struct ProjectFileTreeView: View {
         Group {
             if let repo {
                 if loading && rootEntries.isEmpty {
-                    ProgressView("读取项目目录…")
+                    ProgressView("Reading project directory…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let error, rootEntries.isEmpty {
                     VStack(spacing: Design.Spacing.sm) {
@@ -320,13 +320,13 @@ struct ProjectFileTreeView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                        Button("重试") { loadRoot(repo) }
+                        Button("Retry") { loadRoot(repo) }
                     }
                     .padding(Design.Spacing.lg)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(selection: $selection) {
-                        Section("项目文件") {
+                        Section("Project Files") {
                             ForEach(rootEntries, id: \.path) { entry in
                                 FileTreeNodeView(
                                     repo: repo,
@@ -354,7 +354,7 @@ struct ProjectFileTreeView: View {
                     .listStyle(.sidebar)
                 }
             } else {
-                Text("打开项目后显示文件树")
+                Text("Open a project to show its file tree")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -665,20 +665,20 @@ struct ProjectEmptyStateView: View {
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(Design.Colors.accent)
             VStack(spacing: Design.Spacing.xs) {
-                Text("打开一个项目")
+                Text("Open a project")
                     .font(.title2.weight(.semibold))
-                Text("Arbor 每个窗口只显示一个项目")
+                Text("Arbor shows one project per window")
                     .foregroundStyle(.secondary)
             }
-            Button("选择项目文件夹…", action: onOpen)
+            Button("Choose Project Folder…", action: onOpen)
                 .buttonStyle(.borderedProminent)
             HStack(spacing: 10) {
-                Button("初始化 Git 仓库…", action: onInit)
-                Button("克隆 Git 仓库…", action: onClone)
+                Button("Initialize Git Repository…", action: onInit)
+                Button("Clone Git Repository…", action: onClone)
             }
             if !recentPaths.isEmpty {
                 VStack(alignment: .leading, spacing: Design.Spacing.sm) {
-                    Text("最近项目")
+                    Text("Recent Projects")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ForEach(recentPaths.prefix(5), id: \.self) { path in
@@ -714,7 +714,7 @@ struct ProjectLoadErrorView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(.orange)
-            Text("无法打开 Git 项目")
+            Text("Could not open the Git project")
                 .font(.title2.weight(.semibold))
             Text(message)
                 .font(.callout)
@@ -723,9 +723,9 @@ struct ProjectLoadErrorView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: 620)
             HStack(spacing: 10) {
-                Button("重试", action: onRetry)
+                Button("Retry", action: onRetry)
                     .buttonStyle(.borderedProminent)
-                Button("选择其他项目…", action: onOpen)
+                Button("Choose Another Project…", action: onOpen)
                     .buttonStyle(.bordered)
             }
         }

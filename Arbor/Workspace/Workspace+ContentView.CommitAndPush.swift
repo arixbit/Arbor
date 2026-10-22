@@ -159,7 +159,7 @@ func commitAndPush(
                 self.branchWorkspace.branches = branchList
                 self.branchWorkspace.syncStatuses = syncStatuses
                 self.commitWorkspace.recentMessages = recent
-                if self.projectWorkspace.toolWindowMode == .log {
+                if self.showsLogWorkspace {
                     self.loadLog()
                 }
                 self.commitWorkspace.message = ""

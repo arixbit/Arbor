@@ -143,7 +143,7 @@ func openProjectPath(_ projectPath: String) {
     comparisonWorkspace.repositoryPath = nil
     logList.generation += 1
     repositoryStatus.isLoading = true
-    logList.isLoading = projectWorkspace.toolWindowMode == .log
+    logList.isLoading = showsLogWorkspace
     repositoryStatus.loadError = nil
     commitWorkspace.feedback = nil
     stashRecovery.popConflictInProgress = false
@@ -306,7 +306,7 @@ func openProjectPath(_ projectPath: String) {
             // after relaunch and the active tab query is not silently dropped.
             await MainActor.run {
                 guard self.projectWorkspace.repository === r else { return }
-                if self.projectWorkspace.toolWindowMode == .log {
+                if self.showsLogWorkspace {
                     self.loadLog(reset: true)
                 }
             }

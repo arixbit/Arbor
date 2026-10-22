@@ -148,7 +148,7 @@ func createTag() {
                     "Tag created",
                     detail: targetRootPath.map { "\(name) @ \($0)" } ?? name
                 )
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
             }
         } catch {
             await MainActor.run {
@@ -189,7 +189,7 @@ func deleteTag(_ name: String) {
                 self.tagWorkspace.tags = tags
                 self.tagWorkspace.feedback = "已删除 \(name)"
                 self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
             }
         } catch {
             await MainActor.run { self.tagWorkspace.feedback = errorMessage(error) }

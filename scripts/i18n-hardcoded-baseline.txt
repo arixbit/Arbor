@@ -74,9 +74,6 @@ Arbor/MainWindow/MainWindow+MergeEditor.swift	Patch（只读）
 Arbor/MainWindow/MainWindow+MergeEditor.swift	本地 (ours)
 Arbor/MainWindow/MainWindow+MergeEditor.swift	结果（可编辑）
 Arbor/MainWindow/MainWindow+MergeEditor.swift	远程 (theirs)
-Arbor/MainWindow/MainWindow+Project.swift	在 Finder 中显示项目根目录
-Arbor/MainWindow/MainWindow+Project.swift	打开项目
-Arbor/MainWindow/MainWindow+Project.swift	项目
 Arbor/Panels/Panels+Core.swift	二进制文件：diff/行级暂存按降级策略处理
 Arbor/Panels/Panels+Core.swift	打开项目…
 Arbor/Panels/Panels+Worktree.swift	revision（可选）
@@ -89,16 +86,6 @@ Arbor/Panels/Panels+Worktree.swift	新 worktree 路径
 Arbor/Panels/Panels+Worktree.swift	新分支（可选）
 Arbor/Panels/Panels+Worktree.swift	解锁
 Arbor/Panels/Panels+Worktree.swift	锁定
-Arbor/ProjectFileTreeView.swift	Arbor 每个窗口只显示一个项目
-Arbor/ProjectFileTreeView.swift	克隆 Git 仓库…
-Arbor/ProjectFileTreeView.swift	初始化 Git 仓库…
-Arbor/ProjectFileTreeView.swift	打开一个项目
-Arbor/ProjectFileTreeView.swift	打开项目后显示文件树
-Arbor/ProjectFileTreeView.swift	无法打开 Git 项目
-Arbor/ProjectFileTreeView.swift	最近项目
-Arbor/ProjectFileTreeView.swift	选择其他项目…
-Arbor/ProjectFileTreeView.swift	选择项目文件夹…
-Arbor/ProjectFileTreeView.swift	重试
 Arbor/PushDialogView.swift	取消
 Arbor/PushDialogView.swift	请选择 remote 后再推送。
 Arbor/Settings/DiagnosticsSettingsView.swift	关闭时，Arbor 不执行 .gitattributes 中的外部 filter、非 UTF-8 编码或 textconv；开启后通过 system Git 执行，并受单次转换超时保护。Diff Viewer 的 External Diff 仍需用户显式触发，并使用 Git 配置的 difftool。

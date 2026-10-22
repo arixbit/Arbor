@@ -10,6 +10,9 @@ repository (`scripts/make-ui-fixture.sh`) with the window dragged to exactly
 | Commit | `docs/images/baseline/arbor-commit.png` | `docs/images/baseline/rebased-commit.png` |
 | Log | `docs/images/baseline/arbor-log.png` | `docs/images/baseline/rebased-log.png` |
 
+Status: the Commit layout difference (C1/C2) is fixed; the remaining rows are
+open.
+
 Recapture with:
 
 ```sh
@@ -26,21 +29,21 @@ Rebased keeps three surfaces on screen at once and lets the user hide one:
 Commit tool window (left top), Project tree (left bottom), Log tool window
 (center) with two detail panes on the right.
 
-Arbor splits the same content into mutually exclusive modes:
-
 | | Arbor | Rebased |
 | --- | --- | --- |
 | Left column width | 386 pt (23.5%) | 628 pt (38%) |
-| Commit mode | Commit panel only; the remaining ~1256×1015 is an empty state | Commit panel **+** project tree **+** log |
+| Commit mode | Commit panel + project tree, Log in the centre | Commit panel **+** project tree **+** log |
 | Log mode | Project tree + Log + commit detail | Project tree + Log + two detail panes |
-| Tool windows | exclusive; the Log disappears in Commit mode | independent; any combination |
+| Tool windows | Commit and Log are both on screen; Operations replaces the editor | independent; any combination |
 
 ## Commit screen
 
 | # | Difference | Arbor | Rebased |
 | --- | --- | --- | --- |
-| C1 | Window use | ~85% of the window is the placeholder “Select a context from the project tree or the tool window below” | The same area carries the Log and the project tree |
-| C2 | Left column content | Commit/Stash tabs only | Commit/Stash tabs, then the Project tree below them |
+| ~~C1~~ | ~~Window use~~ | Fixed: the Log editor fills the centre in Commit mode | The same area carries the Log and the project tree |
+| ~~C2~~ | ~~Left column content~~ | Fixed: Commit/Stash tabs with the Project tree below them, expanded by default | Commit/Stash tabs, then the Project tree below them |
+| C2b | Tool-window title | An extra `Commit` row above the Commit/Stash tabs | No such row; the tab strip is the title |
+| C2c | Left column width | 386 pt | 628 pt |
 | C3 | Change list header | Changelist row `● Default 5` | `Changes 2 files` with a select-all checkbox |
 | C4 | Ignored files | `Ignored Files 2 files` expanded by default, taking two rows among real changes | Not shown |
 | C5 | Untracked files | Listed inside `Unstaged Files` | Separate collapsed `Unversioned Files 5 files` group with a tri-state checkbox |
@@ -64,10 +67,9 @@ Arbor splits the same content into mutually exclusive modes:
 
 ## Priority
 
-1. **C1/C2 — Commit mode wastes the window.** The reference shows the Log and
-   the project tree while committing; Arbor replaces both with a placeholder.
-   This is the largest visible difference and a workflow difference, not a
-   styling one.
+1. ~~**C1/C2 — Commit mode wastes the window.**~~ Fixed: the Log loads and
+   stays on screen in Commit mode, and the Project tool window starts expanded
+   below the Commit surface, matching the reference.
 2. **L1 — the Log filter bar does not fit.** The `Branch` control is clipped at
    1642×1015. The reference fits the same controls by folding `User`, `Date`
    and `Paths` into dropdowns instead of always-visible fields.

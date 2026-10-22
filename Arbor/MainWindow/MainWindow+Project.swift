@@ -178,13 +178,13 @@ struct ProjectTreePane: View {
                         Image(systemName: "folder.badge.plus")
                     }
                     .buttonStyle(.borderless)
-                    .help("打开项目")
+                    .help("Open Project")
                     if repo != nil {
                         Button(action: onReveal) {
                             Image(systemName: "arrow.up.forward.app")
                         }
                         .buttonStyle(.borderless)
-                        .help("在 Finder 中显示项目根目录")
+                        .help("Reveal Project Root in Finder")
                     }
                 }
                 .padding(.horizontal, Design.Spacing.md)
@@ -193,7 +193,7 @@ struct ProjectTreePane: View {
 
             if repo != nil {
                 HStack(spacing: Design.Spacing.sm) {
-                    Label("项目", systemImage: "folder")
+                    Label("Project", systemImage: "folder")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if changedCount > 0 {

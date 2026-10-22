@@ -661,8 +661,15 @@ extension ContentView {
         }
     }
 
+    /// The Log editor stays in the window for both the Commit and the Log tool
+    /// window, matching the reference layout where committing never hides the
+    /// history. Only the Operations surface replaces it.
+    var showsLogWorkspace: Bool {
+        projectWorkspace.toolWindowMode != .operations
+    }
+
     func toggleProjectToolWindow() {
-        if projectWorkspace.toolWindowMode == .log {
+        if showsLogWorkspace {
             projectPanelExpanded.toggle()
         } else {
             projectPanelExpanded = true
@@ -691,7 +698,7 @@ extension ContentView {
                 onClone: { cloneWorkspace.showDialog = true },
                 onSelect: requestOpenProject
             )
-        } else if projectWorkspace.toolWindowMode == .log {
+        } else if showsLogWorkspace {
             // Git Log is an editor workspace. A stale file selection (most
             // commonly a conflicted path left by the Commit tool window) must
             // never replace the graph/details workspace with Merge Revisions.
@@ -763,6 +770,12 @@ extension ContentView {
                     fileWorkspace.version = resolved
                 }
             }
+        } else if projectWorkspace.toolWindowMode == .commit {
+            // Rebased keeps the Log editor in the centre of the window while
+            // the Commit tool window is open. Only an explicit file, diff or
+            // conflict selection above replaces it, so committing never leaves
+            // the user staring at an empty editor area.
+            logWorkspace
         } else {
             VStack(spacing: Design.Spacing.md) {
                 Image(systemName: "rectangle.center.inset.filled")

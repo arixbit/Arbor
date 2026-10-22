@@ -251,7 +251,7 @@ func restoreDeletedBranch(_ context: BranchDeleteRecoveryContext) {
                     } else {
                         self.feedbackCenter.success("Branch restored", detail: context.preview.branchName)
                     }
-                    if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                    if self.showsLogWorkspace { self.loadLog() }
                 }
             }
         } catch {

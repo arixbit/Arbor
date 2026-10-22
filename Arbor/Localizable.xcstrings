@@ -16810,6 +16810,96 @@
           }
         }
       }
+    },
+    "Project Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目文件"
+          }
+        }
+      }
+    },
+    "Open a project to show its file tree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目后显示文件树"
+          }
+        }
+      }
+    },
+    "Open a project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开一个项目"
+          }
+        }
+      }
+    },
+    "Arbor shows one project per window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arbor 每个窗口只显示一个项目"
+          }
+        }
+      }
+    },
+    "Choose Project Folder…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择项目文件夹…"
+          }
+        }
+      }
+    },
+    "Recent Projects" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近项目"
+          }
+        }
+      }
+    },
+    "Could not open the Git project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开 Git 项目"
+          }
+        }
+      }
+    },
+    "Choose Another Project…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择其他项目…"
+          }
+        }
+      }
+    },
+    "Reading project directory…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取项目目录…"
+          }
+        }
+      }
     }
 
   },

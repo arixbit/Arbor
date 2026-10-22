@@ -149,7 +149,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                 self.branchWorkspace.branches = branchList
                 self.branchWorkspace.syncStatuses = syncStatuses
                 self.logSelectionState.detailCommit = nil
-                if self.projectWorkspace.toolWindowMode == .log {
+                if self.showsLogWorkspace {
                     // The Log workspace stays live beside Commit in Rebased;
                     // committing from the left pane must immediately move
                     // the graph and inspector to the new HEAD.

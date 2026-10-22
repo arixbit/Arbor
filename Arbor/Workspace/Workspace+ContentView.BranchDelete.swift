@@ -310,7 +310,7 @@ func branchDelete(_ name: String) {
                     self.feedbackCenter.success("Branch deleted", detail: name)
                 }
                 self.loadRepoData()
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
             }
         } catch {
             await MainActor.run {
@@ -421,7 +421,7 @@ func forceDeleteBranch(
                         notificationGroup: .standard
                     )
                     self.loadRepoData()
-                    if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                    if self.showsLogWorkspace { self.loadLog() }
                 }
                 self.branchWorkspace.deleteRecovery = context
             }

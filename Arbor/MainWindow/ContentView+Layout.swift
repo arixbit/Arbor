@@ -136,7 +136,7 @@ extension ContentView {
             UserDefaults.standard.set(mode.rawValue, forKey: "arbor.toolWindowMode")
             if mode == .commit {
                 refreshAll()
-            } else if mode != .log {
+            } else if !showsLogWorkspace {
                 // Do not let a history scan continue while another tool
                 // window owns the main workspace.
                 logList.refreshTask?.cancel()

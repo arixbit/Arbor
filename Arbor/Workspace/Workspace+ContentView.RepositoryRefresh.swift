@@ -256,8 +256,8 @@ func refreshAll(
         ? requestedIncrementalStatusPaths
         : nil
     let existingEntries = repositoryStatus.entries
-    let shouldLoadLog = refreshMetadata && projectWorkspace.toolWindowMode == .log && logList.viewMode != .reflog
-    let shouldLoadReflog = refreshMetadata && projectWorkspace.toolWindowMode == .log && logList.viewMode == .reflog
+    let shouldLoadLog = refreshMetadata && showsLogWorkspace && logList.viewMode != .reflog
+    let shouldLoadReflog = refreshMetadata && showsLogWorkspace && logList.viewMode == .reflog
     DiagnosticsLogger.shared.record(operation: "refresh", repositoryPath: repositoryPath, code: "started")
     Task.detached(priority: .userInitiated) {
         do {

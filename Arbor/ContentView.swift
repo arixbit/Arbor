@@ -119,11 +119,13 @@ struct ContentView: View {
     // unstable bindings) in that path. AppStorage keeps the same user-facing
     // persistence while remaining valid for both scene and AppKit hosting.
     @AppStorage("arbor.toolWindowExpanded") var toolWindowExpanded = true
-    // Rebased opens the Project tool window as a compact bar; expanding it is
-    // an explicit user action. Use a versioned key so the old default=true
-    // cannot keep reopening a large tree below the Commit/Stash workspace.
-    @AppStorage("arbor.projectPanelExpanded.v2") var projectPanelExpanded = false
-    @AppStorage("arbor.toolWindowHeight") var toolWindowHeight: Double = 320
+    // The reference window shows the Project tool window below the Commit /
+    // Stash tool window (see docs/visual-baseline.md), so it starts expanded.
+    // The versioned key lets the new default reach existing installations.
+    @AppStorage("arbor.projectPanelExpanded.v3") var projectPanelExpanded = true
+    // With both tool windows expanded the Commit surface takes the upper half,
+    // matching the reference split; the divider stays draggable.
+    @AppStorage("arbor.toolWindowHeight.v2") var toolWindowHeight: Double = 470
     // The reference workspace uses a ~470pt Commit/Stash column at a
     // 1640pt window width, with the Log editor occupying the remaining area.
     // Rebased keeps Commit/Stash in the left tool-window column while Git Log

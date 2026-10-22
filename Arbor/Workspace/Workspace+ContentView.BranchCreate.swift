@@ -511,7 +511,7 @@ func branchCreate(
                         ? "\(name) (checked out) · \(targetRootPath)"
                         : "\(name) · \(targetRootPath)"
                 )
-                if self.projectWorkspace.toolWindowMode == .log { self.loadLog() }
+                if self.showsLogWorkspace { self.loadLog() }
             }
         } catch { await MainActor.run { self.repositoryStatus.loadError = errorMessage(error) } }
     }
