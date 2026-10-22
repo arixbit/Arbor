@@ -86,9 +86,56 @@ struct LogChangeNode: Identifiable {
             var child = LogChangeNode(name: childName, path: childPath)
             child.insert(components: Array(components.dropFirst()), record: record)
             children.append(child)
-            children.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
     }
+
+    /// Sorting every intermediate tree on each insert used to make building a
+    /// large commit's tree quadratic in `localizedStandardCompare` calls. The
+    /// builder now appends in path order and sorts each directory once here.
+    func sortedByName() -> LogChangeNode {
+        var sorted = self
+        sorted.children = children
+            .map { $0.sortedByName() }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return sorted
+    }
+}
+
+/// Rebuilding the Log Changes tree re-split every path and re-sorted every
+/// directory, and the old `changeTree` computed property did that for every
+/// SwiftUI body evaluation of the browser. The rows only change when the
+/// loaded records, the active filters or the grouping change, so the tree is
+/// memoized against those inputs.
+final class LogChangeTreeCache {
+    struct Key: Equatable {
+        let rowDigest: Int
+        let rowCount: Int
+        let grouping: Int
+        let commitDigest: Int
+    }
+
+    private var key: Key?
+    private var roots: [LogChangeNode] = []
+
+    func roots(for key: Key, build: () -> [LogChangeNode]) -> [LogChangeNode] {
+        if self.key == key { return roots }
+        let built = build()
+        self.key = key
+        self.roots = built
+        return built
+    }
+}
+
+static func logChangesTreeDigest(_ rows: [LogChangeRecord]) -> Int {
+    logChangesTreeDigest(rows.map(\.id))
+}
+
+static func logChangesTreeDigest(_ ids: [String]) -> Int {
+    var hasher = Hasher()
+    for id in ids {
+        hasher.combine(id)
+    }
+    return hasher.finalize()
 }
 
 
@@ -148,6 +195,7 @@ struct LogChangesBrowserView: View {
     @State var selectedParentIndex = 0
     @State var groupByDirectory = true
     @State var collapsedChangeNodes: Set<String> = []
+    @State var treeCache = LogChangeTreeCache()
     @State var diffSource: LogDiffSource = .commit
     @State var activeFilter: LogChangesFilter?
     @State var filteredOutRecordIDs: Set<String> = []
@@ -345,6 +393,19 @@ struct LogChangesBrowserView: View {
     }
 
     var changeTree: [LogChangeNode] {
+        let rows = self.rows
+        let key = LogChangeTreeCache.Key(
+            rowDigest: ContentView.logChangesTreeDigest(rows),
+            rowCount: rows.count,
+            grouping: (groupByDirectory ? 1 : 0)
+                | (showsChangesFromParents ? 2 : 0)
+                | (commits.count > 1 ? 4 : 0),
+            commitDigest: ContentView.logChangesTreeDigest(commits.map(\.id))
+        )
+        return treeCache.roots(for: key) { buildChangeTree(rows: rows) }
+    }
+
+    func buildChangeTree(rows: [LogChangeRecord]) -> [LogChangeNode] {
         if showsChangesFromParents,
            commits.count == 1,
            let commit = commits.first,
@@ -360,7 +421,7 @@ struct LogChangesBrowserView: View {
                     let parts = record.change.path.split(separator: "/")
                     group.insert(components: Array(parts), record: record)
                 }
-                return group
+                return group.sortedByName()
             }
         }
 
@@ -382,7 +443,7 @@ struct LogChangesBrowserView: View {
                     let parts = record.change.path.split(separator: "/")
                     group.insert(components: Array(parts), record: record)
                 }
-                return group
+                return group.sortedByName()
             }
         }
 
@@ -398,7 +459,9 @@ struct LogChangesBrowserView: View {
                 roots.append(node)
             }
         }
-        return roots.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return roots
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .map { $0.sortedByName() }
     }
 
     var flatChangeTree: [LogChangeNode] {
@@ -809,9 +872,10 @@ struct LogChangesBrowserView: View {
     }
 
     var changesTree: some View {
-        List {
+        let selection = selectedRecords
+        return List {
             ForEach(groupByDirectory ? changeTree : flatChangeTree) { node in
-                changeNode(node, depth: 0)
+                changeNode(node, depth: 0, selection: selection)
             }
             if !pendingFilterRecords.isEmpty {
                 DisclosureGroup {
@@ -823,6 +887,7 @@ struct LogChangesBrowserView: View {
                                 record: record
                             ),
                             depth: 1,
+                            selection: selection,
                             isPending: true
                         )
                     }
@@ -844,6 +909,7 @@ struct LogChangesBrowserView: View {
                                 record: record
                             ),
                             depth: 1,
+                            selection: selection,
                             isFilteredOut: true
                         )
                     }
@@ -863,13 +929,14 @@ struct LogChangesBrowserView: View {
     func changeNode(
         _ node: LogChangeNode,
         depth: Int,
+        selection: [LogChangeRecord],
         isFilteredOut: Bool = false,
         isPending: Bool = false
     ) -> AnyView {
         if let record = node.record, node.children.isEmpty {
             let contextActionRecords = contextualLogChangeSelection(
                 context: record,
-                selected: selectedRecords
+                selected: selection
             )
             let contextActionTitle = contextActionRecords.count > 1
                 ? "Selected Changes"
@@ -961,7 +1028,7 @@ struct LogChangesBrowserView: View {
                     }
                     let restoreRecords = contextualLogChangeRestoreSelection(
                         context: record,
-                        selected: selectedRecords
+                        selected: selection
                     )
                     Button(restoreRecords.count > 1 ? "Get Versions" : "Get Version") {
                         onRestoreRepositoryVersion(restoreRecords)
@@ -1002,6 +1069,7 @@ struct LogChangesBrowserView: View {
                     changeNode(
                         child,
                         depth: depth + 1,
+                        selection: selection,
                         isFilteredOut: isFilteredOut,
                         isPending: isPending
                     )

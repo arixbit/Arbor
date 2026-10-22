@@ -579,6 +579,45 @@ struct RebasedTabButtonStyle: ButtonStyle {
     }
 }
 
+/// Repository-relative display helpers. `NSString`'s path helpers do not
+/// resolve against the process working directory, unlike
+/// `URL(fileURLWithPath:)`, so a row never pays a `getcwd` syscall and never
+/// shows the checkout's absolute prefix for a relative change path.
+func changeTreeRowName(_ path: String) -> String {
+    (path as NSString).lastPathComponent
+}
+
+func changeTreeRowParentPath(_ path: String) -> String {
+    let parent = (path as NSString).deletingLastPathComponent
+    return parent == "." ? "" : parent
+}
+
+/// `treeRows` re-sorted every changed path and rebuilt the folder rows on
+/// every body evaluation, which is what made a large change list expensive to
+/// render. The rows only depend on the entries and the grouping mode, so they
+/// are memoized against those inputs.
+final class ChangeTreeRowsCache {
+    struct Key: Equatable {
+        let digest: Int
+        let count: Int
+        let grouped: Bool
+    }
+
+    private var key: Key?
+    private var rows: [RebasedChangeGroup.TreeRow] = []
+
+    func rows(
+        for key: Key,
+        build: () -> [RebasedChangeGroup.TreeRow]
+    ) -> [RebasedChangeGroup.TreeRow] {
+        if self.key == key { return rows }
+        let built = build()
+        self.key = key
+        self.rows = built
+        return built
+    }
+}
+
 struct RebasedChangeGroup: View {
     let title: String
     let entries: [FileEntry]
@@ -622,6 +661,7 @@ struct RebasedChangeGroup: View {
     var onEditGitExclude: () -> Void = {}
     @State var isExpanded = true
     @State var collapsedFolders: Set<String> = []
+    @State var rowsCache = ChangeTreeRowsCache()
 
     struct TreeRow: Identifiable {
         let id: String
@@ -638,6 +678,15 @@ struct RebasedChangeGroup: View {
     /// truncated parent path; the latter loses the tree affordance and makes
     /// two files with the same basename indistinguishable.
     var treeRows: [TreeRow] {
+        let key = ChangeTreeRowsCache.Key(
+            digest: entries.hashValue,
+            count: entries.count,
+            grouped: groupByDirectory
+        )
+        return rowsCache.rows(for: key) { buildTreeRows() }
+    }
+
+    private func buildTreeRows() -> [TreeRow] {
         let sortedEntries = entries.sorted {
             intellijFilePathCompare(
                 $0.path,
@@ -703,7 +752,7 @@ struct RebasedChangeGroup: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Group {
             Button {
                 guard !entries.isEmpty else { return }
                 withAnimation(.easeInOut(duration: 0.12)) {
@@ -723,6 +772,13 @@ struct RebasedChangeGroup: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
+            .padding(.top, 8)
+            .onChange(of: expansionCommand) { _, _ in
+                isExpanded = expansionTarget
+                collapsedFolders = expansionTarget
+                    ? []
+                    : Set(treeRows.filter { $0.entry == nil }.map(\.path))
+            }
 
             if entries.isEmpty {
                 Text(emptyLabel)
@@ -760,12 +816,6 @@ struct RebasedChangeGroup: View {
             guard let onDropPaths, !filePaths.isEmpty else { return false }
             onDropPaths(filePaths)
             return true
-        }
-        .onChange(of: expansionCommand) { _, _ in
-            isExpanded = expansionTarget
-            collapsedFolders = expansionTarget
-                ? []
-                : Set(treeRows.filter { $0.entry == nil }.map(\.path))
         }
     }
 
@@ -829,11 +879,16 @@ struct RebasedChangeGroup: View {
             }
             .frame(width: 16, height: 16)
             StatusBadge(kind: statusKind(entry))
-            let fileURL = URL(fileURLWithPath: entry.path)
-            Text(groupByDirectory ? fileURL.lastPathComponent : entry.path)
+            // `URL(fileURLWithPath:)` resolves relative change paths against
+            // the process working directory. That both ran a `getcwd` syscall
+            // for every row of every render and displayed the checkout's
+            // absolute parent path instead of the repository-relative folder.
+            // Change paths are already repository-relative, so split them
+            // directly.
+            Text(groupByDirectory ? changeTreeRowName(entry.path) : entry.path)
                 .lineLimit(1)
             if groupByDirectory {
-                let parentPath = fileURL.deletingLastPathComponent().path
+                let parentPath = changeTreeRowParentPath(entry.path)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if !parentPath.isEmpty, parentPath != "." {
                     Text("/\(parentPath)")

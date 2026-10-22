@@ -780,7 +780,11 @@ struct RebasedCommitWorkspace: View {
             .padding(.vertical, 8)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                // The change list is the one place that can hold thousands of
+                // rows (a full worktree of edits). A lazy stack keeps row
+                // views, checkboxes and context menus bounded to the visible
+                // range instead of materializing every change.
+                LazyVStack(alignment: .leading, spacing: 4) {
                     if !conflictedEntries.isEmpty {
                         RebasedConflictGroup(
                             entries: conflictedEntries,

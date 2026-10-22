@@ -206,6 +206,79 @@ func resolvedFileHistoryRootPath(
     preferredRootPath ?? selectedCommitRootPath ?? activeLogRootPath ?? repositoryRootPath
 }
 
+/// The project tree used to scan every changed entry for each visible row,
+/// which turned a large worktree into an O(rows x changes) status lookup on
+/// every render. The index derives file and directory statuses once per
+/// status snapshot so a row resolves its colour with one dictionary lookup.
+struct ProjectFileTreeStatusIndex: Equatable {
+    private struct Aggregate: Equatable {
+        var hasConflict = false
+        var notable: ChangeKind?
+    }
+
+    private var exact: [String: Aggregate] = [:]
+    private var subtree: [String: Aggregate] = [:]
+
+    init(entries: [FileEntry] = []) {
+        for entry in entries {
+            let kinds = [entry.staged, entry.unstaged]
+            let hasConflict = kinds.contains(.conflicted)
+            let notable = kinds.first { $0 != .unchanged && $0 != .ignored }
+            merge(into: &exact, key: entry.path, hasConflict: hasConflict, notable: notable)
+            merge(into: &subtree, key: entry.path, hasConflict: hasConflict, notable: notable)
+            // Directory rows aggregate every changed descendant.
+            var directory = entry.path
+            while let slash = directory.lastIndex(of: "/") {
+                directory = String(directory[directory.startIndex..<slash])
+                merge(
+                    into: &subtree,
+                    key: directory,
+                    hasConflict: hasConflict,
+                    notable: notable
+                )
+            }
+        }
+    }
+
+    func kind(path: String, isDirectory: Bool) -> ChangeKind? {
+        guard let aggregate = isDirectory ? subtree[path] : exact[path] else {
+            return nil
+        }
+        return aggregate.hasConflict ? .conflicted : aggregate.notable
+    }
+
+    private func merge(
+        into table: inout [String: Aggregate],
+        key: String,
+        hasConflict: Bool,
+        notable: ChangeKind?
+    ) {
+        var aggregate = table[key] ?? Aggregate()
+        aggregate.hasConflict = aggregate.hasConflict || hasConflict
+        if aggregate.notable == nil, let notable {
+            aggregate.notable = notable
+        }
+        table[key] = aggregate
+    }
+}
+
+/// Memoizes the status index against the current change snapshot.
+final class ProjectFileTreeStatusCache {
+    private var key: Int?
+    private var index = ProjectFileTreeStatusIndex()
+
+    func index(
+        for key: Int,
+        build: () -> ProjectFileTreeStatusIndex
+    ) -> ProjectFileTreeStatusIndex {
+        if self.key == key { return index }
+        let built = build()
+        self.key = key
+        self.index = built
+        return built
+    }
+}
+
 /// 项目文件树：每个目录只在第一次展开时调用一次 listDir。
 struct ProjectFileTreeView: View {
     let repo: Repository?
@@ -227,6 +300,11 @@ struct ProjectFileTreeView: View {
     @State private var rootEntries: [DirEntry] = []
     @State private var error: String?
     @State private var loading = false
+    @State private var statusCache = ProjectFileTreeStatusCache()
+
+    private var statusIndex: ProjectFileTreeStatusIndex {
+        statusCache.index(for: entries.hashValue) { ProjectFileTreeStatusIndex(entries: entries) }
+    }
 
     var body: some View {
         Group {
@@ -254,6 +332,7 @@ struct ProjectFileTreeView: View {
                                     repo: repo,
                                     entry: entry,
                                     entries: entries,
+                                    statusIndex: statusIndex,
                                     selection: $selection,
                                     onCopyPath: onCopyPath,
                                     onCompareWithReference: onCompareWithReference,
@@ -315,6 +394,7 @@ private struct FileTreeNodeView: View {
     let repo: Repository
     let entry: DirEntry
     let entries: [FileEntry]
+    let statusIndex: ProjectFileTreeStatusIndex
     @Binding var selection: String?
     let onCopyPath: (String) -> Void
     let onCompareWithReference: (String, Bool) -> Void
@@ -353,6 +433,7 @@ private struct FileTreeNodeView: View {
                             repo: repo,
                             entry: child,
                             entries: entries,
+                            statusIndex: statusIndex,
                             selection: $selection,
                             onCopyPath: onCopyPath,
                             onCompareWithReference: onCompareWithReference,
@@ -514,11 +595,7 @@ private struct FileTreeNodeView: View {
     }
 
     private var statusKind: ChangeKind? {
-        let prefix = entry.isDir ? "\(entry.path)/" : entry.path
-        let matching = entries.filter { $0.path == entry.path || $0.path.hasPrefix(prefix) }
-        let kinds = matching.flatMap { [$0.staged, $0.unstaged] }
-        return kinds.first(where: { $0 == .conflicted })
-            ?? kinds.first(where: { $0 != .unchanged && $0 != .ignored })
+        statusIndex.kind(path: entry.path, isDirectory: entry.isDir)
     }
 
     private func statusColor(_ kind: ChangeKind?) -> Color? {
@@ -560,7 +637,7 @@ private struct FileTreeNodeView: View {
     }
 
     private func fileSymbol(for name: String) -> String {
-        switch URL(fileURLWithPath: name).pathExtension.lowercased() {
+        switch (name as NSString).pathExtension.lowercased() {
         case "swift", "rs", "py", "js", "ts", "tsx", "jsx", "c", "h", "cpp", "cc", "java", "go":
             return "doc.text"
         case "json", "yaml", "yml", "toml", "xml":
