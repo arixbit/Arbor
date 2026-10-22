@@ -192,6 +192,7 @@ struct RebasedCommitWorkspace: View {
     @State var contextSelectedPaths: Set<String> = []
     @State var treeExpansionCommand = 0
     @State var treeExpansionTarget = true
+    @State var changeTreeExpansion = ChangeTreeExpansionState()
     @State var editingShelfID: String?
     @State var editingShelfDescription = ""
     @State var lastAppliedShelfRequestID = 0
@@ -746,10 +747,12 @@ struct RebasedCommitWorkspace: View {
                     treeExpansionTarget = true
                     treeExpansionCommand += 1
                 })
+                .disabled(!changeTreeExpansion.canExpand)
                 compactButton("chevron.up", help: "Collapse All", action: {
                     treeExpansionTarget = false
                     treeExpansionCommand += 1
                 })
+                .disabled(!changeTreeExpansion.canCollapse)
                 Spacer()
                 if isShowingCachedStatusSnapshot {
                     ProgressView()
@@ -850,6 +853,12 @@ struct RebasedCommitWorkspace: View {
                 .padding(.bottom, 10)
             }
             .frame(maxHeight: .infinity)
+            // Expand All / Collapse All are panel-wide, so the panel collects
+            // each change group's expansion state and disables the buttons
+            // that cannot change anything.
+            .onPreferenceChange(ChangeTreeExpansionStateKey.self) { state in
+                changeTreeExpansion = state
+            }
         }
     }
 

@@ -624,6 +624,29 @@ final class ChangeTreeRowsCache {
     }
 }
 
+/// What the Commit panel's Expand All / Collapse All buttons can do right now.
+///
+/// Every change group publishes its own state and the panel aggregates them, so
+/// a button that cannot change anything is disabled instead of being a
+/// clickable no-op.
+struct ChangeTreeExpansionState: Equatable {
+    var canExpand = false
+    var canCollapse = false
+}
+
+struct ChangeTreeExpansionStateKey: PreferenceKey {
+    static var defaultValue = ChangeTreeExpansionState()
+
+    static func reduce(
+        value: inout ChangeTreeExpansionState,
+        nextValue: () -> ChangeTreeExpansionState
+    ) {
+        let next = nextValue()
+        value.canExpand = value.canExpand || next.canExpand
+        value.canCollapse = value.canCollapse || next.canCollapse
+    }
+}
+
 struct RebasedChangeGroup: View {
     let title: String
     let entries: [FileEntry]
@@ -668,6 +691,24 @@ struct RebasedChangeGroup: View {
     @State var isExpanded = true
     @State var collapsedFolders: Set<String> = []
     @State var rowsCache = ChangeTreeRowsCache()
+
+    /// Folders this group can collapse. A group without folders has nothing to
+    /// expand or collapse.
+    var folderPaths: Set<String> {
+        Set(treeRows.compactMap { $0.entry == nil ? $0.path : nil })
+    }
+
+    /// What the panel-wide Expand All / Collapse All buttons can do to this
+    /// group right now. A section that is already fully expanded cannot be
+    /// expanded again, and an enabled button that cannot act is a clickable
+    /// no-op.
+    var expansionState: ChangeTreeExpansionState {
+        guard !folderPaths.isEmpty else { return ChangeTreeExpansionState() }
+        return ChangeTreeExpansionState(
+            canExpand: !isExpanded || !collapsedFolders.isEmpty,
+            canCollapse: isExpanded && folderPaths.count > collapsedFolders.count
+        )
+    }
 
     struct TreeRow: Identifiable {
         let id: String
@@ -823,6 +864,7 @@ struct RebasedChangeGroup: View {
             onDropPaths(filePaths)
             return true
         }
+        .preference(key: ChangeTreeExpansionStateKey.self, value: expansionState)
     }
 
     func folderRow(_ row: TreeRow) -> some View {

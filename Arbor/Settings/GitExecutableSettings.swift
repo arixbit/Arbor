@@ -5,6 +5,9 @@ import UniformTypeIdentifiers
 
 enum GitExecutableSettings {
     static let applicationKey = "arbor.git.executable"
+
+    /// The engine resolves an empty selection to `git` on PATH.
+    static let pathDefault = "git"
     private static let projectKeyPrefix = "arbor.git.executable.project.v1:"
 
     private static func projectKey(for projectPath: String) -> String {
@@ -72,11 +75,8 @@ struct GitExecutableSettingsSection: View {
                 Button("Save Git executable", action: saveExecutable)
                     .keyboardShortcut(.defaultAction)
                     .disabled(isBusy)
-                // Resetting to the PATH default clears both the draft and the
-                // saved override. When neither holds a value the button cannot
-                // do anything, so it must not look available.
                 Button("Reset to PATH default", action: resetExecutable)
-                    .disabled(isBusy || (path.isEmpty && savedPath.isEmpty))
+                    .disabled(isBusy || !canResetExecutable)
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)
@@ -158,6 +158,15 @@ struct GitExecutableSettingsSection: View {
                 }
             }
         }
+    }
+
+    /// Resetting resolves the PATH default, so it only does something when the
+    /// saved override is set or the draft holds a non-default value. Otherwise
+    /// the button is an enabled no-op.
+    private var canResetExecutable: Bool {
+        if !savedPath.isEmpty { return true }
+        let draft = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !draft.isEmpty && draft != GitExecutableSettings.pathDefault
     }
 
     private func resetExecutable() {

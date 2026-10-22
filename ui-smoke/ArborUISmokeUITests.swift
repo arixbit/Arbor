@@ -41,7 +41,10 @@ final class ArborUISmokeUITests: XCTestCase {
 
     @MainActor
     func testSettingsControlsReact() throws {
-        try sweepScreen(named: "settings", toolWindow: "commit", minimumControls: 3) { session in
+        // Browse… opens a system panel and is skipped by policy, and Reset to
+        // PATH default is disabled while the selection already is the default:
+        // two controls is the correct expectation for a fresh profile.
+        try sweepScreen(named: "settings", toolWindow: "commit", minimumControls: 2) { session in
             XCTAssertTrue(session.openSettings(), "⌘, did not open a Settings window")
         }
     }
