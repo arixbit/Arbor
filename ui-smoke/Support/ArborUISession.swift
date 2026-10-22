@@ -142,6 +142,9 @@ enum ArborUISweepPolicy {
 final class ArborUISession {
     let fixture: URL
     let initialToolWindow: String
+    /// Extra arguments for launches that need a specific persisted state,
+    /// such as forcing the Commit tool window instead of restoring the last one.
+    var extraLaunchArguments: [String] = []
     let screenshotSink: (XCTAttachment) -> Void
     private(set) var app: XCUIApplication
     private(set) var launchedAt = Date()
@@ -190,6 +193,7 @@ final class ArborUISession {
         if initialToolWindow == "log" {
             args.append("--log")
         }
+        args.append(contentsOf: extraLaunchArguments)
         // Force the interface language so accessibility labels are stable.
         args.append(contentsOf: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
         return args

@@ -12,6 +12,7 @@ targets:
     sources:
       - path: ArborUISmokeUITests.swift
       - path: ArborUIDiagnosticsUITests.swift
+      - path: ArborUIVisualCaptureUITests.swift
       - path: Support
     settings:
       base:
