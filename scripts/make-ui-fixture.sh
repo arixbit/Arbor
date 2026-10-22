@@ -125,5 +125,36 @@ SWIFT
 
 printf 'ignored log line\n' > debug.log
 
+# Keep stress-test commits unreachable until the row-layout test moves main
+# to their tip, so the regular visual fixture retains its original history.
+python3 - <<'PY'
+import json
+import os
+import pathlib
+import subprocess
+
+def git(*args, **kwargs):
+    return subprocess.check_output(['git', *args], text=True, **kwargs).strip()
+
+parent = git('rev-parse', 'HEAD')
+tree = git('rev-parse', 'HEAD^{tree}')
+subjects = [
+    'UI row 1 short before',
+    'UI row 2 long words ' + 'a long commit message that must stay in its own row ' * 12,
+    'UI row 3 short middle',
+    'UI row 4 中文与表情 ' + '修复日志列表的长提交信息排版 🛠️ ' * 20,
+    'UI row 5 line separators first\u2028second\u2029third',
+    'UI row 6 short after',
+]
+commits = []
+for index, subject in enumerate(subjects):
+    subject = subject.rstrip()
+    timestamp = f'2024-01-{index + 6:02d}T09:00:00+00:00'
+    environment = dict(os.environ, GIT_AUTHOR_DATE=timestamp, GIT_COMMITTER_DATE=timestamp)
+    parent = git('commit-tree', tree, '-p', parent, input=subject + '\n\nFull commit body.\n', env=environment)
+    commits.append({'id': parent, 'subject': subject})
+pathlib.Path('.git/arbor-ui-log-rows.json').write_text(json.dumps(commits, ensure_ascii=False))
+PY
+
 git status --short >/dev/null
 echo "fixture ready at $target"

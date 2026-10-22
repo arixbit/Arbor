@@ -1092,6 +1092,7 @@ struct LogGraphView: View {
                 }
             }
             .frame(width: commitWidth, height: rowHeight, alignment: .leading)
+            .clipped()
         case .author:
             Text(commit.authorName.isEmpty ? "—" : commit.authorName)
                 .lineLimit(1)
@@ -1192,6 +1193,9 @@ struct LogGraphView: View {
         Text(commit.summary)
             .lineLimit(1)
             .truncationMode(.tail)
+            // Match the graph's fixed row pitch even when a long subject is
+            // measured inside a compressed cell during column/window resizing.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

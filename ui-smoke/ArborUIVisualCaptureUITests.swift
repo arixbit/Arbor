@@ -40,6 +40,60 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     }
 
     @MainActor
+    func testLongCommitSubjectsStayInsideTheirRows() throws {
+        struct FixtureCommit: Decodable {
+            let id: String
+            let subject: String
+        }
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let commits = try JSONDecoder().decode(
+            [FixtureCommit].self,
+            from: Data(contentsOf: fixture.appendingPathComponent(".git/arbor-ui-log-rows.json"))
+        )
+        let tip = try XCTUnwrap(commits.last)
+        try Data((tip.id + "\n").utf8).write(
+            to: fixture.appendingPathComponent(".git/refs/heads/main")
+        )
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.workspaceSidebarWidth.v11", "564",
+            "-arbor.logGraphWidth.v6", "545",
+            "-arbor.log.branches.visible.v1", "NO",
+            "-arbor.log.alignLabels.v1", "NO",
+        ]
+        session.launch()
+        defer { session.terminate() }
+        XCTAssertTrue(session.openProjectTree())
+
+        for width: CGFloat in [1642, 1540, 1200, 980] {
+            resize(session.window, to: CGSize(width: width, height: 1015), label: "log-row-heights")
+            var previousRow: CGRect?
+            for commit in commits.reversed() {
+                let row = session.window.buttons["Select commit \(commit.id.prefix(7))"]
+                XCTAssertTrue(row.waitForExistence(timeout: 5))
+                let subject = session.window.staticTexts.matching(
+                    NSPredicate(format: "value BEGINSWITH %@", String(commit.subject.prefix(18)))
+                ).firstMatch
+                XCTAssertTrue(subject.exists)
+                XCTAssertEqual(row.frame.height, 31, accuracy: 1)
+                XCTAssertLessThanOrEqual(subject.frame.height, row.frame.height,
+                                         "a long subject escaped its row at \(width)pt: \(subject.frame)")
+                XCTAssertEqual(subject.frame.midY, row.frame.midY, accuracy: 1)
+                if let previousRow {
+                    XCTAssertEqual(row.frame.minY - previousRow.minY, 31, accuracy: 1)
+                }
+                previousRow = row.frame
+            }
+            let longCommit = commits[1]
+            let longRow = session.window.buttons["Select commit \(longCommit.id.prefix(7))"]
+            longRow.click()
+            XCTAssertTrue(longRow.isSelected, "clicking a long subject selected the wrong row")
+            capture(window: session.window, named: "log-row-heights-\(Int(width))")
+        }
+    }
+
+    @MainActor
     func testLogFiltersStayInsidePane() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
