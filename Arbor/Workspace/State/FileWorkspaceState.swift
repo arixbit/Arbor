@@ -14,6 +14,9 @@ final class FileWorkspaceState: ObservableObject {
     @Published var treeDiffRequest: FileTreeDiffRequest?
     @Published var referenceComparisonRequest: FileReferenceComparisonRequest?
     @Published var currentRevisionRequest: CurrentRevisionRequest?
+    /// IntelliJ 的 `Show History for Selection…` 作用于编辑器选区；这里由
+    /// 代码视图的行选择触发，打开独立的历史面板。
+    @Published var blockHistoryRequest: BlockHistoryRequest?
     /// Commit workspace preview stays inside the left Stage panel, matching
     /// rebased's split diff preview; it must not replace the right Log editor.
     @Published var previewPath: String?

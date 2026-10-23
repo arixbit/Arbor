@@ -1,0 +1,25 @@
+# 用户可见 surface 的人工判定台账。
+# 每行：<verdict>\t<id>\t<note>
+# verdict: covered | accepted-gap | out-of-scope | not-a-surface | container
+# covered 表示 Arbor 有等价入口，但矩阵无法记录（平台 id 或 class-only action）。
+# 生成：python3 scripts/audit-user-surface.py --write-baseline
+covered	Annotate	项目树 / Log 文件行 Annotate
+covered	ChangesView.CreatePatchFromChanges	Arbor Create Patch
+covered	ChangesView.CreatePatchToClipboard	Arbor Create Patch 的 copy to clipboard 选项
+covered	ChangesView.Refresh	Changes / Log 的 Refresh
+covered	ChangesView.Revert	Changes 列表 Revert Selected Changes / 项目树 Revert
+covered	ChangesView.RevertFiles	多选 Revert 复用同一入口
+covered	CheckinFiles	项目树 / Log Changes 的 Checkin Files…
+covered	CheckinProject	VCS > Git > Commit…
+covered	Compare.SameVersion	Compare with HEAD
+covered	Compare.Selected	Compare with Selected Revision…
+covered	Diff.ShowDiff	Diff 内嵌在工作页 / sheet，不是独立窗口
+covered	Diff.ShowStandaloneDiff	同上
+covered	Start.Use.Vcs	File > Initialize Git Repository…
+covered	Vcs.ShowTabbedFileHistory	Show File History
+covered	class:com.intellij.vcs.git.branch.popup.GitBranchesTreePopupTrackReposSynchronouslyAction	等价开关是 GitRootSyncChoice，放在设置页而非弹窗齿轮
+covered	class:git4idea.actions.branch.GitRebaseBranchAction	对应 Log / 分支弹窗的 Rebase Current onto…
+covered	$Delete	变更列表 / 项目树右键的 Delete…（引擎 delete_worktree_paths）
+covered	Vcs.ShowHistoryForBlock	代码视图行选择右键 Show History for Selection…（git log -L）
+not-a-surface	EditSource	原生应用没有编辑器跳转
+out-of-scope	Vcs.UmlDiff	IDE UML 集成，不是 Git 功能

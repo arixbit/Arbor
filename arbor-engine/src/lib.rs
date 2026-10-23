@@ -67,7 +67,8 @@ pub use lfs::{
     LfsCapability, LfsCommandResult, LfsFileEntry, LfsHookState, LfsPathState, LfsTrackedPattern,
 };
 pub use log::{
-    CommitDiff, CommitInfo, CommitSignatureInfo, LogGraphSortMode, ReflogEntry, SignatureStatus,
+    BlockHistoryEntry, CommitDiff, CommitInfo, CommitSignatureInfo, LogGraphSortMode, ReflogEntry,
+    SignatureStatus,
 };
 pub use merge::{
     BlockDecision, ConflictBlock, ConflictFile, MergeMode, MergeOptions, MergeOutcome, PickKind,

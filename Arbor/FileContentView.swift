@@ -113,6 +113,30 @@ func codeLineChanges(for diff: FileDiff, lineCount: Int) -> [Int: CodeLineChange
     return changes
 }
 
+/// 行选择的纯逻辑：单击选一行并把锚点移过去；Shift 点击从锚点扩展到
+/// 新行。锚点缺失时（首次点击或已重置）Shift 点击退化为单击。
+func fileContentLineSelection(
+    anchor: Int?,
+    line: Int,
+    extending: Bool
+) -> (anchor: Int, range: ClosedRange<Int>) {
+    guard extending, let anchor else {
+        return (line, line...line)
+    }
+    return (anchor, min(anchor, line)...max(anchor, line))
+}
+
+/// 右键菜单作用于哪一段选区：落在选区内就用选区，否则只取该行。
+func fileContentSelectionRange(
+    selected: ClosedRange<Int>?,
+    containing line: Int
+) -> ClosedRange<Int> {
+    guard let selected, selected.contains(line) else {
+        return line...line
+    }
+    return selected
+}
+
 /// 只读工作区文件查看器：行号 + tree-sitter 语法高亮 + 截断/二进制提示。
 struct FileContentView: View {
     let repo: Repository?
@@ -122,6 +146,9 @@ struct FileContentView: View {
     var availableVersions: [FileContentVersion] = [.local]
     var onVersionChange: (FileContentVersion) -> Void = { _ in }
     var onShowFileHistory: (String) -> Void = { _ in }
+    /// IntelliJ 的 `Show History for Selection…`（`Vcs.ShowHistoryForBlock`）
+    /// 作用在编辑器选区上；这里的对应物是代码视图里选中的行区间。
+    var onShowBlockHistory: (String, ClosedRange<Int>) -> Void = { _, _ in }
     var blameRequestID: Int = 0
     /// Incremented by the workspace after a Git status/index refresh. This
     /// mirrors the invalidation part of IntelliJ's VFS-backed version views.
@@ -239,7 +266,15 @@ struct FileContentView: View {
                     messageView(systemImage: "person.2", text: "Blame", color: .secondary)
                 }
             } else if let content {
-                CodeLinesView(text: content.text, path: path ?? "", lineChanges: lineChanges)
+                CodeLinesView(
+                    text: content.text,
+                    path: path ?? "",
+                    lineChanges: lineChanges,
+                    onShowBlockHistory: { range in
+                        guard let path else { return }
+                        onShowBlockHistory(path, range)
+                    }
+                )
             } else {
                 messageView(systemImage: "doc", text: "从文件树选择一个文件", color: .secondary)
             }
@@ -603,14 +638,26 @@ private struct CodeLinesView: View {
     let text: String
     let path: String
     let lineChanges: [Int: CodeLineChange]
+    var onShowBlockHistory: (ClosedRange<Int>) -> Void = { _ in }
     private let spans: [HighlightSpan]
+
+    /// 1-based 锚点行与当前选区。只在左侧行号列上点击才能选行，正文仍然
+    /// 保留原生文字拖选（复制代码是更常用的动作）。
+    @State private var anchorLine: Int?
+    @State private var selectedRange: ClosedRange<Int>?
 
     private let lineNumberWidth: CGFloat = 52 + Design.Spacing.md + 8
 
-    init(text: String, path: String, lineChanges: [Int: CodeLineChange]) {
+    init(
+        text: String,
+        path: String,
+        lineChanges: [Int: CodeLineChange],
+        onShowBlockHistory: @escaping (ClosedRange<Int>) -> Void = { _ in }
+    ) {
         self.text = text
         self.path = path
         self.lineChanges = lineChanges
+        self.onShowBlockHistory = onShowBlockHistory
         self.spans = highlightCode(content: text, path: path)
     }
 
@@ -656,6 +703,9 @@ private struct CodeLinesView: View {
                                 .foregroundStyle(.tertiary)
                                 .frame(width: 52, alignment: .trailing)
                                 .padding(.trailing, Design.Spacing.md)
+                                .contentShape(Rectangle())
+                                .onTapGesture { selectLine(index + 1) }
+                                .help("Click to select a line. Shift-click to extend the selection.")
                             Text(highlightedLine(line, index: index))
                                 .font(Design.Typography.code)
                                 .textSelection(.enabled)
@@ -666,6 +716,14 @@ private struct CodeLinesView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 1)
+                        .background(
+                            isLineSelected(index + 1) ? Design.Colors.selection : .clear
+                        )
+                        .contextMenu {
+                            Button("Show History for Selection…") {
+                                onShowBlockHistory(selectionRange(containing: index + 1))
+                            }
+                        }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(
                             lineChanges[index + 1].map {
@@ -685,6 +743,27 @@ private struct CodeLinesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .scrollContentBackground(.hidden)
+    }
+
+    /// 行选择只影响行区间，不影响正文的文字拖选。
+    private func selectLine(_ line: Int) {
+        let selection = fileContentLineSelection(
+            anchor: anchorLine,
+            line: line,
+            extending: NSEvent.modifierFlags.contains(.shift)
+        )
+        anchorLine = selection.anchor
+        selectedRange = selection.range
+    }
+
+    private func isLineSelected(_ line: Int) -> Bool {
+        guard let selectedRange else { return false }
+        return selectedRange.contains(line)
+    }
+
+    /// 右键到选区之外的行时，以该行为单位，而不是静默沿用旧选区。
+    private func selectionRange(containing line: Int) -> ClosedRange<Int> {
+        fileContentSelectionRange(selected: selectedRange, containing: line)
     }
 
     private func highlightedLine(_ line: String, index: Int) -> AttributedString {

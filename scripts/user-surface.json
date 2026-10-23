@@ -1,0 +1,1950 @@
+{
+  "generated_from": "git4idea descriptors",
+  "surfaces": {
+    "vcs-menu": {
+      "title": "主菜单 VCS > Git",
+      "nodes": [
+        {
+          "id": "Git.MainMenu",
+          "label": "Git.MainMenu",
+          "depth": 0,
+          "kind": "group",
+          "class": "git4idea.actions.GitMainMenuActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "CheckinProject",
+          "label": "Commit…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Commit.Stage",
+          "label": "Commit…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitCommitWithStagingAreaAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.Push",
+          "label": "Push…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.UpdateProject",
+          "label": "Update Project",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Pull",
+          "label": "Pull…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitPull",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Fetch",
+          "label": "Fetch",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitFetch",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Unshallow",
+          "label": "Unshallow repository",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitUnshallowRepositoryAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge",
+          "label": "Merge…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitMerge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.MainMenu.MergeActions",
+          "label": "Merge",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.actions.GitRepositoryStateActionGroup$Merge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Commit",
+          "label": "Commit merge",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitMergeCommitAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Abort",
+          "label": "Abort Merge",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Merge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase",
+          "label": "Rebase…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebase",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.MainMenu.RebaseActions",
+          "label": "Rebase",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.actions.GitRepositoryStateActionGroup$Rebase",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Abort",
+          "label": "Abort Rebase",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseAbort",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Continue",
+          "label": "Continue Rebase",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseContinue",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Skip",
+          "label": "Skip Commit",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseSkip",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ResolveConflicts",
+          "label": "Resolve Conflicts…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitResolveConflictsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.RevertResolved",
+          "label": "Revert Resolved",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRevertResolvedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Branches",
+          "label": "Branches…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.ui.branch.GitBranchesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewBranch",
+          "label": "New Branch…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCreateNewBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Tag",
+          "label": "New Tag…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitTag",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Reset",
+          "label": "Reset HEAD…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitResetHead",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewWorkingTree",
+          "label": "New Worktree…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.workingTree.GitCreateWorkingTreeAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Show.WorkingTrees",
+          "label": "Worktrees…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.workingTree.ShowWorkingTreesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.Show.Log",
+          "label": "Vcs.Show.Log",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Patch.MainMenu",
+          "label": "Patch",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.MainMenu.LocalChanges",
+          "label": "Uncommitted Changes",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "ChangesView.Shelve",
+          "label": "Shelve Changes…",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.Show.Shelf",
+          "label": "Show Shelf",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Show.Stash",
+          "label": "Show Git Stash",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitShowStashTabAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash",
+          "label": "Stash Changes…",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitStash",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Unstash",
+          "label": "Unstash Changes…",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitUnstash",
+          "origin": "git4idea"
+        },
+        {
+          "id": "ChangesView.Revert",
+          "label": "Rollback…",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.UmlDiff",
+          "label": "Vcs.UmlDiff",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.MainMenu.FileActions",
+          "label": "Git.MainMenu.FileActions",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.actions.GitFileActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.FileActions",
+          "label": "Git.FileActions",
+          "depth": 2,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "CheckinFiles",
+          "label": "Commit File",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Add",
+          "label": "Add",
+          "depth": 3,
+          "kind": "action",
+          "class": "com.intellij.openapi.vcs.changes.actions.ScheduleForAdditionWithIgnoredFilesConfirmationAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ignore.File",
+          "label": "Git.Ignore.File",
+          "depth": 3,
+          "kind": "group",
+          "class": "git4idea.ignore.actions.GitIgnoreFileActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Annotate",
+          "label": "Annotate",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.SameVersion",
+          "label": "Compare with Same Repository Version",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.Selected",
+          "label": "Compare with Revision…",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.CompareWithBranch",
+          "label": "Compare with Branch or Tag…",
+          "depth": 3,
+          "kind": "action",
+          "class": "git4idea.actions.GitCompareWithRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.ShowTabbedFileHistory",
+          "label": "Show History",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.ShowHistoryForBlock",
+          "label": "Show History for Selection…",
+          "depth": 3,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Configure.Remotes",
+          "label": "Manage Remotes…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.remote.GitConfigureRemotesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Clone",
+          "label": "Clone…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCloneAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.QuickListPopupAction",
+          "label": "VCS Operations Popup…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Revert.Abort",
+          "label": "Abort Revert",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Revert",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Continue",
+          "label": "Continue Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCherryPickContinueAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Abort",
+          "label": "Abort Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$CherryPick",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "local-changes": {
+      "title": "Local Changes / Uncommitted Changes 子菜单",
+      "nodes": [
+        {
+          "id": "Git.MainMenu.LocalChanges",
+          "label": "Uncommitted Changes",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "ChangesView.Shelve",
+          "label": "Shelve Changes…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.Show.Shelf",
+          "label": "Show Shelf",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Show.Stash",
+          "label": "Show Git Stash",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitShowStashTabAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash",
+          "label": "Stash Changes…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitStash",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Unstash",
+          "label": "Unstash Changes…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitUnstash",
+          "origin": "git4idea"
+        },
+        {
+          "id": "ChangesView.Revert",
+          "label": "Rollback…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.UmlDiff",
+          "label": "Vcs.UmlDiff",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        }
+      ]
+    },
+    "file-actions": {
+      "title": "文件动作分组",
+      "nodes": [
+        {
+          "id": "Git.FileActions",
+          "label": "Git.FileActions",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "CheckinFiles",
+          "label": "Commit File",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Add",
+          "label": "Add",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.openapi.vcs.changes.actions.ScheduleForAdditionWithIgnoredFilesConfirmationAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ignore.File",
+          "label": "Git.Ignore.File",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.ignore.actions.GitIgnoreFileActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Annotate",
+          "label": "Annotate",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.SameVersion",
+          "label": "Compare with Same Repository Version",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.Selected",
+          "label": "Compare with Revision…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.CompareWithBranch",
+          "label": "Compare with Branch or Tag…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCompareWithRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.ShowTabbedFileHistory",
+          "label": "Show History",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.ShowHistoryForBlock",
+          "label": "Show History for Selection…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        }
+      ]
+    },
+    "file-context": {
+      "title": "项目树 / 文件右键",
+      "nodes": [
+        {
+          "id": "Git.ContextMenu",
+          "label": "Git",
+          "depth": 0,
+          "kind": "group",
+          "class": "git4idea.actions.GitMenu",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.FileActions",
+          "label": "Git.FileActions",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "CheckinFiles",
+          "label": "Commit File",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Add",
+          "label": "Add",
+          "depth": 2,
+          "kind": "action",
+          "class": "com.intellij.openapi.vcs.changes.actions.ScheduleForAdditionWithIgnoredFilesConfirmationAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ignore.File",
+          "label": "Git.Ignore.File",
+          "depth": 2,
+          "kind": "group",
+          "class": "git4idea.ignore.actions.GitIgnoreFileActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Annotate",
+          "label": "Annotate",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.SameVersion",
+          "label": "Compare with Same Repository Version",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Compare.Selected",
+          "label": "Compare with Revision…",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.CompareWithBranch",
+          "label": "Compare with Branch or Tag…",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitCompareWithRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.ShowTabbedFileHistory",
+          "label": "Show History",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.ShowHistoryForBlock",
+          "label": "Show History for Selection…",
+          "depth": 2,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Show.Current.Revision",
+          "label": "Show Current Revision",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "ChangesView.Revert",
+          "label": "Rollback…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "ChangesView.RevertFiles",
+          "label": "Rollback File…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Stage.Local.File.Menu",
+          "label": "Git.Stage.Local.File.Menu",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Show.Staged",
+          "label": "Show Staged Version",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitShowStagedVersionAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Local.Staged",
+          "label": "Compare with Staged Version",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareLocalWithStagedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Three.Versions",
+          "label": "Compare HEAD, Staged and Local Versions",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareThreeVersionsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ResolveConflicts",
+          "label": "Resolve Conflicts…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitResolveConflictsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.RevertResolved",
+          "label": "Revert Resolved",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRevertResolvedAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "changes-view": {
+      "title": "Changes 视图右键",
+      "nodes": [
+        {
+          "id": "ChangesViewPopupMenu",
+          "label": "ChangesViewPopupMenu",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.ChangesView.Conflicts",
+          "label": "Git.ChangesView.Conflicts",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ChangesView.Merge",
+          "label": "Git.ChangesView.Merge",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.merge.GitMergeConflictAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ChangesView.AcceptTheirs",
+          "label": "Git.ChangesView.AcceptTheirs",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.merge.GitAcceptTheirsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ChangesView.AcceptYours",
+          "label": "Git.ChangesView.AcceptYours",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.merge.GitAcceptYoursAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.RevertResolved",
+          "label": "Revert Resolved",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRevertResolvedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ignore.File",
+          "label": "Git.Ignore.File",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.ignore.actions.GitIgnoreFileActionGroup",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "stage": {
+      "title": "Stage 工具窗",
+      "nodes": [
+        {
+          "id": "Git.Stage.Tree.Menu",
+          "label": "Git.Stage.Tree.Menu",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Merge",
+          "label": "Git.Stage.Merge",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageMergeConflictAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.AcceptTheirs",
+          "label": "Git.Stage.AcceptTheirs",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageAcceptTheirsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.AcceptYours",
+          "label": "Git.Stage.AcceptYours",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageAcceptYoursAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Add",
+          "label": "Git.Stage.Add",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitAddAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Add.No.Content",
+          "label": "Git.Stage.Add.No.Content",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitAddWithoutContent",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Reset",
+          "label": "Git.Stage.Reset",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitResetAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Stash.Files",
+          "label": "Git.Stage.Stash.Files",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageStashFilesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Revert",
+          "label": "Git.Stage.Revert",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitRevertAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "$Delete",
+          "label": "Delete",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Ignore.File",
+          "label": "Git.Ignore.File",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.ignore.actions.GitIgnoreFileActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Diff.ShowDiff",
+          "label": "Show Diff",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Diff.ShowStandaloneDiff",
+          "label": "Show Diff in a New Tab or Window",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Stage.ThreeSideDiff",
+          "label": "Compare HEAD, Staged and Local Versions",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageThreeSideDiffAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "EditSource",
+          "label": "Jump to Source",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "ChangesView.CreatePatchFromChanges",
+          "label": "Create Patch…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "ChangesView.CreatePatchToClipboard",
+          "label": "Copy as Patch to Clipboard",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Vcs.ShowTabbedFileHistory",
+          "label": "Show History",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Stage.Index.File.Menu",
+          "label": "Git",
+          "depth": 0,
+          "kind": "group",
+          "class": "git4idea.index.actions.GitStageIndexFileMenuGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Show.Local",
+          "label": "Show Local Version",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitShowLocalVersionAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Staged.Head",
+          "label": "Compare with HEAD Version",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareStagedWithHeadAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Staged.Local",
+          "label": "Compare with Local Version",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareStagedWithLocalAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Three.Versions",
+          "label": "Compare HEAD, Staged and Local Versions",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareThreeVersionsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Local.File.Menu",
+          "label": "Git.Stage.Local.File.Menu",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Show.Staged",
+          "label": "Show Staged Version",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitShowStagedVersionAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Local.Staged",
+          "label": "Compare with Staged Version",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareLocalWithStagedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Compare.Three.Versions",
+          "label": "Compare HEAD, Staged and Local Versions",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageCompareThreeVersionsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Toolbar",
+          "label": "Git.Stage.Toolbar",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Diff.ShowDiff",
+          "label": "Show Diff",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "ChangesView.Refresh",
+          "label": "Refresh",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Stage.Add.Tracked",
+          "label": "Stage All Tracked",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStageTrackedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.Silently",
+          "label": "Stash Silently",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitStashSilentlyAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stage.Ui.Settings",
+          "label": "View Options",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "ChangesView.GroupBy",
+          "label": "Group By",
+          "depth": 2,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Stage.ToggleIgnored",
+          "label": "Git.Stage.ToggleIgnored",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitToggleIgnoredFilesAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "log": {
+      "title": "Log 工具窗",
+      "nodes": [
+        {
+          "id": "Git.Log.ContextMenu",
+          "label": "Git.Log.ContextMenu",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Reset.In.Log",
+          "label": "Reset Current Branch to Here…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.reset.GitResetAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Revert.In.Log",
+          "label": "Revert Commit",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.revert.GitRevertAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Uncommit",
+          "label": "Undo Commit…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.reset.GitUncommitAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Reword.Commit",
+          "label": "Edit Commit Message…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.GitRewordAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Fixup.To.Commit",
+          "label": "Fixup…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.GitCommitFixupBySubjectAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Squash.Into.Commit",
+          "label": "Squash Into…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.GitCommitSquashBySubjectAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Drop.Commits",
+          "label": "Drop Commits",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.log.drop.GitDropLogAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Squash.Commits",
+          "label": "Squash Commits…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.log.squash.GitSquashLogAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Interactive.Rebase",
+          "label": "Interactively Rebase from Here…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.rebase.GitInteractiveRebaseAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.PushUpToCommit",
+          "label": "Push All up to Here…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitPushUpToCommitAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.AddCommitToRemoteBranch",
+          "label": "Add Commits to Remote Branch…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.addCommit.GitAddCommitToRemoteBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.BranchOperationGroup",
+          "label": "Git.BranchOperationGroup",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.ui.branch.GitLogBranchOperationsActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewBranch.FromCommit",
+          "label": "New Branch…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.log.action.GitCreateNewBranchFromCommitAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewTag",
+          "label": "New Tag…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCreateTagAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.Toolbar",
+          "label": "Git.Log.Toolbar",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.HighlightCherryPickedCommits",
+          "label": "Not Cherry-Picked Commits",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.branch.HighlightCherryPickedCommitsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.Branches.Settings",
+          "label": "Branches Pane Settings",
+          "depth": 0,
+          "kind": "group",
+          "class": "com.intellij.ide.actions.NonTrivialActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.Branches.Change.Branch.Filter.On.Selection",
+          "label": "Update Branch Filter",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.ui.branch.dashboard.BranchesDashboardActions$ChangeBranchFilterAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.Branches.Navigate.Log.To.Branch.On.Selection",
+          "label": "Navigate Log to Branch Head",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.ui.branch.dashboard.BranchesDashboardActions$NavigateLogToBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Log.Branches.GroupBy.Directory",
+          "label": "Git.Log.Branches.GroupBy.Directory",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.ui.branch.dashboard.BranchesDashboardActions$GroupBranchByDirectoryAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.show.tags",
+          "label": "Show Tags",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.actions.GitBranchesTreeShowTagsAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "branches": {
+      "title": "Branches 弹窗",
+      "nodes": [
+        {
+          "id": "Git.Branch.Backend",
+          "label": "Git.Branch.Backend",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ref.Compare.With",
+          "label": "Git.Ref.Compare.With",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitCompareWithBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ref.Diff.With.Local",
+          "label": "Git.Ref.Diff.With.Local",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.ref.GitShowDiffWithRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitRebaseBranchAction",
+          "label": "GitRebaseBranchAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitRebaseBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.ref.GitMergeRefAction",
+          "label": "GitMergeRefAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.ref.GitMergeRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewWorkingTree",
+          "label": "New Worktree…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.workingTree.GitCreateWorkingTreeAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitUpdateSelectedBranchAction",
+          "label": "GitUpdateSelectedBranchAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitUpdateSelectedBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitPushBranchAction",
+          "label": "GitPushBranchAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitPushBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Branch.Tracked",
+          "label": "Git.Branch.Tracked",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.actions.branch.GitTrackedBranchActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitPullBranchAction$WithRebase",
+          "label": "WithRebase",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitPullBranchAction$WithRebase",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitPullBranchAction$WithMerge",
+          "label": "WithMerge",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitPullBranchAction$WithMerge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Push.Tags",
+          "label": "Git.Push.Tags",
+          "depth": 1,
+          "kind": "group",
+          "class": "git4idea.actions.tag.GitPushTagsActionGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rename.Local.Branch",
+          "label": "Git.Rename.Local.Branch",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitRenameBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.ref.GitDeleteRefAction",
+          "label": "GitDeleteRefAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.ref.GitDeleteRefAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Branches.List",
+          "label": "Git.Branches.List",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ongoing.Rebase.Actions",
+          "label": "Git.Ongoing.Rebase.Actions",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Abort",
+          "label": "Abort Rebase",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseAbort",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Abort",
+          "label": "Abort Merge",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Merge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Abort",
+          "label": "Abort Cherry-Pick",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$CherryPick",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Continue",
+          "label": "Continue Cherry-Pick",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitCherryPickContinueAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Revert.Abort",
+          "label": "Abort Revert",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Revert",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Continue",
+          "label": "Continue Rebase",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseContinue",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Skip",
+          "label": "Skip Commit",
+          "depth": 2,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseSkip",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewBranch",
+          "label": "New Branch…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCreateNewBranchAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:git4idea.actions.branch.GitCheckoutFromInputAction",
+          "label": "GitCheckoutFromInputAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.branch.GitCheckoutFromInputAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Branches.Popup.Settings",
+          "label": "Git.Branches.Popup.Settings",
+          "depth": 0,
+          "kind": "group",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupSettings",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.popup.filter.by.separator",
+          "label": "git.branches.popup.filter.by.separator",
+          "depth": 1,
+          "kind": "group",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupFilterSeparatorWithText",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.popup.filter.by.action",
+          "label": "Actions",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupFilterByAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.popup.filter.by.repository",
+          "label": "Repositories",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupFilterByRepository",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.group.by.directory",
+          "label": "Group by Directory",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupGroupByDirectoryAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "class:com.intellij.vcs.git.branch.popup.GitBranchesTreePopupTrackReposSynchronouslyAction",
+          "label": "GitBranchesTreePopupTrackReposSynchronouslyAction",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupTrackReposSynchronouslyAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.show.recent",
+          "label": "Show Recent Branches",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupShowRecentBranchesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.show.tags",
+          "label": "Show Tags",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.actions.GitBranchesTreeShowTagsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "git.branches.popup.resize",
+          "label": "git.branches.popup.resize",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.branch.popup.GitBranchesTreePopupResizeAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "stash": {
+      "title": "Stash / Shelf",
+      "nodes": [
+        {
+          "id": "Git.Stash.Operations.ContextMenu",
+          "label": "Git.Stash.Operations.ContextMenu",
+          "depth": 0,
+          "kind": "group",
+          "class": "git4idea.stash.ui.GitStashOperationsGroup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.Pop",
+          "label": "&Pop",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitPopStashAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.Apply",
+          "label": "&Apply",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitApplyStashAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.UnstashAs",
+          "label": "&Unstash…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitUnstashAsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.Drop",
+          "label": "&Drop",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitDropStashAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Stash.Clear",
+          "label": "&Clear",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.stash.ui.GitClearStashesAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "hosting": {
+      "title": "托管平台",
+      "nodes": [
+        {
+          "id": "Git.Hosting.Open.In.Browser.Group",
+          "label": "Git.Hosting.Open.In.Browser.Group",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Hosting.Copy.Link.Group",
+          "label": "Git.Hosting.Copy.Link.Group",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "working-trees": {
+      "title": "Working Trees",
+      "nodes": [
+        {
+          "id": "Git.WorkingTrees.ToolwindowGroup.Toolbar",
+          "label": "Git.WorkingTrees.ToolwindowGroup.Toolbar",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CreateNewWorkingTree",
+          "label": "New Worktree…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.workingTree.GitCreateWorkingTreeAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.WorkingTrees.Remove",
+          "label": "Delete…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.workingTrees.ui.RemoveWorkingTreeAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.WorkingTrees.Refresh",
+          "label": "Refresh",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.workingTrees.ui.RefreshWorkingTreesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.WorkingTrees.Prune",
+          "label": "Prune",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.workingTrees.ui.PruneWorkingTreesAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "ContextHelp",
+          "label": "Context Help",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.WorkingTrees.ToolwindowGroup.Popup",
+          "label": "Git.WorkingTrees.ToolwindowGroup.Popup",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.WorkingTrees.Open",
+          "label": "Open as a Project",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.workingTrees.ui.OpenWorkingTreeAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.WorkingTrees.Remove",
+          "label": "Delete…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.workingTrees.ui.RemoveWorkingTreeAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "toolbar": {
+      "title": "工具栏 / VCS widget",
+      "nodes": [
+        {
+          "id": "VcsToolbarActions",
+          "label": "VCS Actions",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.Commit.Stage",
+          "label": "Commit…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.index.actions.GitCommitWithStagingAreaAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "SegmentedVcsActionsBarGroup",
+          "label": "SegmentedVcsActionsBarGroup",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "Git.ShowBranches",
+          "label": "Show Branches",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitBranchesComboBoxAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Toolbar.ShowMoreActions",
+          "label": "Version Control",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitQuickActionsToolbarPopup",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.ToolbarWidget.CreateRepository",
+          "label": "Vcs.ToolbarWidget.CreateRepository",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Vcs.ToolbarWidget.ShareProject",
+          "label": "Share Project On",
+          "depth": 1,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Init",
+          "label": "Create Git Repository…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitInit",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Start.Use.Vcs",
+          "label": "Enable Version Control Integration…",
+          "depth": 1,
+          "kind": "action",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "MainToolbarVCSGroup",
+          "label": "VCS Group",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "platform"
+        },
+        {
+          "id": "main.toolbar.git.MergeRebase",
+          "label": "VCS Merge/Rebase Widget",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.ui.toolbar.GitMergeRebaseWidget",
+          "origin": "git4idea"
+        },
+        {
+          "id": "main.toolbar.git.Branches",
+          "label": "VCS Widget",
+          "depth": 1,
+          "kind": "action",
+          "class": "com.intellij.vcs.git.frontend.widget.GitToolbarWidgetAction",
+          "origin": "git4idea"
+        }
+      ]
+    },
+    "ongoing": {
+      "title": "进行中操作恢复",
+      "nodes": [
+        {
+          "id": "GitMergeRebaseWidgetGroup",
+          "label": "GitMergeRebaseWidgetGroup",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.ResolveConflicts",
+          "label": "Resolve Conflicts…",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitResolveConflictsAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.RevertResolved",
+          "label": "Revert Resolved",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRevertResolvedAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Continue",
+          "label": "Continue Rebase",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseContinue",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Abort",
+          "label": "Abort Rebase",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseAbort",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Commit",
+          "label": "Commit merge",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitMergeCommitAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Abort",
+          "label": "Abort Merge",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Merge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Continue",
+          "label": "Continue Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCherryPickContinueAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Abort",
+          "label": "Abort Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$CherryPick",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Revert.Abort",
+          "label": "Abort Revert",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Revert",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Ongoing.Rebase.Actions",
+          "label": "Git.Ongoing.Rebase.Actions",
+          "depth": 0,
+          "kind": "group",
+          "class": null,
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Abort",
+          "label": "Abort Rebase",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseAbort",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Merge.Abort",
+          "label": "Abort Merge",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Merge",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Abort",
+          "label": "Abort Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$CherryPick",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.CherryPick.Continue",
+          "label": "Continue Cherry-Pick",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitCherryPickContinueAction",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Revert.Abort",
+          "label": "Abort Revert",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitAbortOperationAction$Revert",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Continue",
+          "label": "Continue Rebase",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseContinue",
+          "origin": "git4idea"
+        },
+        {
+          "id": "Git.Rebase.Skip",
+          "label": "Skip Commit",
+          "depth": 1,
+          "kind": "action",
+          "class": "git4idea.actions.GitRebaseSkip",
+          "origin": "git4idea"
+        }
+      ]
+    }
+  }
+}

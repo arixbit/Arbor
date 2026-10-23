@@ -294,6 +294,8 @@ struct ProjectFileTreeView: View {
     var onCheckin: (String) -> Void = { _ in }
     var onAdd: (String) -> Void = { _ in }
     var onRevert: (String) -> Void = { _ in }
+    /// IntelliJ `$Delete`：从磁盘删除该路径（不跑 `git rm`）。
+    var onDelete: (String) -> Void = { _ in }
     var onResolveConflicts: (String) -> Void = { _ in }
     var resolvedConflictPaths: [String] = []
     var onRevertResolved: (String) -> Void = { _ in }
@@ -344,6 +346,7 @@ struct ProjectFileTreeView: View {
                                     onCheckin: onCheckin,
                                     onAdd: onAdd,
                                     onRevert: onRevert,
+                                    onDelete: onDelete,
                                     onResolveConflicts: onResolveConflicts,
                                     resolvedConflictPaths: resolvedConflictPaths,
                                     onRevertResolved: onRevertResolved
@@ -406,6 +409,7 @@ private struct FileTreeNodeView: View {
     let onCheckin: (String) -> Void
     let onAdd: (String) -> Void
     let onRevert: (String) -> Void
+    let onDelete: (String) -> Void
     let onResolveConflicts: (String) -> Void
     let resolvedConflictPaths: [String]
     let onRevertResolved: (String) -> Void
@@ -445,6 +449,7 @@ private struct FileTreeNodeView: View {
                             onCheckin: onCheckin,
                             onAdd: onAdd,
                             onRevert: onRevert,
+                            onDelete: onDelete,
                             onResolveConflicts: onResolveConflicts,
                             resolvedConflictPaths: resolvedConflictPaths,
                             onRevertResolved: onRevertResolved
@@ -569,6 +574,10 @@ private struct FileTreeNodeView: View {
                 isDirectory: isDirectory,
                 entries: entries
             ))
+            Button("Delete…", role: .destructive) {
+                onDelete(entry.path)
+            }
+            .help("Delete from disk. Git keeps tracking the deletion; untracked files cannot be restored.")
             Button("Resolve Conflicts") {
                 if let conflictPath = projectFileTreeFirstConflictedPath(
                     path: entry.path,

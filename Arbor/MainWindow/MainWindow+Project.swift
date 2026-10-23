@@ -97,6 +97,8 @@ struct ProjectTreePane: View {
     let onCheckin: (String) -> Void
     let onAdd: (String) -> Void
     let onRevert: (String) -> Void
+    /// IntelliJ `$Delete`：从磁盘删除该路径（不跑 `git rm`）。
+    let onDelete: (String) -> Void
     let onResolveConflicts: (String) -> Void
     let resolvedConflictPaths: [String]
     let onRevertResolved: (String) -> Void
@@ -120,6 +122,7 @@ struct ProjectTreePane: View {
         onCheckin: @escaping (String) -> Void = { _ in },
         onAdd: @escaping (String) -> Void = { _ in },
         onRevert: @escaping (String) -> Void = { _ in },
+        onDelete: @escaping (String) -> Void = { _ in },
         onResolveConflicts: @escaping (String) -> Void = { _ in },
         resolvedConflictPaths: [String] = [],
         onRevertResolved: @escaping (String) -> Void = { _ in },
@@ -142,6 +145,7 @@ struct ProjectTreePane: View {
         self.onCheckin = onCheckin
         self.onAdd = onAdd
         self.onRevert = onRevert
+        self.onDelete = onDelete
         self.onResolveConflicts = onResolveConflicts
         self.resolvedConflictPaths = resolvedConflictPaths
         self.onRevertResolved = onRevertResolved
@@ -229,6 +233,7 @@ struct ProjectTreePane: View {
                         onCheckin: onCheckin,
                         onAdd: onAdd,
                         onRevert: onRevert,
+                        onDelete: onDelete,
                         onResolveConflicts: onResolveConflicts,
                         resolvedConflictPaths: resolvedConflictPaths,
                         onRevertResolved: onRevertResolved

@@ -13,6 +13,12 @@
 提供 Apple-trusted 包，才需要 Developer ID、notarization、appcast 和对应依赖
 许可证清单。
 
+本轮补齐 `$Delete`（2026-10-23）：变更列表行右键与项目树右键提供 `Delete…`，确认后按 owning Git root 从磁盘删除文件或目录；引擎 `delete_worktree_paths` 不跑 `git rm`，被跟踪文件随后以 deleted 出现在 Changes。绝对路径、`..`、`.git`、仓库根本身与缺失路径全部 fail-closed；删除是永久删除（与 VFS 删除一致），确认文案明说未跟踪文件不可恢复。Rust 6 项 + Swift 6 项回归；native VFS/DataContext/VcsNotifier lifecycle 与 UI automation 仍为 partial。
+
+本轮补齐 `Vcs.ShowHistoryForBlock`（2026-10-23）：代码视图行号列可点选行（点击单选、Shift 点击扩展），行右键的 `Show History for Selection…` 打开选区历史面板；引擎 `block_history` 走 `git log -L<start>,<end>:<path>`，逐提交返回该选区内容与所在行号，未跟踪/二进制/越界由 Git 拒绝并原样上报。未跟踪路径与空/倒序区间有回归测试覆盖；native Editor/DataContext/VcsNotifier lifecycle 与 UI automation 仍为 partial。
+
+本轮固化用户可见 surface 审计（2026-10-23）：`scripts/audit-user-surface.py` 从 git4idea 描述文件还原菜单/右键/工具窗装配，把平台动作与 class-only action 纳入核销，未在 `scripts/user-surface-baseline.txt` 给出结论即失败；`scripts/user-surface.json` 作为提交的 surface 快照让 CI 用 `--snapshot` 复核。首轮核销 186 个可见叶子，仅留下 `$Delete`（删除工作区文件）一个已知缺口。
+
 本轮对齐 `Git.Show.Stash`（2026-08-28）：VCS > Git > Local Changes 增加 Show Stash，直接选择 Stash/Shelf 工作页；Unstash 继续保持恢复弹窗语义。
 
 本轮补齐 `Git.Stash.UnstashAs`（2026-08-28）：单 stash 行菜单提供可选 branch、Pop 和恢复 staged state 的组合对话框；执行按稳定 stash ID 重新解析栈位置。

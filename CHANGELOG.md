@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+Changes: the changes list and the project tree can now delete paths from disk.
+
+- IntelliJ's `$Delete` in the Stage tree is a platform action, so the id-level
+  audit never saw it either. Arbor has no separate Stage tool window, so the
+  entry point lives on the change row menu and on the project tree: `Delete…`,
+  confirmed first, then removed from disk
+- The engine's `delete_worktree_paths` mirrors the VFS delete: it removes the
+  file or directory without running `git rm`, so a tracked deletion shows up
+  as `deleted` in Changes. Each path is resolved to its owning Git root first,
+  and absolute paths, `..`, `.git` and the repository root are refused
+- Deletion is permanent rather than a move to the Trash, matching the
+  reference; the confirmation says so and spells out that untracked files
+  cannot be restored
+
+Editor: "Show History for Selection…" answers the one action the surface audit
+found missing.
+
+- IntelliJ's `Vcs.ShowHistoryForBlock` ("Show History for Selection…") was the
+  only leaf action in the Git file menu Arbor lacked, and the one the existing
+  id-level audit could never see: the platform registers it, so it is neither
+  one of git4idea's ids nor a row in the parity matrix
+- Line numbers in the file viewer are now click targets. Click selects a line,
+  Shift-click extends the range, and the row context menu opens a
+  `History for Selection` panel listing the commits that changed those lines
+- The engine answers it with `git log -L`, so the panel shows the selection's
+  content and line number in each revision. Untracked files, binary content and
+  out-of-range selections surface Git's own refusal instead of an empty list
+
+Audit: the surface-level checklist is a script now, not a document.
+
+- `scripts/audit-user-surface.py` rebuilds the menus, context menus, tool-window
+  trees and gear popups from the reference plugin descriptors, then classifies
+  every leaf as covered / git4idea-declared / platform-only
+- A platform action with no verdict fails the run; `scripts/user-surface-baseline.txt`
+  records the human decision for each one, so a `Vcs.ShowHistoryForBlock` cannot
+  drop out of the audit a second time
+- `scripts/user-surface.json` is the committed surface snapshot, so CI checks the
+  ledger with `--snapshot` without needing the reference repository
+- `scripts/i18n-seed-zh-hans.py` writes the catalog in Xcode's own formatting
+  (`"key" : value`, expanded empty objects); running it used to rewrite all
+  21 000 lines of `Localizable.xcstrings`
+
 ## 1.0.24 - 2026-10-23
 
 IntelliJ parity: two more capability gaps closed against the reference Git

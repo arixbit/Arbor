@@ -333,6 +333,7 @@ extension ContentView {
                 resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                 onRevertResolved: revertResolvedPath,
                 onShowHistory: { path in showFileHistory(path) },
+                onDeletePaths: { paths in requestDeletePaths(paths) },
                 onEditGitignore: editGitignore,
                 onEditGitExclude: editGitExclude
             )
@@ -546,6 +547,7 @@ extension ContentView {
                         onCheckin: beginFileCheckin,
                         onAdd: stageProjectTreePath,
                         onRevert: restoreProjectTreePath,
+                        onDelete: { path in requestDeletePaths([path]) },
                         onResolveConflicts: openConflictFromStage,
                         resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                         onRevertResolved: revertResolvedPath,
@@ -643,6 +645,7 @@ extension ContentView {
                             onCheckin: beginFileCheckin,
                             onAdd: stageProjectTreePath,
                             onRevert: restoreProjectTreePath,
+                            onDelete: { path in requestDeletePaths([path]) },
                             onResolveConflicts: openConflictFromStage,
                             resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                             onRevertResolved: revertResolvedPath,
@@ -752,6 +755,9 @@ extension ContentView {
                 onVersionChange: { fileWorkspace.version = $0 },
                 onShowFileHistory: { path in
                     showFileHistory(path, rootPath: repo?.workdir())
+                },
+                onShowBlockHistory: { path, range in
+                    showBlockHistory(path: path, startLine: range.lowerBound, endLine: range.upperBound)
                 },
                 blameRequestID: fileWorkspace.blameRequestID,
                 refreshToken: fileWorkspace.refreshToken

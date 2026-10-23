@@ -48,6 +48,9 @@ jobs:
       - name: Reject newly hardcoded Chinese UI literals
         run: python3 scripts/i18n-audit.py --only-hardcoded
 
+      - name: Reject unjudged Git surface actions
+        run: python3 scripts/audit-user-surface.py --snapshot scripts/user-surface.json
+
       - name: Build and run the click-and-assert suite
         run: ./scripts/ui-smoke.sh --report build/ui-smoke-results
 

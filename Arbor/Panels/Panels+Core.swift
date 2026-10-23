@@ -686,6 +686,8 @@ struct RebasedChangeGroup: View {
     var onMovePathsToChangeList: (([String], String) -> Void)? = nil
     var onStashPaths: ([String]) -> Void = { _ in }
     var onShowHistory: (String) -> Void = { _ in }
+    /// IntelliJ `$Delete`：从磁盘删除选中路径（不跑 `git rm`）。
+    var onDeletePaths: ([String]) -> Void = { _ in }
     var onEditGitignore: () -> Void = {}
     var onEditGitExclude: () -> Void = {}
     @State var isExpanded = true
@@ -1156,6 +1158,13 @@ struct RebasedChangeGroup: View {
             } label: {
                 Label("Edit .git/info/exclude", systemImage: "doc.text.magnifyingglass")
             }
+            Divider()
+            Button(role: .destructive) {
+                onDeletePaths(selectedPaths)
+            } label: {
+                Label("Delete…", systemImage: "trash")
+            }
+            .help("Delete the selected paths from disk. Git keeps tracking the deletion.")
         }
     }
 }

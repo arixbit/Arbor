@@ -30,7 +30,7 @@ use crate::hooks::{run_commit_msg_hook, run_pre_commit_hook};
 use crate::index::{index_tree, mode_to_kind};
 use crate::log::{
     build_permanent_log_graph, collect_log, commit_info_for_id, parse_commit_signature_record,
-    shorten_ref_name, CommitInfo, CommitSignatureInfo, PermanentLogGraph,
+    shorten_ref_name, BlockHistoryEntry, CommitInfo, CommitSignatureInfo, PermanentLogGraph,
 };
 use crate::merge::{
     apply_merge_with_ancestor, materialize_merge_outcome, materialize_tree, parse_marker_blocks,
@@ -235,6 +235,55 @@ fn prepare_log_command_args(command_args: &[String]) -> Vec<String> {
         args.extend_from_slice(&command_args[separator..]);
     }
     args
+}
+
+/// 从 `git log -L` 的单提交补丁里取出选区内容。
+///
+/// 返回 (选区各行, 该修订里的起始行号)。`-` 行是被删掉的旧内容，不进结果；
+/// 上下文行与 `+` 行按下单顺序拼成新侧选区。`-L` 的每个提交只输出选区
+/// 所在的单个 hunk，所以取首个 `@@` 即可。
+fn parse_block_patch(lines: &[&str]) -> (Vec<String>, u32) {
+    let mut block: Vec<String> = Vec::new();
+    let mut start = 0u32;
+    let mut seen_hunk = false;
+    for line in lines {
+        if line.starts_with("@@") {
+            if !seen_hunk {
+                seen_hunk = true;
+                start = parse_hunk_start(line);
+            }
+            continue;
+        }
+        if !seen_hunk {
+            continue;
+        }
+        if line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+        {
+            break;
+        }
+        if let Some(rest) = line.strip_prefix('+') {
+            block.push(rest.to_string());
+        } else if let Some(rest) = line.strip_prefix(' ') {
+            block.push(rest.to_string());
+        }
+    }
+    (block, start)
+}
+
+/// `@@ -1,2 +3,4 @@` -> 3。解析失败返回 0，调用方只用作展示起点。
+fn parse_hunk_start(header: &str) -> u32 {
+    let Some(plus) = header.find('+') else {
+        return 0;
+    };
+    header[plus + 1..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0)
 }
 
 /// `git reset` 的四种安全面板选项，与 Rebased/IntelliJ 的 GitResetMode 一一对应。
@@ -6132,6 +6181,44 @@ impl Repository {
         Ok(file_content_from_bytes(bytes, false))
     }
 
+    /// 从工作区删除路径（IntelliJ `Delete` / `$Delete`）。
+    ///
+    /// 对照 fork：`Git.Stage.Tree.Menu` 里的 Delete 是 platform 动作，走 VFS
+    /// 删除，只动磁盘、不跑 `git rm`；被跟踪的文件随后以 deleted 出现在状态里。
+    /// 这里保持同一语义，并逐路径做同一条越界校验（绝对路径、`..`、`.git`
+    /// 一律拒绝）。软链接按文件删除，不会跟进目录递归。
+    pub fn delete_worktree_paths(&self, paths: Vec<String>) -> Result<Vec<String>, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "delete requires a non-bare worktree".into(),
+        })?;
+        let mut deleted = Vec::with_capacity(paths.len());
+        for raw in paths {
+            let relative = worktree_relative_path(&raw)?;
+            if relative.as_os_str().is_empty() {
+                return Err(EngineError::GitOperation {
+                    message: "refusing to delete the repository root".into(),
+                });
+            }
+            let target = workdir.join(&relative);
+            // symlink_metadata：软链接指向目录时也按链接本身删除。
+            let metadata =
+                std::fs::symlink_metadata(&target).map_err(|error| EngineError::GitOperation {
+                    message: format!("cannot delete {}: {error}", raw),
+                })?;
+            let outcome = if metadata.is_dir() {
+                std::fs::remove_dir_all(&target)
+            } else {
+                std::fs::remove_file(&target)
+            };
+            outcome.map_err(|error| EngineError::GitOperation {
+                message: format!("cannot delete {}: {error}", raw),
+            })?;
+            deleted.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+        Ok(deleted)
+    }
+
     /// 读取 Git index 中的 staged 文件版本，不触碰工作区或 index。
     /// 目录、冲突 index entry 和不在 index 中的路径都会返回错误。
     pub fn read_index_file(&self, path: String) -> Result<FileContent, EngineError> {
@@ -9227,6 +9314,89 @@ impl Repository {
         }
         crate::log::assign_graph_lanes(&mut commits, false, false);
         Ok(commits)
+    }
+
+    /// 选区历史（IntelliJ `Vcs.ShowHistoryForBlock` / `Show History for Selection…`）。
+    ///
+    /// 对照 fork：`GitVcs.getVcsBlockHistoryProvider()` 返回的就是普通
+    /// `GitHistoryProvider`，`VcsSelectionHistoryDialog` 把选中行范围转成
+    /// `Block` 再逐版本跟随。这里用 `git log -L` 拿到「改动过这段选区的提交」，
+    /// 并把每个提交之后该选区的内容一并返回，供预览窗格直接展示。
+    ///
+    /// `start_line` / `end_line` 是 1-based 且闭区间；`limit` 是提交数上限。
+    /// 未跟踪文件、越界行号、二进制文件由 Git 侧拒绝，错误原文透传。
+    pub fn block_history(
+        &self,
+        path: String,
+        start_line: u32,
+        end_line: u32,
+        limit: u32,
+    ) -> Result<Vec<BlockHistoryEntry>, EngineError> {
+        if path.trim().is_empty() || start_line == 0 || end_line < start_line || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "block history requires a non-bare worktree".into(),
+        })?;
+        // `-L` 自己跟进重命名，所以不追加 pathspec：追加会把改名之前的提交滤掉。
+        let line_range = format!("-L{},{}:{}", start_line, end_line, path);
+        let output = crate::gitprocess::git_command_for_working_dir(workdir)
+            .arg("log")
+            .arg(format!("--max-count={limit}"))
+            .arg("--no-color")
+            .arg("--no-ext-diff")
+            .arg("--patch")
+            .arg("--format=%x00%H")
+            .arg(line_range)
+            .current_dir(workdir)
+            .output()
+            .map_err(EngineError::from_gix)?;
+        if !output.status.success() {
+            return Err(EngineError::GitOperation {
+                message: format!(
+                    "git log -L failed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ),
+            });
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut parsed: Vec<(String, Vec<String>, u32)> = Vec::new();
+        for chunk in stdout.split('\u{0}').skip(1) {
+            let mut lines = chunk.lines();
+            let Some(raw_id) = lines.next() else { continue };
+            let id = raw_id.trim();
+            if id.is_empty() {
+                continue;
+            }
+            let (block_lines, start) = parse_block_patch(lines.collect::<Vec<_>>().as_slice());
+            parsed.push((id.to_string(), block_lines, start));
+        }
+        if parsed.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let refs = crate::log::collect_refs(&repo)?;
+        let head_commit_id = repo
+            .head_commit()
+            .map_err(EngineError::from_gix)?
+            .id()
+            .detach();
+        let mut entries = Vec::with_capacity(parsed.len());
+        for (id, block_lines, start_line) in parsed {
+            let oid = gix::hash::ObjectId::from_hex(id.as_bytes()).map_err(|error| {
+                EngineError::GitOperation {
+                    message: format!("git log -L returned an invalid revision: {error}"),
+                }
+            })?;
+            entries.push(BlockHistoryEntry {
+                commit: commit_info_for_id(&repo, oid, &refs, head_commit_id)?,
+                lines: block_lines,
+                start_line,
+            });
+        }
+        Ok(entries)
     }
 
     /// 带起点、作者、时间过滤的日志。`start_rev` 为空时从 HEAD 开始。

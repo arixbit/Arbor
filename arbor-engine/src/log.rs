@@ -60,6 +60,18 @@ pub struct CommitInfo {
     pub parent_lanes: Vec<u32>,
 }
 
+/// 选区历史的一条记录（IntelliJ `Show History for Selection…`）。
+///
+/// `git log -L` 返回的是「改动过这几行的提交」，`lines` 是该提交之后这段
+/// 选区的内容（新侧），`start_line` 是它在那个修订里的起始行号（1-based）。
+/// 重命名会由 `-L` 自己跟进，所以 `lines` 与当前工作区内容不一定对应。
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct BlockHistoryEntry {
+    pub commit: CommitInfo,
+    pub lines: Vec<String>,
+    pub start_line: u32,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RefNames {
     local: Vec<String>,

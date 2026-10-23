@@ -16933,7 +16933,6 @@
         }
       }
     },
-
     "Author and Date" : {
       "localizations" : {
         "zh-Hans" : {
@@ -16950,6 +16949,256 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "作者与日期过滤"
+          }
+        }
+      }
+    },
+    "Show History for Selection…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示选区历史…"
+          }
+        }
+      }
+    },
+    "History for Selection" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选区历史"
+          }
+        }
+      }
+    },
+    "Selection history unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法显示选区历史"
+          }
+        }
+      }
+    },
+    "Unable to read selection history" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取选区历史"
+          }
+        }
+      }
+    },
+    "Loading selection history…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载选区历史…"
+          }
+        }
+      }
+    },
+    "No commits touched this selection" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有提交改动过这段选区"
+          }
+        }
+      }
+    },
+    "Only tracked lines with committed history appear here." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有已跟踪且有提交历史的内容会出现在这里。"
+          }
+        }
+      }
+    },
+    "Selection at this revision" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该修订中的选区内容"
+          }
+        }
+      }
+    },
+    "The selected path is not a safe repository-relative path." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选路径不是安全的仓库相对路径。"
+          }
+        }
+      }
+    },
+    "The selected file is outside the discovered Git roots." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选文件不在已发现的 Git root 内。"
+          }
+        }
+      }
+    },
+    "Click to select a line. Shift-click to extend the selection." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击行号选择一行，按住 Shift 点击可扩展选区。"
+          }
+        }
+      }
+    },
+    "Refresh the project tree, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请刷新项目树后重试。"
+          }
+        }
+      }
+    },
+    "Refresh the project roots, then retry." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请刷新项目 root 后重试。"
+          }
+        }
+      }
+    },
+    "Check the repository state, then retry." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查仓库状态后重试。"
+          }
+        }
+      }
+    },
+    "Delete…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除…"
+          }
+        }
+      }
+    },
+    "Delete from Disk?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从磁盘删除？"
+          }
+        }
+      }
+    },
+    "Delete paths" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除路径"
+          }
+        }
+      }
+    },
+    "No paths selected for deletion" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有选中要删除的路径"
+          }
+        }
+      }
+    },
+    "Delete unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法删除"
+          }
+        }
+      }
+    },
+    "No Git repository is open." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有打开的 Git 仓库。"
+          }
+        }
+      }
+    },
+    "Open a repository, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请打开一个仓库后重试。"
+          }
+        }
+      }
+    },
+    "Some paths were not deleted" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分路径未能删除"
+          }
+        }
+      }
+    },
+    "Refresh the project roots, then retry the remaining paths." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请刷新项目 root 后重试剩余路径。"
+          }
+        }
+      }
+    },
+    "Delete the selected paths from disk. Git keeps tracking the deletion." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从磁盘删除选中路径；Git 会继续跟踪这次删除。"
+          }
+        }
+      }
+    },
+    "Delete from disk. Git keeps tracking the deletion; untracked files cannot be restored." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从磁盘删除。Git 会继续跟踪这次删除；未跟踪文件无法恢复。"
           }
         }
       }

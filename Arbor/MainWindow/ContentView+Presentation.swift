@@ -79,6 +79,27 @@ extension ContentView {
                 onClose: { fileWorkspace.currentRevisionRequest = nil }
             )
         }
+        .sheet(item: $fileWorkspace.blockHistoryRequest) { request in
+            BlockHistoryView(
+                request: request,
+                onClose: { fileWorkspace.blockHistoryRequest = nil }
+            )
+        }
+        .confirmationDialog(
+            "Delete from Disk?",
+            isPresented: Binding(
+                get: { !projectWorkspace.pendingDeletePaths.isEmpty },
+                set: { presented in
+                    if !presented { cancelDeletePaths() }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive, action: confirmDeletePaths)
+            Button("Cancel", role: .cancel, action: cancelDeletePaths)
+        } message: {
+            Text(deleteConfirmationMessage(projectWorkspace.pendingDeletePaths))
+        }
         .sheet(isPresented: $submoduleWorkspace.showLog) {
             SubmoduleLogView(
                 path: submoduleWorkspace.logPath,

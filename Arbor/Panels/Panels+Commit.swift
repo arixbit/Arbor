@@ -165,6 +165,8 @@ struct RebasedCommitWorkspace: View {
     var resolvedConflictPaths: [String] = []
     var onRevertResolved: (String) -> Void = { _ in }
     var onShowHistory: (String) -> Void = { _ in }
+    /// IntelliJ `$Delete`：Arbor 没有独立 Stage 工具窗，删除入口放在变更列表。
+    var onDeletePaths: ([String]) -> Void = { _ in }
     var onEditGitignore: () -> Void = {}
     var onEditGitExclude: () -> Void = {}
 
@@ -837,6 +839,7 @@ struct RebasedCommitWorkspace: View {
                             onMovePathsToChangeList: onMovePathsToChangeList,
                             onStashPaths: onStashPaths,
                             onShowHistory: onShowHistory,
+                            onDeletePaths: onDeletePaths,
                             onEditGitignore: onEditGitignore,
                             onEditGitExclude: onEditGitExclude
                         )
@@ -1051,6 +1054,7 @@ struct RebasedCommitWorkspace: View {
             onMovePathsToChangeList: onMovePathsToChangeList,
             onStashPaths: onStashPaths,
             onShowHistory: onShowHistory,
+            onDeletePaths: onDeletePaths,
             onEditGitignore: onEditGitignore,
             onEditGitExclude: onEditGitExclude
         )
@@ -1098,6 +1102,7 @@ struct RebasedCommitWorkspace: View {
             onMovePathsToChangeList: onMovePathsToChangeList,
             onStashPaths: onStashPaths,
             onShowHistory: onShowHistory,
+            onDeletePaths: onDeletePaths,
             onEditGitignore: onEditGitignore,
             onEditGitExclude: onEditGitExclude
         )

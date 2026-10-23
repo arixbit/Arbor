@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -623,6 +624,33 @@ TRANSLATIONS = {
     "正在逐 root 执行…": "正在逐 root 执行…",
     "没有文件": "没有文件",
     "选择一个提交查看 Changes": "选择一个提交查看 Changes",
+    # 选区历史（IntelliJ `Vcs.ShowHistoryForBlock` / Show History for Selection…）
+    "Show History for Selection…": "显示选区历史…",
+    "History for Selection": "选区历史",
+    "Selection history unavailable": "无法显示选区历史",
+    "Unable to read selection history": "无法读取选区历史",
+    "Loading selection history…": "正在加载选区历史…",
+    "No commits touched this selection": "没有提交改动过这段选区",
+    "Only tracked lines with committed history appear here.": "只有已跟踪且有提交历史的内容会出现在这里。",
+    "Selection at this revision": "该修订中的选区内容",
+    "The selected path is not a safe repository-relative path.": "所选路径不是安全的仓库相对路径。",
+    "The selected file is outside the discovered Git roots.": "所选文件不在已发现的 Git root 内。",
+    "Click to select a line. Shift-click to extend the selection.": "点击行号选择一行，按住 Shift 点击可扩展选区。",
+    "Refresh the project tree, then try again.": "请刷新项目树后重试。",
+    "Refresh the project roots, then retry.": "请刷新项目 root 后重试。",
+    "Check the repository state, then retry.": "请检查仓库状态后重试。",
+    # 删除路径（IntelliJ `$Delete` / platform Delete）
+    "Delete…": "删除…",
+    "Delete from Disk?": "从磁盘删除？",
+    "Delete paths": "删除路径",
+    "No paths selected for deletion": "没有选中要删除的路径",
+    "Delete unavailable": "无法删除",
+    "No Git repository is open.": "当前没有打开的 Git 仓库。",
+    "Open a repository, then try again.": "请打开一个仓库后重试。",
+    "Some paths were not deleted": "部分路径未能删除",
+    "Refresh the project roots, then retry the remaining paths.": "请刷新项目 root 后重试剩余路径。",
+    "Delete the selected paths from disk. Git keeps tracking the deletion.": "从磁盘删除选中路径；Git 会继续跟踪这次删除。",
+    "Delete from disk. Git keeps tracking the deletion; untracked files cannot be restored.": "从磁盘删除。Git 会继续跟踪这次删除；未跟踪文件无法恢复。",
 }
 
 
@@ -636,7 +664,11 @@ def main() -> None:
         localizations["zh-Hans"] = {
             "stringUnit": {"state": "translated", "value": value}
         }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Xcode 写 xcstrings 时是 `"key" : value`（冒号前带空格），空对象展开成
+    # 两行。用 Python 默认格式会让整个文件重排，diff 从几行变成上万行。
+    text = json.dumps(data, ensure_ascii=False, indent=2, separators=(",", " : "))
+    text = re.sub(r'(?m)^(\s*)"(.*)" : \{\},$', lambda m: f'{m.group(1)}"{m.group(2)}" : {{\n\n{m.group(1)}}},', text)
+    path.write_text(text + "\n", encoding="utf-8")
     print(f"Updated {len(TRANSLATIONS)} zh-Hans keys in {path}")
 
 
