@@ -13308,6 +13308,17 @@
     "This project setting is the default for single-root and multi-root Commit dialogs. The existing identity sheet can still change the current session's one-shot commit options." : {
 
     },
+    "This repository can be converted to a complete one" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此仓库可以转换为完整仓库"
+          }
+        }
+      }
+    },
     "This removes the local tag in every selected root; its exact target remains available to restore." : {
       "localizations" : {
         "zh-Hans" : {

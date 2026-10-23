@@ -173,6 +173,15 @@ extension ContentView {
                 repositoryID: shelfLifecycleMonitorID
             )
         }
+        .background {
+            GitShallowRepositoryCheck(
+                rootPaths: autoFetchRootPaths,
+                projectPath: projectWorkspace.path,
+                onSuggestion: { rootPath, remote in
+                    self.publishShallowRepositorySuggestion(rootPath: rootPath, remote: remote)
+                }
+            )
+        }
         .onChange(of: autoFetchMonitorID) { _, _ in
             gitSettings.autoFetchFailureFingerprint = nil
             gitSettings.autoFetchIncomingFingerprint = nil

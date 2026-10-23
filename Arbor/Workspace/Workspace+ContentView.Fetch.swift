@@ -358,6 +358,19 @@ func doFetchPrune() {
 }
 
 /// 将浅克隆补全为完整历史；执行前要求用户确认，因为该操作不可逆地扩大本地仓库。
+/// IntelliJ 对照：`ShallowRepositoryNotification`（important 通道的
+/// INFORMATION 通知 + expiring Unshallow action）。Arbor 的对应动作是既有
+/// 的 Fetch Full History（Unshallow）入口，复用同一套认证与取消链路。
+func publishShallowRepositorySuggestion(rootPath: String, remote: String) {
+    feedbackCenter.info(
+        "This repository can be converted to a complete one",
+        actionTitle: "Fetch Full History…",
+        action: { self.doFetchUnshallow() },
+        notificationID: "\(autoFetchNotificationIDPrefix).shallow",
+        localized: true
+    )
+}
+
 func doFetchUnshallow() {
     guard !isArborFetchInProgress(
         isRunning: feedbackCenter.isRunning,

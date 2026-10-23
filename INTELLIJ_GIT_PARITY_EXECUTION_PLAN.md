@@ -2,6 +2,9 @@
 
 状态：V1 scope closed (2026-08-29)
 
+
+2026-10-23 `Git.Shallow.Check`：对照 fork `GitShallowRepositoryCheck`（ProjectActivity + RunOnceUtil）补齐单仓库启动时的 shallow clone 检测；单 root、`is_shallow()` 且默认 fetch remote 可解析时发布 important-channel INFO 通知，action 复用既有 Fetch Full History（Unshallow）；多 root/非 shallow/无 remote 保持静默，RunOnce 标记按项目持久化。新增 `GitShallowRepositoryCheck` monitor、`FeedbackCenter.info()` 与真实浅克隆 fixture 测试；native VcsNotifier/ProjectActivity lifecycle 和 UI automation 仍为 partial。
+
 2026-08-28 `Git.Show.Stash`：已补齐主菜单 Show Stash 入口，复用 Commit/Stash 工作页的 tab 请求，并将 Local Changes 子菜单顺序对齐 fork；未把它错误实现为 Unstash 弹窗。
 
 2026-08-28 `Git.Stash.UnstashAs`：已补齐单 stash 行的组合对话框，支持 Apply/Pop、恢复 staged state、创建分支和最终 branch name 校验；stash ID 在执行前重新映射为当前 stack index。

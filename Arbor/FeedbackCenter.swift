@@ -415,6 +415,51 @@ final class FeedbackCenter: ObservableObject {
         )
     }
 
+    /// IntelliJ VcsNotifier 的 INFORMATION 类型。fork 的 Git 提示类通知
+    /// （例如 shallow repository check）使用 important 通道的 INFO 消息：
+    /// 不打断操作，但保持可见直到用户处理。
+    func info(
+        _ title: String,
+        detail: String? = nil,
+        nextStep: String? = nil,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil,
+        additionalActions: [FeedbackAction] = [],
+        notificationID: String? = nil,
+        notificationGroup: VcsNotificationGroup = .important,
+        localized: Bool = true
+    ) {
+        let message = localized
+            ? FeedbackMessage.localized(
+                title,
+                level: .info,
+                detail: detail,
+                nextStep: nextStep,
+                actionTitle: actionTitle,
+                action: action,
+                additionalActions: additionalActions,
+                notificationID: notificationID,
+                notificationGroup: notificationGroup
+            )
+            : FeedbackMessage.raw(
+                title,
+                level: .info,
+                detail: detail,
+                nextStep: nextStep,
+                actionTitle: actionTitle,
+                action: action,
+                additionalActions: additionalActions,
+                notificationID: notificationID,
+                notificationGroup: notificationGroup
+            )
+        finish(with: message)
+        publish(
+            message,
+            autoDismiss: message.actions.isEmpty
+                && message.notificationGroup == .standard
+        )
+    }
+
     func error(
         _ title: String,
         detail: String? = nil,

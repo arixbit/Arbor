@@ -1,6 +1,17 @@
 # IntelliJ Git 对等差距报告
 
-更新时间：2026-10-20
+更新时间：2026-10-23
+
+## 2026-10-23 GitShallowRepositoryCheck 覆盖补齐
+
+对照 fork `GitShallowRepositoryCheck`（ProjectActivity + `RunOnceUtil.runOnceForProject`）与
+`ShallowRepositoryNotification`：Arbor 现在在项目打开后由 `GitShallowRepositoryCheck` monitor
+检查单仓库 shallow 状态；单 root、`is_shallow()` 且默认 fetch remote 可解析时发布 important-channel
+INFO 通知，action 复用既有 Fetch Full History（Unshallow）入口。多 root 项目在进入 RunOnce 标记前
+短路（fork `singleOrNull` 同序），非 shallow、无 remote 和打开失败保持静默；RunOnce 标记按项目
+持久化，每个项目只提示一次。新增矩阵行 `Git.Shallow.Check`（verified-partial）与
+`GitShallowRepositoryCheckTests` 7 例（含真实 `file://` 浅克隆 fixture；本地路径克隆会忽略
+`--depth`）。
 
 ## 2026-10-20 action 全集审计：31 个未覆盖 id 都是容器
 
