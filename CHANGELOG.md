@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.0.24 - 2026-10-23
+
+IntelliJ parity: two more capability gaps closed against the reference Git
+integration, plus the layout and smoke-test work above.
+
+- A project that opens as a shallow clone now gets a one-time notification
+  offering Fetch Full History, mirroring `GitShallowRepositoryCheck`: only
+  single-repository projects, only when a default fetch remote can be
+  resolved, once per project (RunOnceUtil semantics), silent otherwise
+- File History gains Show All Affected Files (`VcsHistory.ShowAllAffected`,
+  the `GitCommittedChangeListProvider.getOneList` surface that is registered
+  dynamically and therefore invisible to the action audit): the selected
+  revision's complete changeset opens with the followed file highlighted, and
+  when the current path is absent from that changeset the path at that
+  revision is resolved through the first-parent rename chain (`git --after`
+  file-history fallback in the reference)
+
 Commit layout: the window no longer empties out while committing.
 
 - Commit mode kept its change list on the left and replaced the rest of the
