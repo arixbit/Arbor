@@ -188,7 +188,8 @@ var logInspector: some View {
                 diffPreviewVertical: logDiffPreviewVertical,
                 showsChangesFromParents: $logShowChangesFromParents,
                 showsOnlyAffectedChanges: $logShowOnlyAffectedChanges,
-                affectedPathSelections: activeLogPathFilterSelections()
+                affectedPathSelections: activeLogPathFilterSelections(),
+                affectedHistoryPath: currentLogTabSnapshot().historyPath
             )
         }
 

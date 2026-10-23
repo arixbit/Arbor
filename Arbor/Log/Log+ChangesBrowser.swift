@@ -181,6 +181,10 @@ struct LogChangesBrowserView: View {
     let onCreatePatch: (CommitInfo) -> Void
     let onCreatePatchSelection: ([LogChangeRecord]) -> Void
     let onCopyPatchSelection: ([LogChangeRecord]) -> Void
+    /// Non-nil only in a dedicated File History tab: enables IntelliJ's
+    /// `VcsHistory.ShowAllAffected` entry (GitHistoryProvider additional
+    /// action) on the single selected revision.
+    var affectedHistoryPath: String? = nil
 
     @State var records: [LogChangeRecord] = []
     @State var selectedRecordID: String?
@@ -205,6 +209,7 @@ struct LogChangesBrowserView: View {
     @State var filterTask: Task<Void, Never>?
     @State var submoduleChangeRequest: SubmoduleChangeRequest?
     @State var standaloneDiffRecord: LogChangeRecord?
+    @State var affectedHistoryResolveTask: Task<Void, Never>?
     @FocusState var changesTreeFocused: Bool
 
     var hasAffectedPathFilter: Bool {
@@ -538,6 +543,21 @@ struct LogChangesBrowserView: View {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(Design.Colors.error)
                         .help(filterError)
+                }
+                if isShowAllAffectedFilesAvailable(
+                    affectedHistoryPath: affectedHistoryPath,
+                    commitCount: commits.count
+                ) {
+                    Button {
+                        showAllAffectedHistoryFiles()
+                    } label: {
+                        Label("Show All Affected Files", systemImage: "rectangle.expand.vertical")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .disabled(isLoading || records.isEmpty)
+                    .help("Show the complete changeset of this revision with the followed file highlighted")
                 }
                 Spacer()
                 if showsDiffPreview {
@@ -1190,10 +1210,59 @@ struct LogChangesBrowserView: View {
         }
     }
 
+    /// IntelliJ 对照：`VcsHistory.ShowAllAffected`（Show All Affected Files）。
+    /// fork 从 File History 打开该提交的完整 changeset 并选中受影响文件；
+    /// Arbor 的 inspector 已展示完整 changeset，这里补齐 fork 的两个用户可见
+    /// 行为：只看受影响变更的开关打开，以及选中/高亮 History 路径的记录 ——
+    /// 路径不在 changeset 时用引擎 `pathAtRevision` 按首父链兑底解析当时路径
+    /// （fork 用 `--after=commitTime` 文件历史）。解析失败保持过滤打开、
+    /// 不高亮、不报错，与 fork 返回 (commit, filePath) 的降级一致。
+    func showAllAffectedHistoryFiles() {
+        guard let affectedHistoryPath,
+              let commit = commits.first else { return }
+        showsOnlyAffectedChanges = true
+        if let match = logAffectedHistoryRecordID(
+            records: records,
+            historyPath: affectedHistoryPath
+        ) {
+            selectedRecordID = match
+            selectedRecordIDs = [match]
+            return
+        }
+        let expectedCommitID = commit.id
+        let repository = repositoryForCommit(commit) ?? repo
+        guard let repository else { return }
+        affectedHistoryResolveTask?.cancel()
+        affectedHistoryResolveTask = Task {
+            let resolvedPath: String?
+            do {
+                resolvedPath = try await Task.detached(priority: .userInitiated) {
+                    try repository.pathAtRevision(
+                        revision: expectedCommitID,
+                        path: affectedHistoryPath
+                    )
+                }.value
+            } catch {
+                resolvedPath = nil
+            }
+            guard !Task.isCancelled,
+                  self.commits.first?.id == expectedCommitID else { return }
+            guard let resolvedPath else { return }
+            if let match = logAffectedHistoryRecordID(
+                records: self.records,
+                historyPath: resolvedPath
+            ) {
+                self.selectedRecordID = match
+                self.selectedRecordIDs = [match]
+            }
+        }
+    }
+
     func loadChanges() {
         changesTask?.cancel()
         diffTask?.cancel()
         filterTask?.cancel()
+        affectedHistoryResolveTask?.cancel()
         records = []
         filteredOutRecordIDs = []
         pendingFilterRecordIDs = []

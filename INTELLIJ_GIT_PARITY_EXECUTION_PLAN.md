@@ -2,6 +2,7 @@
 
 状态：V1 scope closed (2026-08-29)
 
+2026-10-23 `VcsHistory.ShowAllAffected`：补齐 File History 的 Show All Affected Files 动作（`GitCommittedChangeListProvider.getOneList` 在 Git 语境下的唯一用户可见面；changelist 浏览器/Repository tab 仅服务 centralized VCS，且该动作动态注册、XML 审计扫不到）。File History inspector 现可打开受影响过滤并高亮 History 路径记录；新增引擎 `path_at_revision` 沿首父链 follow 改名解析当时路径，解析失败保持过滤不高亮不报错。native ChangesBrowser/DataContext lifecycle 和 UI automation 仍为 partial。
 
 2026-10-23 `Git.Shallow.Check`：对照 fork `GitShallowRepositoryCheck`（ProjectActivity + RunOnceUtil）补齐单仓库启动时的 shallow clone 检测；单 root、`is_shallow()` 且默认 fetch remote 可解析时发布 important-channel INFO 通知，action 复用既有 Fetch Full History（Unshallow）；多 root/非 shallow/无 remote 保持静默，RunOnce 标记按项目持久化。新增 `GitShallowRepositoryCheck` monitor、`FeedbackCenter.info()` 与真实浅克隆 fixture 测试；native VcsNotifier/ProjectActivity lifecycle 和 UI automation 仍为 partial。
 

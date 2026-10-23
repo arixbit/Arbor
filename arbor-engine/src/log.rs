@@ -282,7 +282,7 @@ pub(crate) fn maybe_follow_rename(
 /// the first parent: a merge may carry the rename on either side, and a
 /// rename with edits is represented as a Rewrite rather than an exact blob
 /// deletion/addition pair.
-fn maybe_follow_rename_from_parent(
+pub(crate) fn maybe_follow_rename_from_parent(
     repo: &gix::Repository,
     commit: &gix::Commit<'_>,
     parent_id: gix::hash::ObjectId,

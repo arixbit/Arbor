@@ -74,6 +74,29 @@ func logChangeAffectsAnyPath(_ change: TreeChange, affectedPaths: [String]) -> B
     affectedPaths.contains { logChangeAffectsPath(change, affectedPath: $0) }
 }
 
+/// IntelliJ 对照：`VcsHistory.ShowAllAffected`（GitHistoryProvider 附加动作 →
+/// `GitCommittedChangeListProvider.getOneList`）。单文件 changeset 直接命中；
+/// 多文件按 after-path/oldPath 匹配当前 History 路径，改名场景由调用方
+/// 先用 `pathAtRevision` 解析当时路径再匹配。
+func logAffectedHistoryRecordID(
+    records: [LogChangeRecord],
+    historyPath: String
+) -> String? {
+    let trimmed = historyPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return records.first {
+        logChangeAffectsPath($0.change, affectedPath: trimmed)
+    }?.id
+}
+
+/// fork 的动作只在 File History 面板且单个选中 revision 时可用
+/// （`VcsHistory.ShowAllAffected.update` 的 `VCS_FILE_REVISION` 数据上下文）。
+/// 普通 Log tab 和多选时不可用。
+func isShowAllAffectedFilesAvailable(affectedHistoryPath: String?, commitCount: Int) -> Bool {
+    guard let affectedHistoryPath else { return false }
+    return !affectedHistoryPath.isEmpty && commitCount == 1
+}
+
 func logChangeAffectsAnyPath(
     _ change: TreeChange,
     rootPath: String?,

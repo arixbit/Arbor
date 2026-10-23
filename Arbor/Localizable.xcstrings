@@ -11311,6 +11311,17 @@
         }
       }
     },
+    "Show All Affected Files" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示全部受影响的文件"
+          }
+        }
+      }
+    },
     "Show Already Unshelved" : {
       "extractionState" : "stale",
       "localizations" : {

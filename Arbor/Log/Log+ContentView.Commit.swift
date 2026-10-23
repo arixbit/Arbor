@@ -43,6 +43,9 @@ struct LogCommitInspectorView: View {
     @Binding var showsChangesFromParents: Bool
     @Binding var showsOnlyAffectedChanges: Bool
     let affectedPathSelections: [LogPathFilterSelection]
+    /// Dedicated File History context for the VcsHistory.ShowAllAffected
+    /// entry; nil keeps the browser free of the history-only action.
+    var affectedHistoryPath: String? = nil
 
     var body: some View {
         Group {
@@ -100,7 +103,8 @@ struct LogCommitInspectorView: View {
                         onApplySelectedChanges: onApplySelectedChanges,
                         onCreatePatch: onCreatePatch,
                         onCreatePatchSelection: onCreatePatchSelection,
-                        onCopyPatchSelection: onCopyPatchSelection
+                        onCopyPatchSelection: onCopyPatchSelection,
+                        affectedHistoryPath: affectedHistoryPath
                     )
                     .frame(minHeight: 180, idealHeight: 390, maxHeight: .infinity)
                 }
@@ -127,7 +131,8 @@ struct LogCommitInspectorView: View {
                     onApplySelectedChanges: onApplySelectedChanges,
                     onCreatePatch: onCreatePatch,
                     onCreatePatchSelection: onCreatePatchSelection,
-                    onCopyPatchSelection: onCopyPatchSelection
+                    onCopyPatchSelection: onCopyPatchSelection,
+                    affectedHistoryPath: affectedHistoryPath
                 )
             }
         }

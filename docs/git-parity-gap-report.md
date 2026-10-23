@@ -2,6 +2,27 @@
 
 更新时间：2026-10-23
 
+## 2026-10-23 VcsHistory.ShowAllAffected 覆盖补齐（审计盲区）
+
+深入 fork 源码后发现：`GitCommittedChangeListProvider` 的 changelist 浏览器与
+Changes 工具窗 "Repository" tab 只服务 centralized VCS
+（`CommittedChangesViewManager.isCommittedChangesAvailable` 要求
+`VcsType.centralized`，`showCommittedChangesBrowser` 全 fork 仅 SVN 调用），
+Git 语境下该 Provider 唯一的用户可见面是 `GitHistoryProvider.getAdditionalActions`
+动态挂进 File History 的 `VcsHistory.ShowAllAffected`（Show All Affected Files）——
+它不在 XML action 注册里，`scripts/audit-git-actions.py` 的对账扫不到，是本轮
+「31 个未覆盖 id 全是容器」结论之外的审计盲区。
+
+Arbor 现已补齐：File History tab 的 inspector Changes Browser 新增
+Show All Affected Files 入口（`isShowAllAffectedFilesAvailable` 对齐 fork 的
+单 revision 数据上下文检查），打开受影响过滤并高亮 History 路径的变更记录；
+路径不在 changeset 时新增引擎 `path_at_revision` 沿首父链 follow 改名解析当时
+路径（fork 用 `--after=commitTime` 文件历史兑底），解析失败保持过滤、不高亮、
+不报错。新增矩阵行 `VcsHistory.ShowAllAffected`（verified-partial）。
+
+建议后续：`audit-git-actions.py` 记录已知边界 —— 动态注册的 additional
+actions 需人工核对 `getAdditionalActions`/代码注册面，XML 扫描无法覆盖。
+
 ## 2026-10-23 GitShallowRepositoryCheck 覆盖补齐
 
 对照 fork `GitShallowRepositoryCheck`（ProjectActivity + `RunOnceUtil.runOnceForProject`）与

@@ -5912,6 +5912,89 @@ impl Repository {
         repo.is_shallow()
     }
 
+    /// 解析同一文件在指定 revision 时的路径：从 HEAD 沿首父链回溯并跟随
+    /// 改名，直到到达目标提交。
+    ///
+    /// IntelliJ 对照：`GitCommittedChangeListProvider.getOneList` 的改名兑底 ——
+    /// 当选中文件路径不在该提交的 changeset 中时，fork 用
+    /// `--after=commitTime` 的文件历史最后一条记录定位当时的路径。Arbor 与
+    /// 文件历史同一 follow 语义（首父兼容，见 log.rs），父侧无法解析、目标
+    /// revision 不在首父链上或路径处文件不存在时 fail-closed 返回 None。
+    pub fn path_at_revision(
+        &self,
+        revision: String,
+        path: String,
+    ) -> Result<Option<String>, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        if repo.head().map_err(EngineError::from_gix)?.is_unborn() {
+            return Ok(None);
+        }
+        let trimmed_revision = revision.trim();
+        let trimmed_path = path.trim();
+        if trimmed_revision.is_empty() || trimmed_path.is_empty() {
+            return Ok(None);
+        }
+        let target_id = repo
+            .rev_parse_single(BStr::new(trimmed_revision.as_bytes()))
+            .map(|id| id.detach())
+            .map_err(EngineError::from_gix)?;
+        let mut current_id = repo
+            .head_commit()
+            .map_err(EngineError::from_gix)?
+            .id()
+            .detach();
+        let mut current_path = trimmed_path.to_owned();
+        // 首父链有限；上限只防御异常循环，正常历史在到达根提交前结束。
+        for _ in 0..100_000u32 {
+            if current_id == target_id {
+                let commit = repo
+                    .find_commit(current_id)
+                    .map_err(EngineError::from_gix)?;
+                let tree = repo
+                    .find_tree(commit.tree_id().map_err(EngineError::from_gix)?)
+                    .map_err(EngineError::from_gix)?;
+                let exists = tree
+                    .lookup_entry_by_path(current_path.as_str())
+                    .map_err(EngineError::from_gix)?
+                    .is_some();
+                return Ok(exists.then_some(current_path));
+            }
+            let (parent_id, followed_path) = {
+                let commit = repo
+                    .find_commit(current_id)
+                    .map_err(EngineError::from_gix)?;
+                let Some(parent) = commit.parent_ids().next() else {
+                    // 到达根提交仍未遇到目标 revision：非首父祖先。
+                    return Ok(None);
+                };
+                let parent_id = parent.detach();
+                let tree = repo
+                    .find_tree(commit.tree_id().map_err(EngineError::from_gix)?)
+                    .map_err(EngineError::from_gix)?;
+                let exists = tree
+                    .lookup_entry_by_path(current_path.as_str())
+                    .map_err(EngineError::from_gix)?
+                    .is_some();
+                if !exists {
+                    // follow 链在此中断（文件在该提交被删除）：无法解析。
+                    return Ok(None);
+                }
+                let followed = crate::log::maybe_follow_rename_from_parent(
+                    &repo,
+                    &commit,
+                    parent_id,
+                    &current_path,
+                )?;
+                (parent_id, followed)
+            };
+            if let Some(parent_path) = followed_path {
+                current_path = parent_path;
+            }
+            current_id = parent_id;
+        }
+        Ok(None)
+    }
+
     /// Update the executable captured by this repository after project settings
     /// change. `None` restores the live application-level fallback.
     pub fn set_git_executable_override(&self, path: Option<String>) -> Result<(), EngineError> {
