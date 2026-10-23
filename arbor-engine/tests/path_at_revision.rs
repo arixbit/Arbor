@@ -19,9 +19,7 @@ fn path_at_revision_returns_current_path_without_rename() {
         Some("notes.txt".into())
     );
     assert_eq!(
-        engine
-            .path_at_revision(first, "notes.txt".into())
-            .unwrap(),
+        engine.path_at_revision(first, "notes.txt".into()).unwrap(),
         Some("notes.txt".into())
     );
 }
@@ -79,10 +77,16 @@ fn path_at_revision_fails_closed_for_missing_file_and_unknown_revision() {
     );
     // 未知的 revision 表达式：fail-closed 返回错误而不是猜测。
     assert!(engine
-        .path_at_revision("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef".into(), "a.txt".into())
+        .path_at_revision(
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef".into(),
+            "a.txt".into()
+        )
         .is_err());
     // 空 revision / 空 path：fail-closed None。
-    assert_eq!(engine.path_at_revision("".into(), "a.txt".into()).unwrap(), None);
+    assert_eq!(
+        engine.path_at_revision("".into(), "a.txt".into()).unwrap(),
+        None
+    );
     assert_eq!(
         engine
             .path_at_revision(head.trim().to_string(), "".into())
@@ -125,9 +129,7 @@ fn path_at_revision_follows_chain_through_multiple_renames() {
         Some("three.txt".into())
     );
     assert_eq!(
-        engine
-            .path_at_revision(first, "three.txt".into())
-            .unwrap(),
+        engine.path_at_revision(first, "three.txt".into()).unwrap(),
         Some("one.txt".into())
     );
 }
