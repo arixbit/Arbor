@@ -74,7 +74,7 @@ struct SetUpstreamDialogView: View {
                 ContentUnavailableView {
                     Label("No remote branches", systemImage: "cloud.slash")
                 } description: {
-                    Text("先 Fetch 远程分支，再设置 upstream。")
+                    Text("Fetch the remote branch first, then set upstream.")
                 }
             } else {
                 Picker("Upstream", selection: $selectedUpstream) {
@@ -1027,14 +1027,14 @@ struct RemoteConfigDialogView: View {
                             Text("URL")
                             TextField("https://…", text: $url)
                                 .textFieldStyle(.roundedBorder)
-                            Text("Push URL (可选)")
+                            Text("Push URL (optional)")
                             TextField("https://…", text: $pushUrl)
                                 .textFieldStyle(.roundedBorder)
                             Text("Fetch refspec")
                             TextField("+refs/heads/*:refs/remotes/origin/*", text: $fetchRefspec)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.caption, design: .monospaced))
-                            Text("Push refspec (可选)")
+                            Text("Push refspec (optional)")
                             TextField("HEAD:refs/heads/main", text: $pushRefspec)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.caption, design: .monospaced))
@@ -1056,7 +1056,7 @@ struct RemoteConfigDialogView: View {
                                 .buttonStyle(.borderedProminent)
                         }
                     } else {
-                        Text("选择一个远程进行编辑")
+                        Text("Select a remote to edit")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1171,10 +1171,10 @@ private struct MultiRootRemoteConfigEditorView: View {
                     .toggleStyle(.checkbox)
                 if !context.isAdd {
                     DisclosureGroup("Advanced") {
-                        TextField("Push URL (可选)", text: $pushURL)
+                        TextField("Push URL (optional)", text: $pushURL)
                         TextField("Fetch refspec", text: $fetchRefspec)
                             .font(.system(.body, design: .monospaced))
-                        TextField("Push refspec (可选)", text: $pushRefspec)
+                        TextField("Push refspec (optional)", text: $pushRefspec)
                             .font(.system(.body, design: .monospaced))
                     }
                 }

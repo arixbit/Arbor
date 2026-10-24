@@ -362,6 +362,8 @@ struct MergeEditorView: NSViewRepresentable {
     let bridge: MergeEditorBridge
     let patchText: String?
     let patchHunks: [ApplyPatchConflictHunk]
+    let oursTitle: String
+    let theirsTitle: String
     let onSelectPatchHunk: (ApplyPatchConflictHunk) -> Void
     let onApplyPatchHunk: (ApplyPatchConflictHunk) -> Void
     let onCopyPatchHunk: (ApplyPatchConflictHunk) -> Void
@@ -421,8 +423,8 @@ struct MergeEditorView: NSViewRepresentable {
             stack.orientation = .horizontal
             stack.distribution = .fillEqually
             stack.spacing = 1
-            stack.addView(Self.wrap(resultScroll, title: "结果（可编辑）", color: .orange), in: .center)
-            stack.addView(Self.wrap(patchScroll, title: "Patch（只读）", color: .blue), in: .center)
+            stack.addView(Self.wrap(resultScroll, title: "Result (editable)", color: .orange), in: .center)
+            stack.addView(Self.wrap(patchScroll, title: "Patch (read-only)", color: .blue), in: .center)
             stack.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(stack)
             NSLayoutConstraint.activate([
@@ -459,9 +461,9 @@ struct MergeEditorView: NSViewRepresentable {
         stack.orientation = .horizontal
         stack.distribution = .fillEqually
         stack.spacing = 1
-        stack.addView(Self.wrap(oursScroll, title: "本地 (ours)", color: .red), in: .center)
-        stack.addView(Self.wrap(resultScroll, title: "结果（可编辑）", color: .orange), in: .center)
-        stack.addView(Self.wrap(theirsScroll, title: "远程 (theirs)", color: .green), in: .center)
+        stack.addView(Self.wrap(oursScroll, title: oursTitle, color: .red), in: .center)
+        stack.addView(Self.wrap(resultScroll, title: "Result (editable)", color: .orange), in: .center)
+        stack.addView(Self.wrap(theirsScroll, title: theirsTitle, color: .green), in: .center)
         stack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -534,7 +536,7 @@ struct MergeEditorView: NSViewRepresentable {
 
     static func wrap(_ view: NSView, title: String, color: Color) -> NSView {
         let container = NSView()
-        let label = NSTextField(labelWithString: title)
+        let label = NSTextField(labelWithString: String(localized: String.LocalizationValue(title)))
         label.font = NSFont.systemFont(ofSize: 11, weight: .bold)
         label.textColor = NSColor(color)
         label.translatesAutoresizingMaskIntoConstraints = false

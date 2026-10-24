@@ -1163,11 +1163,11 @@ struct RebasedBranchesPopover: View {
                 } else if incomingOutgoingInfoEnabled, hasIncoming {
                     unfetchedIncomingBadge
                 } else if incomingOutgoingInfoEnabled, let local, local.shortId != branch.shortId {
-                    Text("远程有更新")
+                    Text("Remote has updates")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.blue)
                 } else if incomingOutgoingInfoEnabled, local != nil {
-                    Text("已同步")
+                    Text("Up to date")
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -1306,7 +1306,7 @@ struct RebasedBranchesPopover: View {
         hasUnfetchedIncoming: Bool = false
     ) -> some View {
         if !sync.trackingExists {
-            Text("未跟踪")
+            Text("Untracked")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.orange)
         } else if sync.ahead > 0 || sync.behind > 0 || hasUnfetchedIncoming {
@@ -1325,9 +1325,9 @@ struct RebasedBranchesPopover: View {
                 }
             }
             .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .help("蓝色表示远程有更新，绿色表示本地有待推送提交")
+            .help("Blue marks incoming remote commits; green marks local commits to push")
         } else {
-            Text("已同步")
+            Text("Up to date")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
         }
@@ -1359,7 +1359,7 @@ struct RebasedBranchesPopover: View {
                 }
             }
             .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .help("绿色表示本地待推送提交，蓝色表示远程有更新")
+            .help("Green marks local commits to push; blue marks incoming remote commits")
         }
     }
 

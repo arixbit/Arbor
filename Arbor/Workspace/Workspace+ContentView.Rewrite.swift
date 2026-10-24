@@ -272,8 +272,8 @@ func resetModeName(_ mode: ResetMode) -> String {
 func revertResolvedPath(_ path: String) {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "Revert resolved file?"
-    alert.informativeText = "\(path) will return to the unresolved conflict list."
+    alert.messageText = String(localized: "Revert resolved file?")
+    alert.informativeText = String(localized: "\(path) will return to the unresolved conflict list.")
     alert.addButton(withTitle: "Revert")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else { return }

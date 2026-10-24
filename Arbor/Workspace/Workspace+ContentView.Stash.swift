@@ -222,8 +222,8 @@ func popStashInRoot(rootPath: String, stashID: String, restoreIndex: Bool) {
 
 func dropStashInRoot(rootPath: String, stashID: String) {
     let alert = NSAlert()
-    alert.messageText = "Drop selected stash?"
-    alert.informativeText = "This permanently removes the selected stash from the root."
+    alert.messageText = String(localized: "Drop selected stash?")
+    alert.informativeText = String(localized: "This permanently removes the selected stash from the root.")
     alert.addButton(withTitle: "Drop")
     alert.addButton(withTitle: "Cancel")
     alert.buttons.first?.hasDestructiveAction = true
@@ -257,8 +257,8 @@ func dropStashInRootConfirmed(rootPath: String, stashID: String) {
 
 func stashBranchInRoot(rootPath: String, stashID: String) {
     let alert = NSAlert()
-    alert.messageText = "Create branch from stash"
-    alert.informativeText = "The new branch will be checked out in the selected root and the stash will be applied."
+    alert.messageText = String(localized: "Create branch from stash")
+    alert.informativeText = String(localized: "The new branch will be checked out in the selected root and the stash will be applied.")
     let field = NSTextField(string: "stash-branch")
     field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
     alert.accessoryView = field
@@ -898,8 +898,8 @@ func stashDrop(stashID: String) {
 
 func stashBranch(stashID: String) {
     let alert = NSAlert()
-    alert.messageText = "Create branch from stash"
-    alert.informativeText = "The new branch will be checked out and the stash will be applied."
+    alert.messageText = String(localized: "Create branch from stash")
+    alert.informativeText = String(localized: "The new branch will be checked out and the stash will be applied.")
     let field = NSTextField(string: "stash-branch")
     field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
     alert.accessoryView = field

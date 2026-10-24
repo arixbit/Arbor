@@ -370,7 +370,7 @@ func selectExternalVCSActionPaths(
 
     let alert = NSAlert()
     alert.messageText = title
-    alert.informativeText = "Select the paths to process."
+    alert.informativeText = String(localized: "Select the paths to process.")
     alert.alertStyle = .informational
     alert.addButton(withTitle: actionTitle)
     alert.addButton(withTitle: "Skip")
@@ -430,7 +430,7 @@ func selectExternalVCSMoves(
 
     let alert = NSAlert()
     alert.messageText = title
-    alert.informativeText = "Choose at most one old path for each new path. Ambiguous matches default to Skip."
+    alert.informativeText = String(localized: "Choose at most one old path for each new path. Ambiguous matches default to Skip.")
     alert.alertStyle = .informational
     alert.addButton(withTitle: actionTitle)
     alert.addButton(withTitle: "Skip")

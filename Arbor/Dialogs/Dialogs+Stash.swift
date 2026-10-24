@@ -72,7 +72,7 @@ struct RebasedStashDialog: View {
                 Text("Keep index").font(.callout)
             }
             .toggleStyle(.checkbox)
-            Text("保存后保留当前已暂存的内容；未暂存的修改会被收进 stash。")
+            Text("Keep the currently staged content; unstaged changes go into the stash.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {

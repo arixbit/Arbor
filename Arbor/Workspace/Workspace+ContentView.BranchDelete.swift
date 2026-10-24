@@ -176,7 +176,7 @@ func presentMultiRootBranchDeleteRollback(
 ) {
     guard !contexts.isEmpty else { return }
     let alert = NSAlert()
-    alert.messageText = "Multi-root branch deletion partially completed"
+    alert.messageText = String(localized: "Multi-root branch deletion partially completed")
     let successful = contexts.map { $0.rootPath ?? String(localized: "Repository") }
     alert.informativeText = "Deleted \(branchName) in:\n\(successful.joined(separator: "\n"))\n\nFailures:\n\(failures.joined(separator: "\n"))"
     alert.alertStyle = .warning
@@ -373,7 +373,7 @@ func confirmForceDeleteBranch(preview: BranchDeletePreview, rootPath: String?) -
             details += "\n…"
         }
     }
-    alert.informativeText = "\(details)\(location)"
+    alert.informativeText = String(localized: "\(details)\(location)")
     alert.addButton(withTitle: String(localized: "Delete Anyway"))
     alert.addButton(withTitle: String(localized: "Cancel"))
     alert.buttons.first?.hasDestructiveAction = true
@@ -437,8 +437,8 @@ func forceDeleteBranch(
 func deleteBranchInRoot(rootPath: String, name: String, confirm: Bool = true) {
     if confirm {
         let alert = NSAlert()
-        alert.messageText = "Delete branch \(name)?"
-        alert.informativeText = "This removes the local branch reference in the selected root."
+        alert.messageText = String(localized: "Delete branch \(name)?")
+        alert.informativeText = String(localized: "This removes the local branch reference in the selected root.")
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -519,7 +519,7 @@ func deleteSelectedBranchesInRoots(_ targets: [BranchDashboardReference]) {
     guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
-    alert.messageText = "Delete selected branches?"
+    alert.messageText = String(localized: "Delete selected branches?")
     alert.informativeText = selected
         .map { "\($0.name) · \($0.rootPath)" }
         .joined(separator: "\n")

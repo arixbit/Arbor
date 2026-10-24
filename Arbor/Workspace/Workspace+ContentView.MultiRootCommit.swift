@@ -216,7 +216,7 @@ func performMultiRootCommit(
                 self.multiRootWorkspace.running = false
                 if allowForceRetry && options.runBeforeCommitChecks && !checkFailures.isEmpty {
                     let alert = NSAlert()
-                    alert.messageText = "Commit checks failed"
+                    alert.messageText = String(localized: "Commit checks failed")
                     alert.informativeText = checkFailures.map {
                         "\($0.displayName): \($0.message)"
                     }.joined(separator: "\n")

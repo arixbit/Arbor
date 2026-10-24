@@ -1003,8 +1003,8 @@ func submoduleSetBranch(_ path: String, _ branch: String) {
 
 func submoduleRemove(_ path: String) {
     let alert = NSAlert()
-    alert.messageText = "Remove submodule?"
-    alert.informativeText = "This removes \(path) from .gitmodules, the index and the worktree."
+    alert.messageText = String(localized: "Remove submodule?")
+    alert.informativeText = String(localized: "This removes \(path) from .gitmodules, the index and the worktree.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Remove")
     alert.addButton(withTitle: "Cancel")

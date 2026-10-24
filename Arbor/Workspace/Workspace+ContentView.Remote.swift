@@ -170,8 +170,8 @@ func remoteRemove(_ name: String) {
 
 func confirmRemoteRemoval(_ name: String) -> Bool {
     let alert = NSAlert()
-    alert.messageText = "Remove remote?"
-    alert.informativeText = "This removes the remote configuration and its remote-tracking branches."
+    alert.messageText = String(localized: "Remove remote?")
+    alert.informativeText = String(localized: "This removes the remote configuration and its remote-tracking branches.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Remove")
     alert.addButton(withTitle: "Cancel")

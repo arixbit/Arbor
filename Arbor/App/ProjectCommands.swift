@@ -8,7 +8,7 @@ struct ProjectCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("检查更新…") {
+            Button("Check for Updates…") {
                 NotificationCenter.default.post(name: .arborCheckForUpdates, object: nil)
             }
             Button("About Arbor") {

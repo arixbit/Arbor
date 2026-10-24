@@ -42,7 +42,7 @@ func resetCurrentBranchToRemote() {
 
     let saveChoice = GitLocalChangesSavePolicySettings.choice(for: projectWorkspace.path)
     let alert = NSAlert()
-    alert.messageText = "Reset to Remote Branch?"
+    alert.messageText = String(localized: "Reset to Remote Branch?")
     alert.informativeText = [
         "Reset \(currentBranch) to \(upstream) after fetching the remote tip.",
         "Local commits on \(currentBranch) will no longer be reachable from that branch.",

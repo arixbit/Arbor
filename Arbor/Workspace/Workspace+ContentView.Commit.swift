@@ -228,10 +228,10 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                         nextStep: "Review the check output, then retry or choose the force action."
                     )
                     let alert = NSAlert()
-                    alert.messageText = "提交前检查失败"
-                    alert.informativeText = "\(checkError.command)\n\n\(checkError.output)"
-                    alert.addButton(withTitle: "强制提交")
-                    alert.addButton(withTitle: "取消")
+                    alert.messageText = String(localized: "Before Commit checks failed")
+                    alert.informativeText = String(localized: "\(checkError.command)\n\n\(checkError.output)")
+                    alert.addButton(withTitle: String(localized: "Commit Anyway"))
+                    alert.addButton(withTitle: String(localized: "Cancel"))
                     if alert.runModal() == .alertFirstButtonReturn {
                         self.doCommit(forceChecks: true, rebaseAfterCommit: rebaseAfterCommit)
                     } else {

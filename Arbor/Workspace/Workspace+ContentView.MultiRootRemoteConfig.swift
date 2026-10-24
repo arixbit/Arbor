@@ -300,7 +300,7 @@ func removeSelectedRemotesInRoots(_ groups: [BranchDashboardRemoteGroup]) {
     guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
-    alert.messageText = "Remove selected remotes?"
+    alert.messageText = String(localized: "Remove selected remotes?")
     alert.informativeText = selected
         .map { "\($0.name) · \($0.rootPath)" }
         .joined(separator: "\n")

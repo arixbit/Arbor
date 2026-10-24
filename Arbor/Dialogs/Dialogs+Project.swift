@@ -258,7 +258,7 @@ struct MultiRootPanel: View {
             if isRunning {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("正在逐 root 执行…")
+                    Text("Running per root…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -267,7 +267,7 @@ struct MultiRootPanel: View {
                 ContentUnavailableView {
                     Label("No Git Roots", systemImage: "externaldrive.badge.questionmark")
                 } description: {
-                    Text("当前项目目录不包含 Git 仓库。")
+                    Text("The current project directory does not contain a Git repository.")
                 }
             } else {
                 List {

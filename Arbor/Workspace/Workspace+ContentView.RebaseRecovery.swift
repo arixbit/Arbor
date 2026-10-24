@@ -56,11 +56,11 @@ func presentUpdateRebaseOverMergeDialog(
     problematicRoots: [GitRootInfo]
 ) -> UpdateRebaseOverMergeDecision {
     let alert = NSAlert()
-    alert.messageText = "Rebase would replay merge commits"
+    alert.messageText = String(localized: "Rebase would replay merge commits")
     let roots = problematicRoots
         .map { "• \($0.displayName) (\($0.relativePath))" }
         .joined(separator: "\n")
-    alert.informativeText = "The following Git roots contain merge commits with file changes in the range that would be rebased:\n\n\(roots)\n\nMerging those roots preserves their merge history."
+    alert.informativeText = String(localized: "The following Git roots contain merge commits with file changes in the range that would be rebased:\n\n\(roots)\n\nMerging those roots preserves their merge history.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Merge Instead")
     alert.addButton(withTitle: "Rebase Anyway")

@@ -230,7 +230,7 @@ struct FileContentView: View {
                         .disabled(content.truncated)
                     }
                     if content?.truncated == true {
-                        Label("内容已截断", systemImage: "exclamationmark.triangle")
+                        Label("Content truncated", systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -304,7 +304,7 @@ struct FileContentView: View {
             Image(systemName: "icloud.and.arrow.down")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Git LFS pointer（内容未下载）")
+                Text("Git LFS pointer (content not downloaded)")
                     .font(.callout.weight(.semibold))
                 Text(lfsError ?? "工作区里只有 pointer 文本；下载后即可按真实内容查看与 diff。")
                     .font(.caption)

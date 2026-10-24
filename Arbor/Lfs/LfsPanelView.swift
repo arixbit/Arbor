@@ -90,7 +90,7 @@ struct LfsPanelView: View {
                     .textSelection(.enabled)
                     .foregroundStyle(.secondary)
             }
-            Text("安装后重新打开该面板：`brew install git-lfs`，然后在终端执行 `git lfs install`。")
+            Text("After installing, reopen this panel: run `brew install git-lfs`, then `git lfs install` in a terminal.")
                 .font(.callout)
             Spacer()
         }
@@ -128,7 +128,7 @@ struct LfsPanelView: View {
         GroupBox("Tracked patterns") {
             VStack(alignment: .leading, spacing: 10) {
                 if patterns.isEmpty {
-                    Text("还没有跟踪规则。输入模式（如 `*.psd`）后点 Track，git-lfs 会写入 .gitattributes。")
+                    Text("No tracking rules yet. Enter a pattern (for example `*.psd`) and click Track; git-lfs writes .gitattributes.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
@@ -186,7 +186,7 @@ struct LfsPanelView: View {
                         .foregroundStyle(.secondary)
                 }
                 if files.isEmpty {
-                    Text("没有 LFS 文件。")
+                    Text("No LFS files.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {

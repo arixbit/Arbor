@@ -362,7 +362,7 @@ struct DiffDetailView: View {
                     }
                 }
             } else {
-                Text("选择一个文件查看 diff / 冲突")
+                Text("Select a file to view its diff or conflict")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -425,108 +425,112 @@ struct DiffDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Text(entry.path).font(.headline).lineLimit(1)
-                Spacer()
-                Toggle("忽略空白", isOn: $ignoreWhitespace)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: ignoreWhitespace) { _, _ in load() }
-                Toggle("Word Diff", isOn: $wordDiff)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: wordDiff) { _, _ in load() }
-                Toggle("CRLF 敏感", isOn: $crlfSensitive)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: crlfSensitive) { _, _ in load() }
-                if !isReadOnlyComparison {
-                    Toggle("选择模式", isOn: $selectionMode)
-                        .toggleStyle(.checkbox)
-                        .onChange(of: selectionMode) { _, on in
-                            if !on { selectedLines.removeAll() }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        Toggle("Ignore Whitespace", isOn: $ignoreWhitespace)
+                            .toggleStyle(.checkbox)
+                            .onChange(of: ignoreWhitespace) { _, _ in load() }
+                        Toggle("Word Diff", isOn: $wordDiff)
+                            .toggleStyle(.checkbox)
+                            .onChange(of: wordDiff) { _, _ in load() }
+                        Toggle("CRLF sensitive", isOn: $crlfSensitive)
+                            .toggleStyle(.checkbox)
+                            .onChange(of: crlfSensitive) { _, _ in load() }
+                        if !isReadOnlyComparison {
+                            Toggle("Selection mode", isOn: $selectionMode)
+                                .toggleStyle(.checkbox)
+                                .onChange(of: selectionMode) { _, on in
+                                    if !on { selectedLines.removeAll() }
+                                }
                         }
-                }
-                Menu("Patch") {
-                    Button("Create Patch…") { exportPatch(copyToClipboard: false) }
-                    Button("Copy Patch") { exportPatch(copyToClipboard: true) }
-                }
-                .disabled(!canExportPatch)
-                Button(externalDiffWorking
-                       ? (externalDiffCancelling ? "Canceling…" : "Cancel External Diff")
-                       : "External Diff") {
-                    if externalDiffWorking {
-                        cancelExternalDiff()
-                    } else {
-                        openExternalDiff()
+                        Menu("Patch") {
+                            Button("Create Patch…") { exportPatch(copyToClipboard: false) }
+                            Button("Copy Patch") { exportPatch(copyToClipboard: true) }
+                        }
+                        .disabled(!canExportPatch)
+                        Button(externalDiffWorking
+                               ? (externalDiffCancelling ? "Canceling…" : "Cancel External Diff")
+                               : "External Diff") {
+                            if externalDiffWorking {
+                                cancelExternalDiff()
+                            } else {
+                                openExternalDiff()
+                            }
+                        }
+                        .disabled(externalDiffWorking
+                                  ? externalDiffCancelling
+                                  : showBlame || showThreeVersions || externalDiffGitCommand(for: entry, mode: mode) == nil)
+                            .help("Open the active comparison in Git's configured difftool")
+                        if showBlame {
+                            GitAnnotationOptionsMenu {
+                                loadBlame(entry.path)
+                            }
+                        }
+                        Button("Compare with Clipboard") {
+                            patchPlan = nil
+                            compareWithClipboard(entry.path)
+                        }
+                        Button("Attributes") {
+                            showAttributes = true
+                            loadAttributes(entry.path)
+                        }
+                        Button(showBlame ? "Diff" : "Blame") {
+                            showBlame.toggle()
+                            if showBlame {
+                                patchPlan = nil
+                                loadBlame(entry.path)
+                            } else {
+                                load()
+                            }
+                        }
+                        Button(showThreeVersions ? "Diff" : "Compare Three Versions") {
+                            showThreeVersions.toggle()
+                            if showThreeVersions {
+                                patchPlan = nil
+                            } else {
+                                load()
+                            }
+                        }
+                        .disabled(isReadOnlyComparison || (!hasUnstaged && !hasStaged))
+                        if isReadOnlyComparison {
+                            Text(initialMode == .worktreeToHead ? "HEAD → Local" : "Local → Staged")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Dimension", selection: $mode) {
+                                Text("Working Tree").tag(DiffMode.worktreeToIndex)
+                                Text("Staged").tag(DiffMode.indexToHead)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 200)
+                            .disabled(!hasUnstaged && !hasStaged)
+                        }
+                        Picker("Diff View", selection: $presentationMode) {
+                            ForEach(DiffPresentationMode.allCases) { item in
+                                Text(item.title).tag(item)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 190)
+                        .disabled(selectionMode)
                     }
                 }
-                .disabled(externalDiffWorking
-                          ? externalDiffCancelling
-                          : showBlame || showThreeVersions || externalDiffGitCommand(for: entry, mode: mode) == nil)
-                    .help("Open the active comparison in Git's configured difftool")
-                if showBlame {
-                    GitAnnotationOptionsMenu {
-                        loadBlame(entry.path)
-                    }
-                }
-                Button("与剪贴板比较") {
-                    patchPlan = nil
-                    compareWithClipboard(entry.path)
-                }
-                Button("Attributes") {
-                    showAttributes = true
-                    loadAttributes(entry.path)
-                }
-                Button(showBlame ? "Diff" : "Blame") {
-                    showBlame.toggle()
-                    if showBlame {
-                        patchPlan = nil
-                        loadBlame(entry.path)
-                    } else {
-                        load()
-                    }
-                }
-                Button(showThreeVersions ? "Diff" : "Compare Three Versions") {
-                    showThreeVersions.toggle()
-                    if showThreeVersions {
-                        patchPlan = nil
-                    } else {
-                        load()
-                    }
-                }
-                .disabled(isReadOnlyComparison || (!hasUnstaged && !hasStaged))
-                if isReadOnlyComparison {
-                    Text(initialMode == .worktreeToHead ? "HEAD → Local" : "Local → Staged")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("维度", selection: $mode) {
-                        Text("工作区").tag(DiffMode.worktreeToIndex)
-                        Text("已暂存").tag(DiffMode.indexToHead)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .disabled(!hasUnstaged && !hasStaged)
-                }
-                Picker("Diff View", selection: $presentationMode) {
-                    ForEach(DiffPresentationMode.allCases) { item in
-                        Text(item.title).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 190)
-                .disabled(selectionMode)
             }
-            HStack(spacing: 6) {
-                TextField("rev1", text: $rev1).textFieldStyle(.roundedBorder).frame(width: 130)
-                TextField("rev2", text: $rev2).textFieldStyle(.roundedBorder).frame(width: 130)
-                Button("任意版本比较") { compareRevs(entry.path) }
-                    .disabled(rev1.isEmpty || rev2.isEmpty)
-                Spacer()
-                if selectionMode {
-                    Text("点击变更行选择（变更组不可拆分）")
-                        .font(.caption2).foregroundStyle(.secondary)
-                    Text("\(selectedLines.count) 行已选")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button(mode == .worktreeToIndex ? "暂存所选行" : "取消暂存所选行") { applyPartial() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(selectedLines.isEmpty)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    TextField("rev1", text: $rev1).textFieldStyle(.roundedBorder).frame(width: 130)
+                    TextField("rev2", text: $rev2).textFieldStyle(.roundedBorder).frame(width: 130)
+                    Button("Compare arbitrary revisions") { compareRevs(entry.path) }
+                        .disabled(rev1.isEmpty || rev2.isEmpty)
+                    if selectionMode {
+                        Text("Click a changed line to select it (change groups are atomic)")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Text("\(selectedLines.count) lines selected")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button(mode == .worktreeToIndex ? "Stage Selected Lines" : "Unstage Selected Lines") { applyPartial() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(selectedLines.isEmpty)
+                    }
                 }
             }
         }
@@ -878,7 +882,7 @@ struct DiffDetailView: View {
                         .padding(.vertical, 0.5)
                         .contentShape(Rectangle())
                         .onTapGesture { openCommitDetail(line.commitId) }
-                        .help("点击打开该提交详情")
+                        .help("Click to open the commit details")
                     }
                 }
             }
@@ -917,10 +921,10 @@ struct DiffDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let fileDiff {
             if fileDiff.binary {
-                Text("二进制文件，无法显示 diff").foregroundStyle(.secondary)
+                Text("Binary file; diff cannot be shown").foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if fileDiff.hunks.isEmpty {
-                Text("该维度无变更").foregroundStyle(.secondary)
+                Text("No changes in this dimension").foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if presentationMode == .unified {
                 UnifiedDiffView(fileDiff: fileDiff)

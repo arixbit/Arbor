@@ -6,15 +6,15 @@ extension ContentView {
 func createChangeList() {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "New Changelist"
-    alert.informativeText = "Create an empty local Changes Browser list."
+    alert.messageText = String(localized: "New Changelist")
+    alert.informativeText = String(localized: "Create an empty local Changes Browser list.")
     let nameField = NSTextField(frame: .zero)
     nameField.placeholderString = "Name"
     let descriptionField = NSTextField(frame: .zero)
     descriptionField.placeholderString = "Description (optional)"
     let activeButton = NSButton(checkboxWithTitle: "Set active", target: nil, action: nil)
     activeButton.state = .off
-    let contextLabel = NSTextField(labelWithString: "Track Context is unavailable without a task provider.")
+    let contextLabel = NSTextField(labelWithString: String(localized: "Track Context is unavailable without a task provider."))
     contextLabel.textColor = .secondaryLabelColor
     contextLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
     let stack = NSStackView(views: [nameField, descriptionField, activeButton, contextLabel])
@@ -67,7 +67,7 @@ func createChangeList() {
 func renameChangeList(_ oldName: String) {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "Rename Changelist"
+    alert.messageText = String(localized: "Rename Changelist")
     alert.informativeText = oldName
     let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
     field.stringValue = oldName
@@ -99,8 +99,8 @@ func renameChangeList(_ oldName: String) {
 func deleteChangeList(_ name: String) {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "Delete Changelist"
-    alert.informativeText = "Changes in \"\(name)\" will move to the default list."
+    alert.messageText = String(localized: "Delete Changelist")
+    alert.informativeText = String(localized: "Changes in \"\(name)\" will move to the default list.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")
@@ -147,8 +147,8 @@ func movePathsToChangeList(_ paths: [String], _ targetName: String) {
     let commentField = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
     commentField.placeholderString = "Comment (optional)"
     let alert = NSAlert()
-    alert.messageText = "Move to Changelist"
-    alert.informativeText = "Move \(paths.count) change(s) to \"\(targetName)\"."
+    alert.messageText = String(localized: "Move to Changelist")
+    alert.informativeText = String(localized: "Move \(paths.count) change(s) to \"\(targetName)\".")
     alert.accessoryView = commentField
     alert.addButton(withTitle: "Move")
     alert.addButton(withTitle: "Cancel")

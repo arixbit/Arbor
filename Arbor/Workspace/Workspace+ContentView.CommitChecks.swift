@@ -80,9 +80,9 @@ func presentCommitWarningDecision(
         guard !seenSettings.contains(warning.setting) else { continue }
 
         let alert = NSAlert()
-        alert.messageText = "Commit warning: \(warning.setting.title)"
+        alert.messageText = String(localized: "Commit warning: \(warning.setting.title)")
         let prefix = warning.rootLabel.isEmpty ? "" : "\(warning.rootLabel): "
-        alert.informativeText = "\(prefix)\(warning.message)"
+        alert.informativeText = String(localized: "\(prefix)\(warning.message)")
         alert.alertStyle = .warning
         alert.showsSuppressionButton = true
         alert.suppressionButton?.title = "Don't warn about this again in this project"

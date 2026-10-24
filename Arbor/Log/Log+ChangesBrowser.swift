@@ -522,7 +522,7 @@ struct LogChangesBrowserView: View {
                         .controlSize(.small)
                         .frame(width: 190)
                     } else if commit.parentIds.isEmpty {
-                        Text("Root commit — 与空 tree 比较")
+                        Text("Root commit — compared with an empty tree")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -531,7 +531,7 @@ struct LogChangesBrowserView: View {
                     Text("前 \(Self.maximumCommitsPerSelection)/\(commits.count) 个提交")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                        .help("多选 Changes 最多加载 50 个提交，避免阻塞 Log 工作区")
+                        .help("Multi-selection loads at most 50 commits to keep the Log workspace responsive")
                 }
                 if isLoading { ProgressView().controlSize(.small) }
                 if isFiltering {

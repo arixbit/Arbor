@@ -337,7 +337,7 @@ struct LogGraphView: View {
                                                 ProgressView()
                                                     .controlSize(.small)
                                             } else {
-                                                Text("加载更多提交")
+                                                Text("Load more commits")
                                             }
                                         }
                                         .buttonStyle(.borderless)

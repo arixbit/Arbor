@@ -117,7 +117,7 @@ struct HooksPanelView: View {
                 Image(systemName: "shippingbox")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .help("有 .sample 模板可安装")
+                    .help("A .sample template is available to install")
             }
         }
         .padding(.vertical, 2)
@@ -213,12 +213,12 @@ struct HooksPanelView: View {
     private func editorFooter(_ hook: GitHookInfo) -> some View {
         HStack(spacing: 10) {
             if isDirty {
-                Label("未保存", systemImage: "pencil")
+                Label("Unsaved", systemImage: "pencil")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
             if hook.state == .missing {
-                Text("保存后会创建该文件并加上可执行位。")
+                Text("Saving creates the file and sets its executable bit.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

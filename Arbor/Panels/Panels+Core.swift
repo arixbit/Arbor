@@ -428,7 +428,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             Menu {
-                Button("打开项目…", action: onOpenProject)
+                Button("Open Project…", action: onOpenProject)
                 if !recentProjects.isEmpty {
                     Divider()
                     ForEach(recentProjects, id: \.self) { recentPath in
@@ -983,7 +983,7 @@ struct RebasedChangeGroup: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(.quaternary, in: Capsule())
-                    .help("二进制文件：diff/行级暂存按降级策略处理")
+                    .help("Binary file: diff and line staging use the fallback policy")
             }
             Spacer(minLength: 4)
             if entry.staged != .unchanged && entry.unstaged != .unchanged {

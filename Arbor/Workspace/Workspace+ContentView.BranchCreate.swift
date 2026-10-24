@@ -459,8 +459,8 @@ func confirmBranchResetIfNeeded(
     }
 
     let alert = NSAlert()
-    alert.messageText = "Reset existing branch?"
-    alert.informativeText = "(name) has (comparison.ahead) local commit(s) not contained in (base). Resetting it will discard those commits from the branch ref."
+    alert.messageText = String(localized: "Reset existing branch?")
+    alert.informativeText = String(localized: "\(name) has \(comparison.ahead) local commit(s) not contained in \(base). Resetting it will discard those commits from the branch ref.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Drop Local Commits")
     alert.addButton(withTitle: "Cancel")

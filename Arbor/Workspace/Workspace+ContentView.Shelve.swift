@@ -292,7 +292,7 @@ func renameShelve(
     rootPath: String? = nil
 ) {
     let alert = NSAlert()
-    alert.messageText = "Rename Shelf"
+    alert.messageText = String(localized: "Rename Shelf")
     alert.informativeText = name
     let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
     field.stringValue = currentDescription

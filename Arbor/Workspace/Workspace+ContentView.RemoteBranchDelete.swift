@@ -39,7 +39,7 @@ func deleteTrackedRemoteBranch(
     let roots = contexts.filter { $0.trackedRemoteBranch == normalizedRemoteBranch }
     let location = roots.compactMap(\.rootPath).joined(separator: "\n")
     let alert = NSAlert()
-    alert.messageText = "Delete tracked remote branch?"
+    alert.messageText = String(localized: "Delete tracked remote branch?")
     alert.informativeText = "This will delete \(normalizedRemoteBranch) from the remote repository.\(location.isEmpty ? "" : "\n\n\(location)")"
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Delete")
@@ -151,8 +151,8 @@ func deleteRemoteBranchInRoot(rootPath: String, branch: String) {
         return
     }
     let alert = NSAlert()
-    alert.messageText = "Delete remote branch?"
-    alert.informativeText = "This will delete \(branch) from its remote repository."
+    alert.messageText = String(localized: "Delete remote branch?")
+    alert.informativeText = String(localized: "This will delete \(branch) from its remote repository.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")
@@ -480,7 +480,7 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
     }
 
     let alert = NSAlert()
-    alert.messageText = "Delete selected remote branches?"
+    alert.messageText = String(localized: "Delete selected remote branches?")
     alert.informativeText = selected
         .map { "\($0.name) · \($0.rootPath)" }
         .joined(separator: "\n")
@@ -699,8 +699,8 @@ func deleteSelectedRemoteBranchesInRoots(_ targets: [BranchDashboardReference]) 
 func deleteRemoteBranch(_ branch: RemoteBranchInfo) {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "Delete remote branch?"
-    alert.informativeText = "This will delete \(branch.name) from the remote repository."
+    alert.messageText = String(localized: "Delete remote branch?")
+    alert.informativeText = String(localized: "This will delete \(branch.name) from the remote repository.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")

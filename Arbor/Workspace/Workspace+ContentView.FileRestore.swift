@@ -28,7 +28,7 @@ func restoreSelectedFilesFromRevisions(_ records: [LogChangeRecord]) {
         1,
         Set(records.compactMap(\.commit.repositoryPath).filter { !$0.isEmpty }).count
     )
-    alert.informativeText = "Replace the index and working tree copies of \(requests.count) file(s) from \(rootCount) Git root(s)?"
+    alert.informativeText = String(localized: "Replace the index and working tree copies of \(requests.count) file(s) from \(rootCount) Git root(s)?")
     alert.alertStyle = .warning
     alert.addButton(withTitle: records.count == 1 ? "Get Version" : "Get Versions")
     alert.addButton(withTitle: "Cancel")
@@ -109,7 +109,7 @@ func restoreFileFromHead(
     guard let repo else { return }
     let alert = NSAlert()
     alert.messageText = prompt
-    alert.informativeText = "This restores \(path) in both the index and working tree."
+    alert.informativeText = String(localized: "This restores \(path) in both the index and working tree.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: confirmTitle)
     alert.addButton(withTitle: "Cancel")
@@ -140,8 +140,8 @@ func restoreProjectTreePath(_ path: String) {
           let primaryRootPath = primaryRepo.workdir(),
           !primaryRootPath.isEmpty else { return }
     let alert = NSAlert()
-    alert.messageText = "Revert file?"
-    alert.informativeText = "This restores \(normalizedPath) in both the index and working tree."
+    alert.messageText = String(localized: "Revert file?")
+    alert.informativeText = String(localized: "This restores \(normalizedPath) in both the index and working tree.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Revert")
     alert.addButton(withTitle: "Cancel")

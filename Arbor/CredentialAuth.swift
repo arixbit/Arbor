@@ -406,7 +406,7 @@ struct CredentialDialogView: View {
                         .buttonStyle(.borderedProminent)
                 }
             } else if controller.request?.kind == .passphrase {
-                Text("SSH 私钥需要解锁口令（passphrase）。")
+                Text("The SSH private key needs its passphrase.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 SecureField("Passphrase", text: $secret)

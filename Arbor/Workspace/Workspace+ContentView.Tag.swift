@@ -366,8 +366,8 @@ func unstagePath(_ p: String) {
 func revertUnstagedPath(_ p: String) {
     guard let repo else { return }
     let alert = NSAlert()
-    alert.messageText = "Revert unstaged changes?"
-    alert.informativeText = "This restores \(p) to the staged version and keeps the index unchanged."
+    alert.messageText = String(localized: "Revert unstaged changes?")
+    alert.informativeText = String(localized: "This restores \(p) to the staged version and keeps the index unchanged.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Revert")
     alert.addButton(withTitle: "Cancel")
@@ -680,7 +680,7 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
     guard !selected.isEmpty, !multiRootWorkspace.running else { return }
 
     let alert = NSAlert()
-    alert.messageText = "Delete selected tags?"
+    alert.messageText = String(localized: "Delete selected tags?")
     alert.informativeText = selected
         .map { "\($0.name) · \($0.rootPath)" }
         .joined(separator: "\n")
@@ -777,8 +777,8 @@ func deleteSelectedTagsInRoots(_ targets: [BranchDashboardReference]) {
 
 func deleteTagInRoot(rootPath: String, name: String) {
     let alert = NSAlert()
-    alert.messageText = "Delete tag \(name)?"
-    alert.informativeText = "This removes the local tag in the selected root."
+    alert.messageText = String(localized: "Delete tag \(name)?")
+    alert.informativeText = String(localized: "This removes the local tag in the selected root.")
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")
     alert.buttons.first?.hasDestructiveAction = true
@@ -931,7 +931,7 @@ func deleteMultiRootTag(name: String, selectedRootPaths: Set<String>) {
 
 func renameTagInRoot(rootPath: String, name: String) {
     let alert = NSAlert()
-    alert.messageText = "Rename Tag"
+    alert.messageText = String(localized: "Rename Tag")
     let field = NSTextField(string: name)
     field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
     alert.accessoryView = field

@@ -46,13 +46,13 @@ struct WorktreePanel: View {
             Divider()
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    TextField("新 worktree 路径", text: $path)
+                    TextField("New worktree path", text: $path)
                         .textFieldStyle(.roundedBorder)
-                    TextField("新分支（可选）", text: $branch)
+                    TextField("New branch (optional)", text: $branch)
                         .textFieldStyle(.roundedBorder)
-                    TextField("revision（可选）", text: $revision)
+                    TextField("Revision (optional)", text: $revision)
                         .textFieldStyle(.roundedBorder)
-                    Button("创建") {
+                    Button("Create") {
                         onCreate(path, branch, revision)
                         path = ""
                         branch = ""
@@ -61,7 +61,7 @@ struct WorktreePanel: View {
                     .disabled(path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || occupiedBranches.contains(branch))
                 }
                 if occupiedBranches.contains(branch), !branch.isEmpty {
-                    Text("分支 (branch) 已被其他 worktree 占用；请换一个分支或只填写 revision。")
+                    Text("The branch is already used by another worktree; choose another branch or enter only a revision.")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -111,20 +111,20 @@ struct WorktreePanel: View {
                     }
                 }
                 Spacer()
-                Button("打开") { onOpen(item.path) }
+                Button("Open") { onOpen(item.path) }
                     .buttonStyle(.borderless)
                 if item.locked {
-                    Button("解锁") { onUnlock(item.path) }
+                    Button("Unlock") { onUnlock(item.path) }
                         .buttonStyle(.borderless)
                 } else {
-                    Button("锁定") { onLock(item.path) }
+                    Button("Lock") { onLock(item.path) }
                         .buttonStyle(.borderless)
                 }
-                Button("删除") { onRemove(item.path, false) }
+                Button("Delete") { onRemove(item.path, false) }
                     .buttonStyle(.borderless)
                     .disabled(isMain)
                 if !isMain {
-                    Button("强制") { onRemove(item.path, true) }
+                    Button("Force") { onRemove(item.path, true) }
                         .buttonStyle(.borderless)
                         .foregroundStyle(.red)
                 }

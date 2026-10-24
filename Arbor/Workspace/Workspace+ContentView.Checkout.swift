@@ -6,8 +6,8 @@ extension ContentView {
 func checkoutFromLog(_ commit: CommitInfo) {
     guard let repo = logRepository(for: commit) else { return }
     let alert = NSAlert()
-    alert.messageText = "Checkout revision?"
-    alert.informativeText = "This will detach HEAD at \(commit.shortId). Uncommitted changes must be clean."
+    alert.messageText = String(localized: "Checkout revision?")
+    alert.informativeText = String(localized: "This will detach HEAD at \(commit.shortId). Uncommitted changes must be clean.")
     alert.addButton(withTitle: "Checkout")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -264,7 +264,7 @@ func presentMultiRootCheckoutRecovery(
     successfulTargets: [MultiRootBranchTarget] = []
 ) {
     let alert = NSAlert()
-    alert.messageText = "Local changes would be overwritten in multiple Git roots"
+    alert.messageText = String(localized: "Local changes would be overwritten in multiple Git roots")
     alert.informativeText = failures
         .map { "\($0.displayName): \($0.message)" }
         .joined(separator: "\n")
@@ -755,7 +755,7 @@ func presentMultiRootCheckoutAndUpdateRecovery(
     failures: [RootOperationResult]
 ) {
     let alert = NSAlert()
-    alert.messageText = "Local changes would be overwritten during checkout"
+    alert.messageText = String(localized: "Local changes would be overwritten during checkout")
     alert.informativeText = failures.map { "\($0.displayName): \($0.message)" }.joined(separator: "\n")
     alert.alertStyle = .warning
     alert.addButton(withTitle: rebase ? "Smart Checkout with Rebase" : "Smart Checkout and Update")
@@ -787,8 +787,8 @@ func presentMultiRootCheckoutAndUpdateRecovery(
 
 func promptForCheckoutReference() -> String? {
     let alert = NSAlert()
-    alert.messageText = "Checkout Tag or Revision"
-    alert.informativeText = "Enter reference (branch, tag) name or commit hash:"
+    alert.messageText = String(localized: "Checkout Tag or Revision")
+    alert.informativeText = String(localized: "Enter reference (branch, tag) name or commit hash:")
     let field = NSTextField(string: "")
     field.placeholderString = "branch, tag, or commit"
     field.frame = NSRect(x: 0, y: 0, width: 360, height: 24)

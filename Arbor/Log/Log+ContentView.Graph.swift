@@ -532,12 +532,12 @@ VStack(spacing: 0) {
     case .compare:
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("旧版本 / 分支", text: $comparisonWorkspace.revision1)
+                TextField("Old revision / branch", text: $comparisonWorkspace.revision1)
                     .textFieldStyle(.roundedBorder)
                 Text("→").foregroundStyle(.secondary)
-                TextField("新版本 / 分支", text: $comparisonWorkspace.revision2)
+                TextField("New revision / branch", text: $comparisonWorkspace.revision2)
                     .textFieldStyle(.roundedBorder)
-                Button("比较") {
+                Button("Compare") {
                     comparisonWorkspace.withWorkingTree = false
                     loadTreeChanges()
                 }
@@ -615,11 +615,11 @@ VStack(spacing: 0) {
     case .tags:
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                TextField("tag 名称", text: $tagWorkspace.name)
+                TextField("Tag name", text: $tagWorkspace.name)
                     .textFieldStyle(.roundedBorder)
-                TextField("指向 rev（空=HEAD）", text: $tagWorkspace.at)
+                TextField("Points to rev (empty = HEAD)", text: $tagWorkspace.at)
                     .textFieldStyle(.roundedBorder)
-                Button("创建") { createTag() }
+                Button("Create") { createTag() }
             }
             .padding(.horizontal, 8)
             if let feedback = tagWorkspace.feedback {
@@ -637,7 +637,7 @@ VStack(spacing: 0) {
                         .help(tag.message)
                     Spacer()
                     pushTagAction(for: tag.name)
-                    Button("删除") { deleteTag(tag.name) }
+                    Button("Delete") { deleteTag(tag.name) }
                 }
             }
             .listStyle(.inset)

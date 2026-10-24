@@ -282,7 +282,7 @@ struct PushDialogView: View {
                     }
                 }
                 if remotes.count > 1 && !remotes.contains(where: { $0.name == remote }) {
-                    Text("请选择 remote 后再推送。")
+                    Text("Select a remote before pushing.")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -364,7 +364,7 @@ struct PushDialogView: View {
             }
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { onCancel() }
+                Button("Cancel", role: .cancel) { onCancel() }
                 if remotes.isEmpty && !mode.allowsCommitOnlyFallbackWithoutRemote {
                     if showsConfigurationActions {
                         Button("Configure Remotes…") { onConfigureRemotes() }

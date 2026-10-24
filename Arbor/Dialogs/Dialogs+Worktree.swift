@@ -79,7 +79,7 @@ struct RebasedNewWorktreeDialog: View {
                     let cleaned = GitBranchNameCleanup.cleanUpOnTyping(value)
                     if cleaned != value { branch = cleaned }
                 }
-            Text("留空将直接检出来源引用；填写后会从来源引用创建新分支。")
+            Text("Leave empty to check out the source ref; enter a name to create a new branch from it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let branchError {

@@ -92,7 +92,7 @@ struct DiagnosticsSettingsView: View {
                     "Enable Git external conversion and textconv",
                     isOn: $gitExternalConversionEnabled
                 )
-                Text("关闭时，Arbor 不执行 .gitattributes 中的外部 filter、非 UTF-8 编码或 textconv；开启后通过 system Git 执行，并受单次转换超时保护。Diff Viewer 的 External Diff 仍需用户显式触发，并使用 Git 配置的 difftool。")
+                Text("When off, Arbor does not run external filters, non-UTF-8 conversion, or textconv from .gitattributes. When on, system Git runs them with a per-conversion timeout. External Diff in the Diff Viewer still requires an explicit action and uses the configured difftool.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -194,23 +194,23 @@ struct DiagnosticsSettingsView: View {
             }
 
             Section("General") {
-                Text("每个窗口只围绕一个项目；新项目可从工具栏打开并选择替换或新窗口。")
+                Text("Each window focuses on one project; open a new project from the toolbar and choose replace or new window.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Section("Updates") {
                 Toggle(
-                    "自动检查更新",
+                    "Automatically Check for Updates",
                     isOn: Binding(
                         get: { AppUpdateChecker.autoCheckEnabled },
                         set: { AppUpdateChecker.setAutoCheckEnabled($0) }
                     )
                 )
-                Text("每天最多联网检查一次 GitHub Releases；也可以随时手动检查。检查只读取最新版本号，不上传任何数据。")
+                Text("Check GitHub Releases online at most once a day; you can also check manually. Only the latest version number is read; no data is uploaded.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack {
-                    Button("立即检查更新") {
+                    Button("Check for Updates Now") {
                         runManualUpdateCheck()
                     }
                     .disabled(updateChecker.isChecking)
@@ -225,7 +225,7 @@ struct DiagnosticsSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let updateCheckReleaseURL {
-                    Button("打开下载页") {
+                    Button("Open Downloads Page") {
                         NSWorkspace.shared.open(updateCheckReleaseURL)
                     }
                 }

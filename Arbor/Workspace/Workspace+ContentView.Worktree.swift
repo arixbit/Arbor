@@ -130,7 +130,7 @@ func removeWorktree(path: String, force: Bool) {
     guard let repo else { return }
     let alert = NSAlert()
     alert.messageText = force ? "Force remove worktree?" : "Remove worktree?"
-    alert.informativeText = "\(path) 中未提交的修改可能会丢失。"
+    alert.informativeText = String(localized: "Uncommitted changes in \(path) may be lost.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: force ? "Force Remove" : "Remove")
     alert.addButton(withTitle: "Cancel")

@@ -337,7 +337,7 @@ func confirmAndDeleteMultiRootMergedBranch(
     }.joined(separator: "\n")
     let alert = NSAlert()
     alert.messageText = "Delete merged branch \(branchName) from \(targets.count) Git root\(targets.count == 1 ? "" : "s")?"
-    alert.informativeText = "This removes the local branch reference in:\n\(rootList)"
+    alert.informativeText = String(localized: "This removes the local branch reference in:\n\(rootList)")
     alert.addButton(withTitle: "Delete")
     alert.addButton(withTitle: "Cancel")
     alert.buttons.first?.hasDestructiveAction = true

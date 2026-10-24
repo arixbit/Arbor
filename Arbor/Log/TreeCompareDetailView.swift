@@ -162,7 +162,7 @@ struct TreeCompareDetailView: View {
                     ProgressView()
                 }
             } else {
-                Text("选择一个文件查看比较结果").foregroundStyle(.secondary)
+                Text("Select a file to view the comparison").foregroundStyle(.secondary)
             }
             Spacer()
         }

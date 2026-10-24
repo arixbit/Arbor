@@ -396,8 +396,8 @@ func doFetchUnshallow() {
         return
     }
     let alert = NSAlert()
-    alert.messageText = "Fetch complete history?"
-    alert.informativeText = "这会把当前浅克隆补全为完整历史，并增加本地磁盘占用。"
+    alert.messageText = String(localized: "Fetch complete history?")
+    alert.informativeText = String(localized: "This fetch unshallows the repository and increases local disk usage.")
     alert.alertStyle = .warning
     alert.addButton(withTitle: "Fetch Full History")
     alert.addButton(withTitle: "Cancel")

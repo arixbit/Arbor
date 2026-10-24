@@ -45,8 +45,11 @@ struct ConflictDetailView: View {
     @State var conflict: ConflictFile?
     @State var conflictBatchPreview: ConflictBatchPreview?
     @State var conflictIsBinary = false
+    @State var operationKind: OperationKind?
+    @State var mergeSourceReference: String?
     @State var conflictError: String?
     @State var feedback: String?
+    @State var feedbackIsSuccess = false
     @State var saving = false
     @State var externalToolWorking = false
     @State var externalToolCancelling = false
@@ -70,6 +73,34 @@ struct ConflictDetailView: View {
     @StateObject var bridge = MergeEditorBridge()
 
     var isPatchMode: Bool { patchText != nil }
+
+    /// Git's ours/theirs sides keep the same names in every operation, but
+    /// their meaning changes: ours is the current branch during a merge and
+    /// the upstream during a rebase; theirs is the incoming commit. Label the
+    /// panes by operation instead of calling one side "Remote", which is
+    /// wrong for rebase, cherry-pick, revert and stash restore.
+    var oursSideTitle: String {
+        switch operationKind {
+        case .rebase: return String(localized: "Upstream (ours)")
+        case .merge, .cherryPick, .revert: return String(localized: "Current branch (ours)")
+        default: return String(localized: "Ours")
+        }
+    }
+
+    var theirsSideTitle: String {
+        switch operationKind {
+        case .rebase: return String(localized: "Your commit (theirs)")
+        case .merge:
+            if let source = mergeSourceReference, !source.isEmpty {
+                return String(localized: "%@ (theirs)")
+                    .replacingOccurrences(of: "%@", with: source)
+            }
+            return String(localized: "Merged branch (theirs)")
+        case .cherryPick: return String(localized: "Picked commit (theirs)")
+        case .revert: return String(localized: "Reverted commit (theirs)")
+        default: return String(localized: "Theirs")
+        }
+    }
 
     var selectedPatchHunk: ApplyPatchConflictHunk? {
         guard isPatchMode else { return nil }
@@ -110,24 +141,24 @@ struct ConflictDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text((isPatchMode ? "补丁冲突：" : "冲突：") + path)
+                Text(isPatchMode ? "Patch conflict: \(path)" : "Conflict: \(path)")
                     .font(.headline).lineLimit(1)
                 Spacer()
                 if patchText != nil {
                     Button("Patch") { showPatchPreview = true }
-                        .help("查看当前 Apply Patch 冲突的实际补丁")
+                        .help("View the actual patch for this Apply Patch conflict")
                     Button("Local Diff") { loadLocalDiff() }
-                        .help("比较本地冲突阶段与当前结果编辑器")
+                        .help("Compare the local conflict stage with the current result editor")
                 }
                 Button("Reset") { resetConflictFile() }
-                    .help("从 index stages 重新生成冲突 marker，并清理当前文件的 hunk 决策")
+                    .help("Regenerate conflict markers from the index stages and clear this file's hunk decisions")
                     .disabled(conflict == nil || conflictIsBinary || saving)
                 if !isPatchMode {
                     Button("Accept Both") { acceptFile(.both) }
-                        .help("保留双方内容（ours 在上）")
+                        .help("Keep both sides (ours first)")
                         .disabled(conflict == nil || conflictIsBinary)
                     Button("Base") { showBase = true }
-                        .help("查看共同祖先版本")
+                        .help("View the common ancestor")
                         .disabled(conflict == nil || conflictIsBinary)
                     Button(externalToolWorking ? (externalToolCancelling ? "Canceling…" : "Cancel") : "External Tool") {
                         if externalToolWorking {
@@ -147,8 +178,8 @@ struct ConflictDetailView: View {
                     Button("Settings…") { showExternalToolSettings = true }
                         .disabled(repo == nil || externalToolWorking || saving)
                 }
-                Button("刷新") { load() }
-                Button(saving ? "保存中…" : "标记已解决") { markResolved() }
+                Button("Refresh") { load() }
+                Button(saving ? "Saving…" : "Mark Resolved") { markResolved() }
                     .disabled(saving || repo == nil || conflict == nil || conflictIsBinary)
             }
             .padding(10)
@@ -157,8 +188,8 @@ struct ConflictDetailView: View {
                 Text(conflictError).foregroundStyle(.red).padding()
                 Spacer()
             } else if conflict == nil, let feedback {
-                Label(feedback, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                Label(feedback, systemImage: feedbackIsSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(feedbackIsSuccess ? .green : .red)
                     .padding()
                 Spacer()
             } else if conflictIsBinary {
@@ -168,6 +199,8 @@ struct ConflictDetailView: View {
                                 initialResult: conflict.result, path: path, bridge: bridge,
                                 patchText: patchText,
                                 patchHunks: patchHunks,
+                                oursTitle: oursSideTitle,
+                                theirsTitle: theirsSideTitle,
                                 onSelectPatchHunk: { selectedPatchHunkID = $0.id },
                                 onApplyPatchHunk: { applySelectedPatchHunk($0) },
                                 onCopyPatchHunk: { copyPatchHunk($0) },
@@ -257,33 +290,34 @@ struct ConflictDetailView: View {
 
     var blockToolbar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Button("全部接受本地") { acceptAllBlocks(.ours) }
-                Button("全部接受远程") { acceptAllBlocks(.theirs) }
-                Button("Resolve Simple") { applyConflictBatch(.resolveSimple) }
-                    .help("Resolve all conflict blocks whose two sides are identical")
-                    .disabled(saving || bridge.blocks.isEmpty)
-                Button("Apply Left Non-conflicts") {
-                    applyConflictBatch(.applyOursNonConflicting)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Button("Accept All Ours") { acceptAllBlocks(.ours) }
+                    Button("Accept All Theirs") { acceptAllBlocks(.theirs) }
+                    Button("Resolve Simple") { applyConflictBatch(.resolveSimple) }
+                        .help("Resolve all conflict blocks whose two sides are identical")
+                        .disabled(saving || bridge.blocks.isEmpty)
+                    Button("Apply Ours Non-conflicts") {
+                        applyConflictBatch(.applyOursNonConflicting)
+                    }
+                        .help("Apply only non-conflicting changes from the local side")
+                        .disabled(saving || bridge.blocks.isEmpty)
+                    Button("Apply Theirs Non-conflicts") {
+                        applyConflictBatch(.applyTheirsNonConflicting)
+                    }
+                        .help("Apply only non-conflicting changes from the remote side")
+                        .disabled(saving || bridge.blocks.isEmpty)
+                    Button("↑") { navigateBlock(-1) }
+                        .help("Previous Conflict Block")
+                        .disabled(bridge.blocks.isEmpty)
+                    Text(bridge.blocks.isEmpty ? "No conflict blocks" : "Block \(selectedBlock + 1)/\(bridge.blocks.count)")
+                        .font(.caption).foregroundStyle(.secondary).frame(minWidth: 90)
+                    Button("↓") { navigateBlock(1) }
+                        .help("Next Conflict Block")
+                        .disabled(bridge.blocks.isEmpty)
                 }
-                    .help("Apply only non-conflicting changes from the local side")
-                    .disabled(saving || bridge.blocks.isEmpty)
-                Button("Apply Right Non-conflicts") {
-                    applyConflictBatch(.applyTheirsNonConflicting)
-                }
-                    .help("Apply only non-conflicting changes from the remote side")
-                    .disabled(saving || bridge.blocks.isEmpty)
-                Spacer()
-                Button("↑") { navigateBlock(-1) }
-                    .help("上一个冲突块")
-                    .disabled(bridge.blocks.isEmpty)
-                Text(bridge.blocks.isEmpty ? "无冲突块" : "块 \(selectedBlock + 1)/\(bridge.blocks.count)")
-                    .font(.caption).foregroundStyle(.secondary).frame(minWidth: 90)
-                Button("↓") { navigateBlock(1) }
-                    .help("下一个冲突块")
-                    .disabled(bridge.blocks.isEmpty)
+                .padding(6)
             }
-            .padding(6)
             if let preview = conflictBatchPreview,
                preview.simpleBlocks + preview.oursOnlyBlocks + preview.theirsOnlyBlocks + preview.trueConflictBlocks > 0 {
                 Text("Safe blocks: \(preview.simpleBlocks) simple · \(preview.oursOnlyBlocks) local-only · \(preview.theirsOnlyBlocks) remote-only · \(preview.trueConflictBlocks) overlapping")
@@ -304,7 +338,7 @@ struct ConflictDetailView: View {
             }
             if let feedback {
                 Text(feedback).font(.caption)
-                    .foregroundStyle(feedback.hasPrefix("已") ? .green : .red)
+                    .foregroundStyle(feedbackIsSuccess ? .green : .red)
                     .padding(.horizontal, 8).padding(.bottom, 6)
             }
         }
@@ -312,30 +346,31 @@ struct ConflictDetailView: View {
 
     var applyPatchToolbar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Button("Keep All Local") { acceptAllBlocks(.ours) }
-                Button("Apply All Patch") { acceptAllBlocks(.theirs) }
-                Button("Apply Non-Conflicts") { applyNonConflictingPatchHunks() }
-                    .disabled(patchHunks.allSatisfy { $0.resolution.isResolved || $0.resolution == .notApplied })
-                Button("Apply Selected Changes") { applySelectedPatchHunk() }
-                    .help("将结果或 Patch 编辑器选中的 patch changes 应用到结果编辑器")
-                    .disabled(!canApplySelectedPatchHunk || saving)
-                Button("Ignore Selected Changes") { ignoreSelectedPatchHunk() }
-                    .help("忽略选中的 patch hunk，并保留当前结果")
-                    .disabled(!canIgnoreSelectedPatchHunk || saving)
-                Spacer()
-                Button("Previous Unresolved") { navigatePatchHunk(-1) }
-                    .help("跳到上一个未解决 patch hunk")
-                    .disabled(unresolvedPatchHunks.isEmpty)
-                Text(patchHunkSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 180)
-                Button("Next Unresolved") { navigatePatchHunk(1) }
-                    .help("跳到下一个未解决 patch hunk")
-                    .disabled(unresolvedPatchHunks.isEmpty)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Button("Keep All Local") { acceptAllBlocks(.ours) }
+                    Button("Apply All Patch") { acceptAllBlocks(.theirs) }
+                    Button("Apply Non-Conflicts") { applyNonConflictingPatchHunks() }
+                        .disabled(patchHunks.allSatisfy { $0.resolution.isResolved || $0.resolution == .notApplied })
+                    Button("Apply Selected Changes") { applySelectedPatchHunk() }
+                        .help("Apply the patch changes selected in the result or Patch editor to the result editor")
+                        .disabled(!canApplySelectedPatchHunk || saving)
+                    Button("Ignore Selected Changes") { ignoreSelectedPatchHunk() }
+                        .help("Ignore the selected patch hunks and keep the current result")
+                        .disabled(!canIgnoreSelectedPatchHunk || saving)
+                    Button("Previous Unresolved") { navigatePatchHunk(-1) }
+                        .help("Go to the Previous Unresolved Patch Hunk")
+                        .disabled(unresolvedPatchHunks.isEmpty)
+                    Text(patchHunkSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 180)
+                    Button("Next Unresolved") { navigatePatchHunk(1) }
+                        .help("Go to the Next Unresolved Patch Hunk")
+                        .disabled(unresolvedPatchHunks.isEmpty)
+                }
+                .padding(6)
             }
-            .padding(6)
             if patchHunks.isEmpty {
                 Text("No structured text hunks for this patch file; use the result editor or file-level actions.")
                     .font(.caption)
@@ -355,7 +390,7 @@ struct ConflictDetailView: View {
             }
             if let feedback {
                 Text(feedback).font(.caption)
-                    .foregroundStyle(feedback.hasPrefix("已") ? .green : .red)
+                    .foregroundStyle(feedbackIsSuccess ? .green : .red)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
             }
@@ -391,12 +426,14 @@ struct ConflictDetailView: View {
             Button {
                 selectedBlock = b.index
             } label: {
-                Text(isPatchMode ? "Patch Block \(b.index + 1)" : "块 \(b.index + 1)").font(.caption2)
+                Text(isPatchMode ? "Patch Block \(b.index + 1)" : "Block \(b.index + 1)").font(.caption2)
             }
             .buttonStyle(.plain)
-            Button("本地") { resolveBlock(b.index, .ours) }
-            Button(isPatchMode ? "应用补丁" : "远程") { resolveBlock(b.index, .theirs) }
-            Button("两者") { resolveBlock(b.index, .both) }
+            Button("Ours") { resolveBlock(b.index, .ours) }
+                .help(oursSideTitle)
+            Button(isPatchMode ? "Apply Patch" : "Theirs") { resolveBlock(b.index, .theirs) }
+                .help(theirsSideTitle)
+            Button("Both") { resolveBlock(b.index, .both) }
         }
         .padding(4)
         .background(isSel ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08),
@@ -415,7 +452,8 @@ struct ConflictDetailView: View {
         if isPatchMode {
             guard !patchHunks.isEmpty else {
                 bridge.acceptAll(side)
-                feedback = side == .ours ? "已全部保留本地结果" : "已全部应用补丁"
+                feedbackIsSuccess = true
+                feedback = side == .ours ? "Kept all local results" : "Applied all patch hunks"
                 return
             }
             var resolved = 0
@@ -440,13 +478,15 @@ struct ConflictDetailView: View {
             }
             refreshUnresolvedPatchHunks()
             selectedPatchHunkID = nil
+            feedbackIsSuccess = resolved > 0
             feedback = side == .ours
-                ? "已忽略 \(resolved) 个 patch hunk"
-                : "已应用 \(resolved) 个 patch hunk"
+                ? "Ignored \(resolved) patch hunk(s)"
+                : "Applied \(resolved) patch hunk(s)"
             return
         }
         bridge.acceptAll(side)
-        feedback = side == .ours ? "已全部接受本地" : "已全部接受远程"
+        feedbackIsSuccess = true
+        feedback = side == .ours ? "All local conflicts accepted" : "All remote conflicts accepted"
     }
 
     func applyConflictBatch(_ action: ConflictBatchAction) {
@@ -470,6 +510,7 @@ struct ConflictDetailView: View {
                         self.onChanged()
                         return
                     }
+                    self.feedbackIsSuccess = result.fullyResolved
                     self.feedback = result.fullyResolved
                         ? "All eligible conflicts resolved"
                         : "Applied \(result.appliedBlocks) safe block(s); \(result.remainingBlocks) remain"
@@ -481,6 +522,7 @@ struct ConflictDetailView: View {
                     self.bridge.setResultEditingEnabled(true)
                     self.saving = false
                     guard self.repo?.gitDir() == repositoryID, self.path == path else { return }
+                    self.feedbackIsSuccess = false
                     self.feedback = "\(error)"
                 }
             }
@@ -567,8 +609,9 @@ struct ConflictDetailView: View {
             }
         }
         refreshUnresolvedPatchHunks()
-        feedback = "已应用 (applied + alreadyApplied) 个 patch change"
-            + (skipped == 0 ? "" : "，跳过 (skipped) 个不可精确应用的 change")
+        feedbackIsSuccess = skipped == 0
+        feedback = "Applied \(applied + alreadyApplied) patch change(s)"
+            + (skipped == 0 ? "" : "; skipped \(skipped) change(s) that could not be applied exactly")
         selectNextUnresolvedPatchHunkIfNeeded()
     }
 
@@ -589,7 +632,8 @@ struct ConflictDetailView: View {
             setPatchHunkResolution(hunk.id, .ignored)
         }
         refreshUnresolvedPatchHunks()
-        feedback = "已忽略 (candidates.count) 个 patch change"
+        feedbackIsSuccess = true
+        feedback = "Ignored \(candidates.count) patch change(s)"
         selectNextUnresolvedPatchHunkIfNeeded()
     }
 
@@ -598,7 +642,8 @@ struct ConflictDetailView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content, forType: .string)
         selectedPatchHunkID = hunk.id
-        feedback = "已复制 Hunk \(hunk.index + 1) 的补丁内容"
+        feedbackIsSuccess = true
+        feedback = "Copied patch content for Hunk \(hunk.index + 1)"
     }
 
     func applyNonConflictingPatchHunks() {
@@ -628,9 +673,10 @@ struct ConflictDetailView: View {
         refreshUnresolvedPatchHunks()
         selectNextUnresolvedPatchHunkIfNeeded()
         let total = appliedCount + automaticallyResolvedCount
+        feedbackIsSuccess = total > 0
         feedback = total == 0
-            ? "没有可自动应用的 patch hunk"
-            : "已自动处理 \(total) 个 patch hunk"
+            ? "No patch hunks could be applied automatically"
+            : "Processed \(total) patch hunk(s) automatically"
     }
 
     func setPatchHunkResolution(
@@ -663,7 +709,8 @@ struct ConflictDetailView: View {
                 resolution: rawResolution
             )
         } catch {
-            feedback = "保存 patch hunk 状态失败：\(error)"
+            feedbackIsSuccess = false
+            feedback = "Failed to save patch hunk state: \(error)"
             return false
         }
         return true
@@ -692,13 +739,13 @@ struct ConflictDetailView: View {
     var baseSheet: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Base（共同祖先）").font(.headline)
+                Text("Base (common ancestor)").font(.headline)
                 Spacer()
-                Button("关闭") { showBase = false }
+                Button("Close") { showBase = false }
             }.padding(10)
             Divider()
             ScrollView([.vertical, .horizontal]) {
-                Text(conflict?.base ?? "（无）")
+                Text(conflict?.base ?? "None")
                     .font(.system(.body, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
@@ -712,7 +759,7 @@ struct ConflictDetailView: View {
             HStack {
                 Text("Patch to Apply").font(.headline)
                 Spacer()
-                Button("关闭") { showPatchPreview = false }
+                Button("Close") { showPatchPreview = false }
             }
             .padding(10)
             Divider()
@@ -758,7 +805,7 @@ struct ConflictDetailView: View {
             HStack {
                 Text("Local → Result").font(.headline)
                 Spacer()
-                Button("关闭") { showLocalDiff = false }
+                Button("Close") { showLocalDiff = false }
             }
             .padding(10)
             Divider()
@@ -838,7 +885,7 @@ struct ConflictDetailView: View {
                 }
             } catch {
                 await MainActor.run {
-                    self.localDiffError = "无法生成 Local Diff：\(error)"
+                    self.localDiffError = "Could not build the local diff: \(error)"
                     self.localDiffLoading = false
                 }
             }
@@ -883,13 +930,15 @@ struct ConflictDetailView: View {
                         self.conflict = nil
                         self.conflictIsBinary = false
                         self.conflictBatchPreview = nil
-                        self.conflictError = "冲突文件已解决或不再存在：\(path)"
+                        self.conflictError = "The conflict file is resolved or no longer exists: \(path)"
                         self.patchHunks = []
                         self.selectedPatchHunkID = nil
                     }
                     return
                 }
                 let cf = workspaceFile.file
+                let operationKind = workspace.operation
+                let mergeSourceReference = repo.mergeSourceReference()
                 let batchPreview = directPatchText == nil
                     ? try? repo.conflictBatchPreview(path: path)
                     : nil
@@ -919,6 +968,8 @@ struct ConflictDetailView: View {
                     }
                     self.conflict = cf
                     self.conflictIsBinary = workspaceFile.binary
+                    self.operationKind = operationKind
+                    self.mergeSourceReference = mergeSourceReference
                     self.conflictBatchPreview = batchPreview
                     self.conflictError = nil
                     self.selectedBlock = 0
@@ -960,9 +1011,12 @@ struct ConflictDetailView: View {
                 try repo.acceptConflict(path: path, pick: pick)
                 await MainActor.run {
                     self.saving = false
-                    let side = pick == .both ? "双方" : pick == .ours
-                        ? "本地" : self.isPatchMode ? "补丁" : "远程"
-                    self.feedback = "已接受" + side
+                    self.feedbackIsSuccess = true
+                    self.feedback = pick == .both
+                        ? "Accepted both sides"
+                        : pick == .ours
+                            ? "Accepted the local side"
+                            : (self.isPatchMode ? "Applied the patch side" : "Accepted the remote side")
                     self.onChanged()
                 }
             } catch {
@@ -984,18 +1038,23 @@ struct ConflictDetailView: View {
             do {
                 try repo.resetConflict(path: path)
                 let resetFeedback: String
+                let resetSucceeded: Bool
                 if let restoreName {
                     do {
                         try repo.shelveClearRestoreHunkResolutions(name: restoreName, path: path)
-                        resetFeedback = "已重置为未解决状态"
+                        resetFeedback = "Reset to unresolved"
+                        resetSucceeded = true
                     } catch {
-                        resetFeedback = "已重置为未解决状态，但清理恢复状态失败：\(error)"
+                        resetFeedback = "Reset to unresolved, but clearing the recovery state failed: \(error)"
+                        resetSucceeded = false
                     }
                 } else {
-                    resetFeedback = "已重置为未解决状态"
+                    resetFeedback = "Reset to unresolved"
+                    resetSucceeded = true
                 }
                 await MainActor.run {
                     self.saving = false
+                    self.feedbackIsSuccess = resetSucceeded
                     self.feedback = resetFeedback
                     self.onChanged()
                     self.load()
@@ -1024,7 +1083,8 @@ struct ConflictDetailView: View {
             return
         }
         if !parseConflictMarkers(content).isEmpty {
-            feedback = "仍有未解决的冲突标记；请先解决每个冲突块"
+            feedbackIsSuccess = false
+            feedback = "There are still unresolved conflict markers; resolve every conflict block first"
             return
         }
         resolveEditedContent(content)
@@ -1053,7 +1113,8 @@ struct ConflictDetailView: View {
                         self.onChanged()
                         return
                     }
-                    self.feedback = "已标记为已解决"
+                    self.feedbackIsSuccess = true
+                    self.feedback = "Marked as resolved"
                     self.onChanged()
                 }
             } catch {
@@ -1061,6 +1122,7 @@ struct ConflictDetailView: View {
                     self.bridge.setResultEditingEnabled(true)
                     self.saving = false
                     guard self.repo?.gitDir() == repositoryID, self.path == path else { return }
+                    self.feedbackIsSuccess = false
                     self.feedback = "\(error)"
                 }
             }

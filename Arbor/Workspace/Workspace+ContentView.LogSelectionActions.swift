@@ -20,8 +20,8 @@ func revertFromLog(_ commit: CommitInfo) {
 func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
     guard let repo = logRepository(for: commit) else { return }
     let alert = NSAlert()
-    alert.messageText = "Drop selected changes?"
-    alert.informativeText = "The selected files will be removed from \(commit.shortId) and the rewritten history will replace the current branch tip."
+    alert.messageText = String(localized: "Drop selected changes?")
+    alert.informativeText = String(localized: "The selected files will be removed from \(commit.shortId) and the rewritten history will replace the current branch tip.")
     alert.addButton(withTitle: "Drop Changes")
     alert.addButton(withTitle: "Cancel")
     guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -90,8 +90,8 @@ func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
 func extractSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
     guard let repo = logRepository(for: commit) else { return }
     let alert = NSAlert()
-    alert.messageText = "Extract selected changes"
-    alert.informativeText = "The selected files will become a new commit after \(commit.shortId)."
+    alert.messageText = String(localized: "Extract selected changes")
+    alert.informativeText = String(localized: "The selected files will become a new commit after \(commit.shortId).")
     let messageField = NSTextField(string: commit.summary)
     messageField.placeholderString = "New commit message"
     messageField.frame = NSRect(x: 0, y: 0, width: 360, height: 24)

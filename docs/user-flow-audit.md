@@ -71,13 +71,15 @@ bare remote 上执行。目的是回答三个问题：整条路径能否走通�
 
 按影响从高到低：
 
-1. **冲突两侧标题与操作语义不一致。** Arbor 的合并编辑器固定显示
-   `Local (ours)` / `Remote (theirs)`。在 merge 中这还能理解；在 rebase
-   中 Git 的 `ours` 是上游/新基准，`theirs` 才是正在重放的本地提交；
+1. **冲突两侧标题与操作语义不一致（已修复）。** Arbor 的合并编辑器曾固定
+   显示 `Local (ours)` / `Remote (theirs)`。在 merge 中这还能理解；在
+   rebase 中 Git 的 `ours` 是上游/新基准，`theirs` 才是正在重放的本地提交；
    cherry-pick 和 revert 中 `ours` 是目标分支，`theirs` 是被应用的提交；
-   stash 恢复时 `ours` 是工作区，`theirs` 是保存的现场。Rebased 的合并
-   工具按操作显示 `Yours` / `Theirs`（可带分支名），不会把 `theirs` 一律
-   说成“远程”。这是冲突页 UI 对照的首要修正项。
+   stash 恢复时 `ours` 是工作区，`theirs` 是保存的现场。现在标题按操作
+   显示：merge 为 `Current branch (ours)` / `<source> (theirs)`，rebase 为
+   `Upstream (ours)` / `Your commit (theirs)`，cherry-pick/revert 为
+   `Current branch (ours)` / `Picked|Reverted commit (theirs)`；逐块按钮和
+   悬停提示也改用 `Ours` / `Theirs`，不再把 `theirs` 一律称为“远程”。
 2. **冲突页有大量绕过 String Catalog 的中文。** 包括
    `全部接受本地/远程`、`标记已解决`、`块 n/N`、`应用补丁/远程`、
    `Base（共同祖先）`、`关闭`、`刷新` 以及 patch hunk 反馈。英文界面会
@@ -89,8 +91,9 @@ bare remote 上执行。目的是回答三个问题：整条路径能否走通�
    `冲突文件已解决或不再存在：...`、`已接受...`。这些不在 i18n 审计的
    直接字面量模式里；本轮已改成英文 key + 插值，后续随 catalog 翻译。
 5. **`Base` / `Both` 等动作名称与 Rebased 的 `Accept Yours/Theirs`
-   词汇不同。** 语义一致，但中文用户会看到 “Ours/Theirs” 与
-   “本地/远程”混用。这一项在冲突页 UI 对照轮统一，不在本轮改动词表。
+   词汇仍不完全相同。** 本轮把冲突侧统一成 Git 原生的 `Ours` / `Theirs`，
+   与 Rebased 的 `Yours` / `Theirs` 仍有一个词的差异；语义映射已一致，
+   视觉与词表留到冲突页 UI 对照轮确认。
 
 ## 本轮修复
 
@@ -102,7 +105,22 @@ bare remote 上执行。目的是回答三个问题：整条路径能否走通�
   - 反馈颜色由 `feedbackIsSuccess` 决定；
   - 冲突页/合并编辑器的用户可见中文改为英文 key；
   - 失败与重置提示改为插值文本。
+- 冲突页工具条在窄窗口下改为横向滚动，Diff 头部（包含中文“忽略空白/
+  CRLF 敏感/选择模式/任意版本比较”）也拆成两行横向滚动区，长中文不再
+  被固定 HStack 挤掉。
 - 证据与边界：引擎全量测试通过；UI 交互仍受系统自动化授权阻塞。
+
+## i18n 补齐结果
+
+- `scripts/i18n-audit.py` 现在也扫描 `String(localized:)`、NSAlert 的
+  `messageText` / `informativeText` 和 `addButton(withTitle:)`，不再只看
+  SwiftUI 的直接字面量。
+- 审计结果：扫描 1497 个字面量，缺失 catalog key 0、缺 zh-Hans 0、
+  硬编码中文 0（基线已清零）。
+- 原先 96 条硬编码中文、125 条未翻译、380 条未登记 key 全部补齐；
+  `scripts/i18n-zh-hans-additions.json` 保存新增翻译，seed 脚本合并它。
+- CI 的 i18n 步骤从 `--only-hardcoded` 改为完整审计，后续新增文案
+  必须同时提供中英两边。
 
 ## 后续
 

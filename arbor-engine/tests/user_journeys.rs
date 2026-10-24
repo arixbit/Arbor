@@ -6,9 +6,7 @@
 
 mod common;
 
-use arbor_engine::{
-    BlockDecision, ChangeKind, PickKind, ResetMode,
-};
+use arbor_engine::{BlockDecision, ChangeKind, PickKind, ResetMode};
 use common::TestRepo;
 
 fn bare_remote(r: &TestRepo, name: &str) -> tempfile::TempDir {
@@ -74,7 +72,11 @@ fn daily_flow_open_edit_partial_stage_commit_push() {
         .find(|entry| entry.path == "notes.txt")
         .expect("notes.txt");
     assert_eq!(entry.staged, ChangeKind::Modified, "staged hunk");
-    assert_eq!(entry.unstaged, ChangeKind::Modified, "remaining worktree edit");
+    assert_eq!(
+        entry.unstaged,
+        ChangeKind::Modified,
+        "remaining worktree edit"
+    );
 
     let commit = repo
         .commit_with_options(
@@ -100,7 +102,10 @@ fn daily_flow_open_edit_partial_stage_commit_push() {
         !committed.contains("local"),
         "commit excludes the unstaged hunk"
     );
-    assert!(r.read("notes.txt").contains("local"), "worktree keeps the rest");
+    assert!(
+        r.read("notes.txt").contains("local"),
+        "worktree keeps the rest"
+    );
 
     repo.push_with_options(Some("origin".into()), "main".into(), false, false)
         .expect("push");
@@ -164,7 +169,12 @@ fn branch_flow_fetch_checkout_merge_conflict_continue_and_rebase_abort() {
         "rebase side",
     );
     r.git(&["checkout", "-q", "main"]);
-    common::commit(&r.path, "file.txt", "line1\nmain-side\nline3\n", "main side");
+    common::commit(
+        &r.path,
+        "file.txt",
+        "line1\nmain-side\nline3\n",
+        "main side",
+    );
     r.git(&["checkout", "-q", "rebase-me"]);
     let rebase_side_head = r.git(&["rev-parse", "HEAD"]);
     let paused = repo
@@ -189,10 +199,11 @@ fn history_flow_diff_cherry_pick_revert_reset_stash() {
     let repo = r.open();
 
     // 查看 Diff：提交与路径过滤。
-    let commit_diff = repo
-        .commit_diff(two.clone(), None)
-        .expect("commit diff");
-    assert!(commit_diff.changes.iter().any(|file| file.path == "file.txt"));
+    let commit_diff = repo.commit_diff(two.clone(), None).expect("commit diff");
+    assert!(commit_diff
+        .changes
+        .iter()
+        .any(|file| file.path == "file.txt"));
     let path_diff = repo
         .diff_commits_with_paths(
             base.clone(),
@@ -224,7 +235,9 @@ fn history_flow_diff_cherry_pick_revert_reset_stash() {
     repo.reset(target.clone(), ResetMode::Soft)
         .expect("soft reset");
     assert_eq!(r.git(&["rev-parse", "HEAD"]), target);
-    assert!(r.git(&["diff", "--cached", "--name-only"]).contains("file.txt"));
+    assert!(r
+        .git(&["diff", "--cached", "--name-only"])
+        .contains("file.txt"));
     assert_eq!(r.read("file.txt"), "one\n");
 
     // Stash 保存现场（含 index）→ 工作区干净 → Apply --index 恢复 → Pop 消费。
@@ -235,7 +248,9 @@ fn history_flow_diff_cherry_pick_revert_reset_stash() {
     assert_eq!(stashes.len(), 1);
     repo.stash_apply_with_index(0, true).expect("stash apply");
     assert_eq!(r.read("file.txt"), "one\n");
-    assert!(r.git(&["diff", "--cached", "--name-only"]).contains("file.txt"));
+    assert!(r
+        .git(&["diff", "--cached", "--name-only"])
+        .contains("file.txt"));
     assert_eq!(repo.stash_list().unwrap().len(), 1, "apply keeps the stash");
     repo.stash_drop(0).expect("drop applied stash");
     assert!(repo.stash_list().unwrap().is_empty());

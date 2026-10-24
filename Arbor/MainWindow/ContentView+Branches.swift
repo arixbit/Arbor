@@ -384,7 +384,7 @@ extension ContentView {
                 onDeleteTag: tagDelete,
                 onRenameTag: { old in
                     let alert = NSAlert()
-                    alert.messageText = "Rename Tag"
+                    alert.messageText = String(localized: "Rename Tag")
                     let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
                     field.stringValue = old
                     alert.accessoryView = field
@@ -495,7 +495,7 @@ extension ContentView {
 
     func renameBranchFromPopup(_ oldName: String) {
         let alert = NSAlert()
-        alert.messageText = "Rename Branch"
+        alert.messageText = String(localized: "Rename Branch")
         let field = NSTextField(string: oldName)
         field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
         alert.accessoryView = field
@@ -511,8 +511,8 @@ extension ContentView {
 
     private func deleteBranchFromPopup(_ name: String) {
         let alert = NSAlert()
-        alert.messageText = "Delete branch \(name)?"
-        alert.informativeText = "This removes the local branch reference. Unmerged commits are not deleted from the object database immediately."
+        alert.messageText = String(localized: "Delete branch \(name)?")
+        alert.informativeText = String(localized: "This removes the local branch reference. Unmerged commits are not deleted from the object database immediately.")
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true

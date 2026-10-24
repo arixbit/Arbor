@@ -289,12 +289,12 @@ extension ContentView {
             if !isPresented { operationRecovery.initialPath = nil }
         }
         .alert("打开另一个项目？", isPresented: $projectWorkspace.showSwitchAlert) {
-            Button("替换当前窗口") { replacePendingProject() }
-            Button("新窗口") {
+            Button("Replace Current Window") { replacePendingProject() }
+            Button("New Window") {
                 openWindow(id: "project", value: projectWorkspace.pendingPath)
                 projectWorkspace.pendingPath = nil
             }
-            Button("取消", role: .cancel) { projectWorkspace.pendingPath = nil }
+            Button("Cancel", role: .cancel) { projectWorkspace.pendingPath = nil }
         } message: {
             Text("当前窗口正在显示 \(projectWorkspace.repository?.displayName() ?? "一个项目")。选择如何打开新项目。")
         }

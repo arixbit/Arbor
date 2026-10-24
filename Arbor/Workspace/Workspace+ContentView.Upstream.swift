@@ -68,8 +68,8 @@ func unsetBranchUpstream(_ branch: String) {
 /// 错误地复用到另一个 root。
 func setBranchUpstreamInRoot(rootPath: String, branch: String) {
     let alert = NSAlert()
-    alert.messageText = "Set Upstream"
-    alert.informativeText = "输入 remote-tracking branch，例如 origin/\(branch)。"
+    alert.messageText = String(localized: "Set Upstream")
+    alert.informativeText = String(localized: "Enter a remote-tracking branch, for example origin/\(branch).")
     let field = NSTextField(string: "origin/\(branch)")
     field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
     alert.accessoryView = field

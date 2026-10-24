@@ -54,7 +54,7 @@ struct LogCommitInspectorView: View {
                     Image(systemName: "arrow.left.circle")
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                    Text("选择一个提交查看 Changes")
+                    Text("Select a commit to view Changes")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

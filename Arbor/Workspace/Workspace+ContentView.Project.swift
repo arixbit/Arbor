@@ -66,8 +66,8 @@ func initializeProject(at requestedPath: String) {
     if let existingRoot = gitInitializationExistingRepositoryRoot(path: selectedPath) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Directory Already Belongs to Git"
-        alert.informativeText = "\(selectedPath) is inside the Git repository at \(existingRoot). Initialize Git again?"
+        alert.messageText = String(localized: "Directory Already Belongs to Git")
+        alert.informativeText = String(localized: "\(selectedPath) is inside the Git repository at \(existingRoot). Initialize Git again?")
         alert.addButton(withTitle: "Initialize Anyway")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true

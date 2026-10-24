@@ -239,7 +239,7 @@ struct SearchEverywhereView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
                     if normalizedQuery.isEmpty {
-                        Text("输入以搜索分支、提交、Tag 或 Git 动作")
+                        Text("Search branches, commits, tags and actions")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(8)
@@ -297,7 +297,7 @@ struct SearchEverywhereView: View {
                             }
                         }
                         if !hasResults && !isSearchingCommits {
-                            Text("无匹配结果")
+                            Text("No matching results")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(8)
@@ -306,7 +306,7 @@ struct SearchEverywhereView: View {
                 }
             }
             HStack {
-                Text("⌘O 动作 · 回车在 Log 中定位")
+                Text("⌘O actions · Enter reveals in Log")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer()
