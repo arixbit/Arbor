@@ -34,6 +34,18 @@ HELP_PATTERN = re.compile(
 ARGUMENT_PATTERN = re.compile(
     r"\b(?:title|prompt|description)\s*:\s*\"((?:\\.|[^\"\\])*)\""
 )
+# SwiftUI localizes Text/Button/... implicitly, but explicit String(localized:)
+# and AppKit NSAlert properties bypass those initializers. They need the same
+# catalog coverage or a Chinese interface silently shows English.
+LOCALIZED_PATTERN = re.compile(
+    r"\bString\s*\(\s*localized:\s*\"((?:\\.|[^\"\\])*)\""
+)
+APPKIT_PATTERN = re.compile(
+    r"\b(?:messageText|informativeText)\s*=\s*\"((?:\\.|[^\"\\])*)\""
+)
+APPKIT_TITLE_PATTERN = re.compile(
+    r"\baddButton\s*\(\s*withTitle:\s*\"((?:\\.|[^\"\\])*)\""
+)
 
 
 def decode_swift_string(value: str) -> str:
@@ -51,7 +63,14 @@ def line_number(source: str, offset: int) -> int:
 def scan_file(path: Path) -> list[tuple[str, int]]:
     source = path.read_text(encoding="utf-8")
     matches: list[tuple[str, int]] = []
-    for pattern in (CALL_PATTERN, HELP_PATTERN, ARGUMENT_PATTERN):
+    for pattern in (
+        CALL_PATTERN,
+        HELP_PATTERN,
+        ARGUMENT_PATTERN,
+        LOCALIZED_PATTERN,
+        APPKIT_PATTERN,
+        APPKIT_TITLE_PATTERN,
+    ):
         for match in pattern.finditer(source):
             value = decode_swift_string(match.group(1))
             if value and "\\(" not in value:
@@ -72,7 +91,14 @@ def hardcoded_chinese(path: Path) -> list[tuple[str, int]]:
     """
     source = path.read_text(encoding="utf-8")
     hits: list[tuple[str, int]] = []
-    for pattern in (CALL_PATTERN, HELP_PATTERN, ARGUMENT_PATTERN):
+    for pattern in (
+        CALL_PATTERN,
+        HELP_PATTERN,
+        ARGUMENT_PATTERN,
+        LOCALIZED_PATTERN,
+        APPKIT_PATTERN,
+        APPKIT_TITLE_PATTERN,
+    ):
         for match in pattern.finditer(source):
             value = decode_swift_string(match.group(1))
             if value and "\\(" not in value and CJK_PATTERN.search(value):

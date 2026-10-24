@@ -653,6 +653,14 @@ TRANSLATIONS = {
     "Delete from disk. Git keeps tracking the deletion; untracked files cannot be restored.": "从磁盘删除。Git 会继续跟踪这次删除；未跟踪文件无法恢复。",
 }
 
+# Later UI surfaces added after the initial seed. Keeping them in a separate
+# JSON file makes the additions reviewable without touching the legacy table.
+ADDITIONS_PATH = Path(__file__).resolve().parent / "i18n-zh-hans-additions.json"
+if ADDITIONS_PATH.exists():
+    TRANSLATIONS.update(
+        json.loads(ADDITIONS_PATH.read_text(encoding="utf-8"))
+    )
+
 
 def main() -> None:
     path = Path(__file__).resolve().parents[1] / "Arbor/Localizable.xcstrings"
