@@ -14,9 +14,10 @@ func logFilterField(
     TextField(title, text: text)
         .textFieldStyle(.plain)
         .padding(.horizontal, 10)
-        .frame(width: width, height: 32)
+        .frame(width: width, height: 28)
         .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
-        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
+        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 4))
+        .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 1) }
 }
 
 
@@ -63,15 +64,16 @@ var logStartRevisionMenu: some View {
                 }
             }
         } label: {
-            Label(logBranchFilterTitle,
-                  systemImage: "arrow.triangle.branch")
-                .lineLimit(1)
+            Group {
+                if logList.startRevisions.isEmpty { Text("Branch") }
+                else { Text(logBranchFilterTitle) }
+            }
+            .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
-        .frame(maxWidth: 120)
+        .frame(maxWidth: 100)
         .padding(.horizontal, 8)
-        .frame(height: 32)
-        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
+        .frame(height: 28)
         .help(logBranchFilterTitle)
         .accessibilityIdentifier("log-branch-filter")
         .onChange(of: logList.startRevisions) { _, _ in scheduleLogRefresh() }
@@ -115,11 +117,12 @@ var logFilterBar: some View {
             .fixedSize(horizontal: true, vertical: false)
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .frame(height: 48)
+    .padding(.vertical, 4)
+    .frame(height: 40)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("log-filter-bar")
     .onChange(of: logList.follow) { _, _ in scheduleLogRefresh() }
+
 }
 
 var logPrimaryFilters: some View {
@@ -130,8 +133,10 @@ var logPrimaryFilters: some View {
             .onSubmit { scheduleLogRefresh() }
         logFilterChip(".*", help: "Regex", isOn: $logList.messageRegex)
         logFilterChip("Cc", help: "Match Case", isOn: $logList.messageMatchCase)
-        logPathFilterMenu
         logStartRevisionMenu
+        logUserFilterButton
+        logDateFilterButton
+        logPathFilterMenu
     }
 }
 
@@ -178,22 +183,19 @@ var logPathFilterMenu: some View {
             Button("Clear") { clearLogPathFilter() }
         }
     } label: {
-        Label {
+        Group {
             if currentPathSelections.isEmpty {
                 Text("Paths")
             } else {
                 Text(logPathFilterSummary(currentPathSelections))
             }
-        } icon: {
-            Image(systemName: currentPathSelections.isEmpty ? "folder" : "folder.fill")
         }
         .lineLimit(1)
     }
     .menuStyle(.borderlessButton)
     .frame(maxWidth: 120)
     .padding(.horizontal, 8)
-    .frame(height: 32)
-    .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 8))
+    .frame(height: 28)
     .foregroundStyle(currentPathSelections.isEmpty ? .secondary : Design.Colors.accent)
     .help("Choose or clear Paths filter")
     .accessibilityIdentifier("log-path-filter")
@@ -201,7 +203,6 @@ var logPathFilterMenu: some View {
 
 var logFilterActions: some View {
     HStack(spacing: 6) {
-        logAdvancedFiltersButton
         Toggle(isOn: $logList.follow) {
             Image(systemName: "arrow.right.to.line.compact")
         }
@@ -209,7 +210,18 @@ var logFilterActions: some View {
         .help("Follow current branch")
         .accessibilityLabel("Follow current branch")
         Button {
+            let isReflog = logList.viewMode == .reflog
             loadLog()
+            let generation = isReflog ? reflog.generation : logList.generation
+            if let task = isReflog ? reflog.loadTask : logList.loadTask {
+                Task { @MainActor in
+                    await task.value
+                    guard !task.isCancelled,
+                          generation == (isReflog ? reflog.generation : logList.generation),
+                          logList.error == nil else { return }
+                    feedbackCenter.success("Log refreshed")
+                }
+            }
         } label: {
             Image(systemName: "arrow.clockwise")
         }
@@ -224,53 +236,92 @@ var logFilterActions: some View {
     }
 }
 
-/// Author and date fields share a compact popover.
-var logAdvancedFiltersButton: some View {
-    let hasFilters = !logList.authorFilter.isEmpty
-        || !logList.since.isEmpty
-        || !logList.until.isEmpty
-    return Button {
+/// Separate, named entries match the visible filter order in the reference.
+var logUserFilterButton: some View {
+    Button {
         logList.advancedFiltersPresented.toggle()
     } label: {
-        Image(systemName: hasFilters
-              ? "line.3.horizontal.decrease.circle.fill"
-              : "line.3.horizontal.decrease.circle")
-            .font(.system(size: 13, weight: .medium))
-            .frame(width: 26, height: 26)
-            .foregroundStyle(hasFilters ? Design.Colors.accent : .secondary)
+        HStack(spacing: 4) {
+            Text("User")
+            Image(systemName: "chevron.down").font(.system(size: 9))
+        }
+        .foregroundStyle(logList.authorFilter.isEmpty ? .secondary : Design.Colors.accent)
+        .frame(height: 28)
     }
     .buttonStyle(.plain)
-    .help("Author and date filters")
-    .accessibilityLabel("Author and date filters")
+    .accessibilityIdentifier("log-user-filter")
     .popover(isPresented: $logList.advancedFiltersPresented, arrowEdge: .bottom) {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Author and Date")
-                .font(.system(size: 12, weight: .semibold))
-            logFilterField("User", text: $logList.authorFilter, width: 220)
-                .onSubmit { scheduleLogRefresh() }
-            logFilterField("Since", text: $logList.since, width: 220)
-                .onSubmit { scheduleLogRefresh() }
-            logFilterField("Until", text: $logList.until, width: 220)
-                .onSubmit { scheduleLogRefresh() }
-            HStack {
-                Button("Clear") {
-                    logList.authorFilter = ""
-                    logList.since = ""
-                    logList.until = ""
-                    scheduleLogRefresh()
-                }
-                .disabled(!hasFilters)
-                Spacer()
-                Button("Done") {
-                    logList.advancedFiltersPresented = false
-                    scheduleLogRefresh()
-                }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(14)
-        .frame(width: 260)
+        logUserFilterEditor
     }
+}
+
+var logUserFilterEditor: some View {
+    VStack(alignment: .leading, spacing: 10) {
+        Text("User").font(.headline)
+        logFilterField("User", text: $logList.authorFilter, width: 220)
+            .onSubmit { scheduleLogRefresh() }
+        HStack {
+            Button("Clear") {
+                logList.authorFilter = ""
+                scheduleLogRefresh()
+            }
+            .disabled(logList.authorFilter.isEmpty)
+            Spacer()
+            Button("Done") {
+                logList.advancedFiltersPresented = false
+                scheduleLogRefresh()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+    }
+    .padding(14)
+    .frame(width: 260)
+}
+
+var logDateFilterButton: some View {
+    let hasFilters = !logList.since.isEmpty || !logList.until.isEmpty
+    return Button {
+        logList.dateFiltersPresented.toggle()
+    } label: {
+        HStack(spacing: 4) {
+            Text("Date")
+            Image(systemName: "chevron.down").font(.system(size: 9))
+        }
+        .foregroundStyle(hasFilters ? Design.Colors.accent : .secondary)
+        .frame(height: 28)
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("log-date-filter")
+    .popover(isPresented: $logList.dateFiltersPresented, arrowEdge: .bottom) {
+        logDateFilterEditor
+    }
+}
+
+var logDateFilterEditor: some View {
+    let hasFilters = !logList.since.isEmpty || !logList.until.isEmpty
+    return VStack(alignment: .leading, spacing: 10) {
+        Text("Date").font(.headline)
+        logFilterField("Since", text: $logList.since, width: 220)
+            .onSubmit { scheduleLogRefresh() }
+        logFilterField("Until", text: $logList.until, width: 220)
+            .onSubmit { scheduleLogRefresh() }
+        HStack {
+            Button("Clear") {
+                logList.since = ""
+                logList.until = ""
+                scheduleLogRefresh()
+            }
+            .disabled(!hasFilters)
+            Spacer()
+            Button("Done") {
+                logList.dateFiltersPresented = false
+                scheduleLogRefresh()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
+    }
+    .padding(14)
+    .frame(width: 260)
 }
 
 }

@@ -192,6 +192,7 @@ var logGraphHistoryContent: some View {
                 selection: $logSelectionState.selection,
                 selectedIDs: $logSelectionState.selectedIDs,
                 rootQualifiedIdentity: isLogRootQualified,
+                showColumnHeaders: logShowColumnHeaders,
                 compactReferences: logCompactReferences,
                 showCommitColumns: logShowCommitColumns,
                 showAuthorColumn: logShowAuthorColumn,
@@ -291,6 +292,7 @@ var logGraphGearMenu: some View {
         Divider()
         Toggle("Compact References", isOn: $logCompactReferences)
         Menu("Log Columns") {
+            Toggle("Show Column Headers", isOn: $logShowColumnHeaders)
             Toggle("Show Author and Date", isOn: showAuthorAndDateBinding)
             Toggle("Show Author", isOn: showAuthorColumnBinding)
             Toggle("Show Date", isOn: showDateColumnBinding)

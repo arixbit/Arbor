@@ -11,6 +11,7 @@ struct CommitActionFeedback: Equatable {
 // MARK: - 提交详情（日志模式）
 
 struct CommitDetailView: View {
+    @Environment(\.locale) private var locale
     let repo: Repository?
     let commit: CommitInfo?
     let remotes: [RemoteInfo]
@@ -34,6 +35,7 @@ struct CommitDetailView: View {
     /// separate splitter components.  The metadata component reuses this
     /// view, but must not start a second hidden changes/diff loader.
     var showsChanges: Bool = true
+    var compactMetadata: Bool = false
     @State private var feedback: CommitActionFeedback?
     @State private var changedFiles: [TreeChange] = []
     @State private var selectedPath: String?
@@ -50,7 +52,13 @@ struct CommitDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let commit {
-                if showsMetadata {
+                if showsMetadata && compactMetadata {
+                    ScrollView {
+                        compactCommitHeader(commit)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                } else if showsMetadata {
                     // MainFrame's right side is a details splitter: the
                     // commit metadata stays above the changes browser. The
                     // changes browser then has its own file-tree/diff-preview
@@ -103,37 +111,91 @@ struct CommitDetailView: View {
         .onChange(of: selectedPath) { _, path in loadDiff(path) }
     }
 
-    /// Rebased places commit actions after the metadata and immediately above
-    /// the Changes browser. Keep the labels visible: these are primary actions
-    /// in the Log workspace, not hidden overflow icons.
+    /// The full inspector keeps labeled actions; the narrow Log inspector
+    /// offers the same actions in its metadata menu.
     private func inspectorActions(_ commit: CommitInfo) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button("Revert Commit") {
-                    if let onRevertRequested {
-                        onRevertRequested(commit)
-                    } else {
-                        revertCommit(commit)
-                    }
-                }
-                    .disabled(commit.parentIds.count != 1 || repo == nil)
-                Button("Cherry-pick") {
-                    if let onCherryPickRequested {
-                        onCherryPickRequested(commit)
-                    } else {
-                        cherryPick(commit)
-                    }
-                }
-                    .disabled(repo == nil)
-                Button("Create Branch from Commit") { onCreateBranch(commit) }
-                    .disabled(repo == nil)
-                hostedCommitAction(commit)
+                inspectorActionButtons(commit)
             }
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)
         .padding(.top, 4)
         .padding(.bottom, 2)
+    }
+
+    @ViewBuilder
+    private func inspectorActionButtons(_ commit: CommitInfo) -> some View {
+        Button("Revert Commit") {
+            if let onRevertRequested {
+                onRevertRequested(commit)
+            } else {
+                revertCommit(commit)
+            }
+        }
+            .disabled(commit.parentIds.count != 1 || repo == nil)
+        Button("Cherry-pick") {
+            if let onCherryPickRequested {
+                onCherryPickRequested(commit)
+            } else {
+                cherryPick(commit)
+            }
+        }
+            .disabled(repo == nil)
+        Button("Create Branch from Commit") { onCreateBranch(commit) }
+            .disabled(repo == nil)
+        hostedCommitAction(commit)
+    }
+
+    private func compactCommitHeader(_ commit: CommitInfo) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                Text(commit.summary)
+                    .font(Design.Typography.interface(13, weight: .semibold))
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+                if showsActions {
+                    Menu {
+                        inspectorActionButtons(commit)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .accessibilityLabel("Commit Actions")
+                }
+            }
+            if !commit.messageBody.isEmpty {
+                Text(commit.messageBody)
+                    .textSelection(.enabled)
+            }
+            Text("\(commit.id.prefix(8)) \(commit.authorName)")
+                .textSelection(.enabled)
+            (Text("<\(commit.authorEmail)>").foregroundColor(.accentColor)
+                + Text(" · \(Design.Typography.commitDate(commit.time, locale: locale))"))
+                .textSelection(.enabled)
+            let refs = commit.refs + commit.tagRefs + commit.remoteRefs
+            if !refs.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "tag").foregroundStyle(.green)
+                    Text(refs.joined(separator: ", "))
+                }
+                    .textSelection(.enabled)
+            }
+            DisclosureGroup("Commit Details") {
+                VStack(alignment: .leading, spacing: 6) {
+                    infoRow("Commit", commit.id)
+                    infoRow("Committer", "\(commit.committerName) <\(commit.committerEmail)>")
+                    infoRow("Parents", commit.parentIds.isEmpty ? "None" : commit.parentIds.joined(separator: "\n"))
+                    if commit.hasSignature { infoRow("Signature", signatureBadge) }
+                }
+                .textSelection(.enabled)
+                .padding(.top, 4)
+            }
+            feedbackRow
+        }
+        .font(Design.Typography.interface(13))
     }
 
     @ViewBuilder

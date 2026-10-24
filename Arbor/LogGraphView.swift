@@ -5,6 +5,7 @@ import AppKit
 /// Git log 的图表列。它对应 IntelliJ 的 VcsLogGraphTable：
 /// 图和提交信息是同一张可横向滚动的表，而不是一块固定宽度的装饰性 Canvas。
 struct LogGraphView: View {
+    @Environment(\.locale) private var locale
     let commits: [CommitInfo]
     @Binding var selection: String?
     @Binding var selectedIDs: Set<String>
@@ -13,6 +14,7 @@ struct LogGraphView: View {
     private func commitIdentity(_ commit: CommitInfo) -> String {
         logCommitDisplayIdentity(repositoryPath: commit.repositoryPath, id: commit.id, aggregate: rootQualifiedIdentity)
     }
+    var showColumnHeaders = false
     let compactReferences: Bool
     let showCommitColumns: Bool
     let showAuthorColumn: Bool
@@ -94,7 +96,7 @@ struct LogGraphView: View {
     // Rebased keeps the log dense enough to scan dozens of commits at once.
     // The old 58pt rows made the graph look like a card list and diverged
     // visibly from the reference workspace.
-    private let rowHeight: CGFloat = 31
+    private let rowHeight: CGFloat = 26
     // Rebased keeps a real graph gutter in front of the commit table. It is
     // deliberately wide enough for merge-heavy histories: collapsing this
     // column to a tiny decoration makes all branches look like one line and
@@ -107,7 +109,6 @@ struct LogGraphView: View {
     private let laneWidth: CGFloat = 18
     private let maximumGraphWidth: CGFloat = 360
     private let minimumCommitColumnWidth: CGFloat = 276
-    private let preferredTableWidth: CGFloat = 720
     private let columnHeaderHeight: CGFloat = 28
 
     private enum RefKind {
@@ -118,30 +119,21 @@ struct LogGraphView: View {
 
         var foreground: Color {
             switch self {
-            case .head: .white
-            case .local: .orange
-            case .tag: .green
+            case .head: .orange
+            case .local: .green
+            case .tag: .orange
             case .remote: .blue
             }
         }
 
-        var background: Color {
+        var symbol: String {
             switch self {
-            case .head: .blue.opacity(0.78)
-            case .local: .orange.opacity(0.16)
-            case .tag: .green.opacity(0.16)
-            case .remote: .blue.opacity(0.16)
+            case .head: "arrowtriangle.right.fill"
+            case .local, .tag: "tag"
+            case .remote: "tag.fill"
             }
         }
 
-        var border: Color {
-            switch self {
-            case .head: .blue.opacity(0.95)
-            case .local: .orange.opacity(0.36)
-            case .tag: .green.opacity(0.36)
-            case .remote: .blue.opacity(0.36)
-            }
-        }
     }
 
     @ViewBuilder
@@ -199,7 +191,7 @@ struct LogGraphView: View {
     private func graphWidth(maxLane: Int) -> CGFloat {
         min(
             maximumGraphWidth,
-            max(120, CGFloat(maxLane + 1) * effectiveLaneWidth(maxLane: maxLane) + 28)
+            max(46, CGFloat(maxLane + 1) * effectiveLaneWidth(maxLane: maxLane) + 10)
         )
     }
 
@@ -248,20 +240,21 @@ struct LogGraphView: View {
                 minimumCommitColumnWidth,
                 columnLayout.width(for: .commit)
             )
+            let columnChrome = 20 + CGFloat(max(0, visibleColumns.count - 1)) * 6
             let layoutCommitColumnWidth = max(
                 configuredCommitWidth,
-                viewport.size.width - layoutGraphWidth - dynamicColumnWidth - 24
+                viewport.size.width - layoutGraphWidth - dynamicColumnWidth - columnChrome
             )
             let layoutContentWidth = max(
                 viewport.size.width,
-                preferredTableWidth,
-                layoutGraphWidth + layoutCommitColumnWidth + dynamicColumnWidth + 24
+                layoutGraphWidth + layoutCommitColumnWidth + dynamicColumnWidth + columnChrome
             )
             // Keep the deterministic pagination fallback inside the
             // scrollable content. The old height ended at the last row and
             // clipped the button below the LazyVStack.
             let layoutContentHeight = layoutGraphHeight + (hasMore ? 36 : 0)
-            let verticalViewportHeight = max(0, viewport.size.height - columnHeaderHeight)
+            let showsColumnHeader = showColumnHeaders && visibleColumns.count > 1
+            let verticalViewportHeight = max(0, viewport.size.height - (showsColumnHeader ? columnHeaderHeight : 0))
 
             // The Canvas and the graph hit-target overlays only cover a
             // window around the visible rows instead of the entire history.
@@ -280,12 +273,14 @@ struct LogGraphView: View {
 
             ScrollView(.horizontal, showsIndicators: true) {
                 VStack(spacing: 0) {
-                    logColumnHeader(
-                        graphWidth: layoutGraphWidth,
-                        commitColumnWidth: layoutCommitColumnWidth,
-                        contentWidth: layoutContentWidth,
-                        visibleColumns: visibleColumns
-                    )
+                    if showsColumnHeader {
+                        logColumnHeader(
+                            graphWidth: layoutGraphWidth,
+                            commitColumnWidth: layoutCommitColumnWidth,
+                            contentWidth: layoutContentWidth,
+                            visibleColumns: visibleColumns
+                        )
+                    }
 
                     ScrollView(.vertical) {
                         ZStack(alignment: .topLeading) {
@@ -297,6 +292,7 @@ struct LogGraphView: View {
                                     originY: renderWindowOriginY,
                                     laneSpacing: laneSpacing,
                                     commitIDs: resolvedGraph.commitIDs,
+                                    colorIndexes: resolvedGraph.colorIndexes,
                                     graph: linearBekGraph,
                                     highlight: hoveredLinearBekHighlight
                                 )
@@ -1097,12 +1093,12 @@ struct LogGraphView: View {
             Text(commit.authorName.isEmpty ? "—" : commit.authorName)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .frame(width: columnLayout.width(for: .author), alignment: .leading)
         case .date:
-            Text(dateStr(commit.time))
+            Text(Design.Typography.commitDate(commit.time, locale: locale))
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .frame(width: columnLayout.width(for: .date), alignment: .trailing)
         case .hash:
             Text(commit.shortId)
@@ -1206,16 +1202,14 @@ struct LogGraphView: View {
             compact: compactReferences,
             showTagNames: showTagNames
         )) { ref in
-            Text(ref.title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(ref.kind.foreground)
-                .padding(.horizontal, 5)
-                .frame(height: 18)
-                .background(ref.kind.background, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(ref.kind.border, lineWidth: 0.75)
-                }
+            HStack(spacing: 3) {
+                Image(systemName: ref.kind.symbol)
+                    .font(.system(size: 11))
+                    .foregroundStyle(ref.kind.foreground)
+                Text(ref.title)
+                    .font(Design.Typography.interface(12))
+                    .foregroundStyle(.secondary)
+            }
                 .lineLimit(1)
                 .frame(minWidth: alignLabels ? 56 : nil, alignment: .leading)
                 .help(ref.title)
@@ -1306,9 +1300,8 @@ struct LogGraphView: View {
         )
     }
 
-    private func color(for lane: UInt32) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo]
-        return colors[Int(lane) % colors.count]
+    private func color(for index: Int) -> Color {
+        Design.Colors.graphPalette[index % Design.Colors.graphPalette.count]
     }
 
     private func strokeGraphEdge(
@@ -1328,15 +1321,14 @@ struct LogGraphView: View {
     private func graphEdgePath(start: CGPoint, target: CGPoint) -> Path {
         var path = Path()
         path.move(to: start)
-        let middleY = (start.y + target.y) / 2
         if start.x == target.x {
             path.addLine(to: target)
         } else {
-            path.addLine(to: CGPoint(x: start.x, y: middleY))
+            let bend = (target.y - start.y) * 0.35
             path.addCurve(
                 to: target,
-                control1: CGPoint(x: start.x, y: middleY),
-                control2: CGPoint(x: target.x, y: middleY)
+                control1: CGPoint(x: start.x, y: start.y + bend),
+                control2: CGPoint(x: target.x, y: target.y - bend)
             )
         }
         return path
@@ -1353,6 +1345,7 @@ struct LogGraphView: View {
         originY: CGFloat,
         laneSpacing: CGFloat,
         commitIDs: Set<String>,
+        colorIndexes: [Int],
         graph: LinearBekGraphModel,
         highlight: LinearBekGraphHighlight?
     ) {
@@ -1368,9 +1361,9 @@ struct LogGraphView: View {
                 target: target,
                 color: highlight?.normalEdges.contains(edge) == true
                     ? .primary
-                    : color(for: edge.toLane),
+                    : color(for: colorIndexes[edge.upRow]),
                 style: StrokeStyle(
-                    lineWidth: highlight?.normalEdges.contains(edge) == true ? 3.5 : 2,
+                    lineWidth: highlight?.normalEdges.contains(edge) == true ? 2.5 : 1.3,
                     lineCap: .round,
                     lineJoin: .round
                 )
@@ -1385,9 +1378,9 @@ struct LogGraphView: View {
                 target: point(lane: edge.toLane, row: edge.downRow, laneSpacing: laneSpacing, originY: originY),
                 color: highlight?.dottedEdges.contains(edge) == true
                     ? .primary
-                    : color(for: edge.toLane),
+                    : color(for: colorIndexes[edge.upRow]),
                 style: StrokeStyle(
-                    lineWidth: highlight?.dottedEdges.contains(edge) == true ? 3.5 : 2,
+                    lineWidth: highlight?.dottedEdges.contains(edge) == true ? 2.5 : 1.3,
                     lineCap: .round,
                     lineJoin: .round,
                     dash: [2, 3]
@@ -1414,11 +1407,11 @@ struct LogGraphView: View {
                         x: 16 + CGFloat(parentLane) * laneSpacing,
                         y: size.height
                     ),
-                    color: color(for: parentLane),
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                    color: color(for: colorIndexes[index]),
+                    style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round)
                 )
             }
-            let radius: CGFloat = commit.parentIds.count > 1 ? 6 : 5
+            let radius: CGFloat = commit.parentIds.count > 1 ? 4.5 : 4
             context.fill(
                 Path(ellipseIn: CGRect(
                     x: start.x - radius,
@@ -1429,7 +1422,7 @@ struct LogGraphView: View {
                 with: .color(
                     highlight?.rows.contains(index) == true
                         ? .primary
-                        : commit.isHead ? .blue : color(for: commit.lane)
+                        : color(for: colorIndexes[index])
                 )
             )
             if commit.isHead {
@@ -1440,8 +1433,8 @@ struct LogGraphView: View {
                         width: (radius + 2) * 2,
                         height: (radius + 2) * 2
                     )),
-                    with: .color(.blue.opacity(0.35)),
-                    lineWidth: 2
+                    with: .color(color(for: colorIndexes[index])),
+                    lineWidth: 1.5
                 )
             }
         }

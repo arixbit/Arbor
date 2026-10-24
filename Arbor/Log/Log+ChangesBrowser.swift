@@ -481,6 +481,7 @@ struct LogChangesBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 Text("Changes")
                     .font(.headline)
@@ -560,7 +561,7 @@ struct LogChangesBrowserView: View {
                     .help("Show the complete changeset of this revision with the followed file highlighted")
                 }
                 Spacer()
-                if showsDiffPreview {
+                if showsDiffPreview && selectedRecordID != nil {
                     if case .local = diffSource {
                         Text("Compare with Local")
                             .font(.caption)
@@ -784,6 +785,8 @@ struct LogChangesBrowserView: View {
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
+            }
+            .scrollIndicators(.hidden)
             .frame(height: 34)
             .overlay(alignment: .bottom) { Divider() }
 
@@ -810,8 +813,9 @@ struct LogChangesBrowserView: View {
                         : (activeFilter == nil ? "No changed files" : "No files remain after filtering")))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if showsDiffPreview {
-                if diffPreviewVertical {
+            } else if showsDiffPreview && selectedRecordID != nil {
+                GeometryReader { geometry in
+                if diffPreviewVertical || geometry.size.width < 520 {
                     VSplitView {
                         changesTree
                         diffPreview
@@ -823,6 +827,7 @@ struct LogChangesBrowserView: View {
                         diffPreview
                             .frame(minWidth: 220, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                     }
+                }
                 }
             } else {
                 changesTree
@@ -962,12 +967,13 @@ struct LogChangesBrowserView: View {
                 ? "Selected Changes"
                 : "Change"
             let row = HStack(spacing: 7) {
-                Text(changeKindText(record.change.kind))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 46, alignment: .leading)
+                Image(systemName: repositoryFileSymbol(for: record.change.path))
+                    .font(Design.Typography.interface(13))
+                    .foregroundStyle(repositoryFileIconColor(for: record.change.path))
+                    .frame(width: 16)
                 Text(node.name)
-                    .font(.system(.body, design: .monospaced))
+                    .font(Design.Typography.interface(13))
+                    .foregroundStyle(record.change.kind == .added ? Color.green : .primary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if commits.count > 1 {

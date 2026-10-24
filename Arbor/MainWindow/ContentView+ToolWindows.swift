@@ -22,6 +22,7 @@ extension ContentView {
                 shelfChangeLists: activeShelfChangeLists,
                 showShelfRequestID: shelfWorkspace.tabRequestID,
                 onWorkspaceTabChange: { shelfWorkspace.isWorkspaceTabActive = $0 },
+                onHideToolWindow: { toolWindowExpanded = false },
                 shelfRootPath: activeShelfRootPath,
                 shelfRootOptions: availableShelfRoots,
                 selectedShelfRootPath: activeShelfRootPath ?? "",
@@ -440,7 +441,7 @@ extension ContentView {
             let panelHeight = proxy.size.height
             let headerHeight: CGFloat = 32
             let resizeHandleHeight: CGFloat = 7
-            let minimumToolHeight: CGFloat = 220
+            let minimumToolHeight: CGFloat = projectWorkspace.toolWindowMode == .commit ? 280 : 220
             let minimumProjectHeight: CGFloat = 140
             let bothExpanded = toolWindowExpanded && projectPanelExpanded
             let separatorHeight = bothExpanded ? resizeHandleHeight : 1
@@ -518,7 +519,6 @@ extension ContentView {
                     ProjectTreePane(
                         repo: repo,
                         projectPath: projectWorkspace.path,
-                        headId: repositoryStatus.headId,
                         entries: repositoryStatus.entries,
                         selection: Binding(
                             get: { fileWorkspace.fileSelection },
@@ -558,22 +558,26 @@ extension ContentView {
             } else {
                 VStack(spacing: 0) {
                     VStack(spacing: 0) {
-                    WorkspacePanelHeader(
-                        title: LocalizedStringKey(projectWorkspace.toolWindowMode.title),
-                        systemImage: projectWorkspace.toolWindowMode.systemImage,
-                        isExpanded: toolWindowExpanded,
-                        onToggle: {
-                            withAnimation(.easeInOut(duration: 0.16)) {
-                                toolWindowExpanded.toggle()
+                    if !toolWindowExpanded || projectWorkspace.toolWindowMode == .operations {
+                        WorkspacePanelHeader(
+                            title: LocalizedStringKey(projectWorkspace.toolWindowMode.title),
+                            systemImage: projectWorkspace.toolWindowMode.systemImage,
+                            isExpanded: toolWindowExpanded,
+                            onToggle: {
+                                withAnimation(.easeInOut(duration: 0.16)) {
+                                    toolWindowExpanded.toggle()
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                     if toolWindowExpanded {
                         activeToolWindowContent
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .frame(height: toolPanelHeight)
+                .background(Design.Colors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 if bothExpanded {
                     WorkspacePanelResizeHandle(
@@ -616,7 +620,6 @@ extension ContentView {
                         ProjectTreePane(
                             repo: repo,
                             projectPath: projectWorkspace.path,
-                            headId: repositoryStatus.headId,
                             entries: repositoryStatus.entries,
                             selection: Binding(
                             get: { fileWorkspace.fileSelection },
@@ -655,6 +658,8 @@ extension ContentView {
                     }
                     }
                     .frame(height: projectPanelHeight)
+                    .background(Design.Colors.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
 
                     Spacer(minLength: 0)
                 }

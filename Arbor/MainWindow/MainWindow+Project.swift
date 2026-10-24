@@ -82,7 +82,6 @@ struct StatusBadge: View {
 struct ProjectTreePane: View {
     let repo: Repository?
     let projectPath: String?
-    let headId: String?
     let entries: [FileEntry]
     @Binding var selection: String?
     let onOpen: () -> Void
@@ -107,7 +106,6 @@ struct ProjectTreePane: View {
     init(
         repo: Repository?,
         projectPath: String?,
-        headId: String?,
         entries: [FileEntry],
         selection: Binding<String?>,
         onOpen: @escaping () -> Void,
@@ -130,7 +128,6 @@ struct ProjectTreePane: View {
     ) {
         self.repo = repo
         self.projectPath = projectPath
-        self.headId = headId
         self.entries = entries
         self._selection = selection
         self.onOpen = onOpen
@@ -150,13 +147,6 @@ struct ProjectTreePane: View {
         self.resolvedConflictPaths = resolvedConflictPaths
         self.onRevertResolved = onRevertResolved
         self.showHeader = showHeader
-    }
-
-    var changedCount: Int {
-        entries.filter {
-            $0.staged != .unchanged
-                || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
-        }.count
     }
 
     var body: some View {
@@ -195,30 +185,6 @@ struct ProjectTreePane: View {
                 .padding(.vertical, Design.Spacing.sm)
             }
 
-            if repo != nil {
-                HStack(spacing: Design.Spacing.sm) {
-                    Label("Project", systemImage: "folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if changedCount > 0 {
-                        Text("\(changedCount)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Design.Colors.warning, in: Capsule())
-                    }
-                    Spacer()
-                    if let headId {
-                        Text(String(headId.prefix(7)))
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, Design.Spacing.md)
-                .padding(.bottom, Design.Spacing.sm)
-            }
-            Divider()
             ProjectFileTreeView(
                 repo: repo,
                 entries: entries,

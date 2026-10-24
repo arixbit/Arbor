@@ -22,6 +22,7 @@ struct RebasedCommitWorkspace: View {
     /// Keeps selection-scoped main-menu actions from using a stale Changes
     /// selection while the Shelf tab is active.
     var onWorkspaceTabChange: (Bool) -> Void = { _ in }
+    var onHideToolWindow: () -> Void = {}
     let shelfRootPath: String?
     let shelfRootOptions: [GitRootInfo]
     let selectedShelfRootPath: String
@@ -189,8 +190,8 @@ struct RebasedCommitWorkspace: View {
     @State var pendingUnshelveMemberGroups: ShelfMemberBatchUnshelveRequest?
     @State var showClearStashesConfirmation = false
     @State var showCommitAllConfirmation = false
-    @State var groupByDirectory = true
-    @State var showIgnored = true
+    @State var groupByDirectory = false
+    @State var showIgnored = false
     @State var contextSelectedPaths: Set<String> = []
     @State var treeExpansionCommand = 0
     @State var treeExpansionTarget = true
@@ -222,17 +223,6 @@ struct RebasedCommitWorkspace: View {
         rebaseEditPauseAllowsAmend(operationState)
     }
 
-    /// GitStageTree keeps ordinary-sized untracked sets under Unstaged. It
-    /// creates a separate Unversioned node only when IntelliJ's
-    /// `vcs.unversioned.files.max.intree` threshold is exceeded.
-    var standaloneUnversionedEntries: [FileEntry] {
-        untrackedEntries.count > 1_000 ? untrackedEntries : []
-    }
-
-    var embeddedUntrackedPaths: Set<String> {
-        Set(untrackedEntries.count > 1_000 ? [] : untrackedEntries.map(\.path))
-    }
-
     var contextEligiblePaths: Set<String> {
         Set(entries.filter(gitIgnoreActionAvailable).map(\.path))
     }
@@ -242,18 +232,12 @@ struct RebasedCommitWorkspace: View {
             guard $0.unstaged != .unchanged,
                   $0.unstaged != .ignored,
                   !conflictedPaths.contains($0.path) else { return false }
-            if $0.unstaged == .untracked {
-                return embeddedUntrackedPaths.contains($0.path)
-            }
-            return true
+            return $0.unstaged != .untracked
         }
     }
 
     var visibleChangedCount: Int {
-        // A partially staged file is rendered in both Unstaged and Staged
-        // groups, but Rebased's Changes counter represents files, not group
-        // rows. Counting the three arrays directly made the header jump by
-        // two for one physical file.
+        // Index and worktree arrays can contain the same partially staged file.
         Set((conflictedEntries + unstagedEntries + untrackedEntries + stagedEntries).map(\.path)).count
     }
 
@@ -362,9 +346,9 @@ struct RebasedCommitWorkspace: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 22) {
+            HStack(spacing: 8) {
                 ForEach(Tab.allCases, id: \.self) { item in
-                    Button(item.rawValue) {
+                    Button(LocalizedStringKey(item.rawValue)) {
                         tab = item
                         onWorkspaceTabChange(item == .stash)
                     }
@@ -372,6 +356,8 @@ struct RebasedCommitWorkspace: View {
                 }
                 Spacer()
                 Menu {
+                    Button("Hide Tool Window", action: onHideToolWindow)
+                    Divider()
                     Button("Refresh") { onRefresh() }
                     Button("Stash…") { onStash() }
                     Button("Shelve…") { onShelve() }
@@ -397,6 +383,7 @@ struct RebasedCommitWorkspace: View {
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
+            .frame(height: 40)
             .background(rebasedSurface)
 
             Divider()
@@ -681,10 +668,10 @@ struct RebasedCommitWorkspace: View {
                 // Rebased keeps the Changes tree as the dominant region;
                 // the commit editor is a compact footer, not an equal-sized
                 // second pane. The tree therefore absorbs extra height.
-                .frame(minHeight: 180, idealHeight: 640, maxHeight: .infinity)
+                .frame(minHeight: 80, idealHeight: 640, maxHeight: .infinity)
 
             commitEditorPanel
-                .frame(minHeight: 180, idealHeight: 180, maxHeight: 240)
+                .frame(minHeight: 126, idealHeight: 140, maxHeight: 140)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -718,7 +705,7 @@ struct RebasedCommitWorkspace: View {
                         }
                     } label: {
                         Image(systemName: "arrow.uturn.backward.circle")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Design.Typography.interface(13, weight: .medium))
                             .frame(width: 22, height: 22)
                     }
                     .menuStyle(.borderlessButton)
@@ -733,7 +720,7 @@ struct RebasedCommitWorkspace: View {
                     Toggle("Show Ignored", isOn: $showIgnored)
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(Design.Typography.interface(13, weight: .medium))
                         .frame(width: 22, height: 22)
                 }
                 .menuStyle(.borderlessButton)
@@ -768,28 +755,12 @@ struct RebasedCommitWorkspace: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
-            HStack {
-                Text("Changes")
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Text("\(visibleChangedCount) files")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if showIgnored, !ignoredEntries.isEmpty {
-                    Text("· \(ignoredEntries.count) ignored")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
             ScrollView {
                 // The change list is the one place that can hold thousands of
                 // rows (a full worktree of edits). A lazy stack keeps row
                 // views, checkboxes and context menus bounded to the visible
                 // range instead of materializing every change.
-                LazyVStack(alignment: .leading, spacing: 4) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if !conflictedEntries.isEmpty {
                         RebasedConflictGroup(
                             entries: conflictedEntries,
@@ -797,10 +768,10 @@ struct RebasedCommitWorkspace: View {
                         )
                     }
                     changeGroups
-                    if !standaloneUnversionedEntries.isEmpty {
+                    if !untrackedEntries.isEmpty {
                         RebasedChangeGroup(
                             title: "Unversioned Files",
-                            entries: standaloneUnversionedEntries,
+                            entries: untrackedEntries,
                             changeListName: visibleChangeLists.first(where: { $0.isDefault })?.name ?? "Default",
                             changeLists: visibleChangeLists,
                             emptyLabel: "No files",
@@ -841,7 +812,8 @@ struct RebasedCommitWorkspace: View {
                             onShowHistory: onShowHistory,
                             onDeletePaths: onDeletePaths,
                             onEditGitignore: onEditGitignore,
-                            onEditGitExclude: onEditGitExclude
+                            onEditGitExclude: onEditGitExclude,
+                            isExpanded: false
                         )
                     }
                     if showIgnored {
@@ -872,8 +844,8 @@ struct RebasedCommitWorkspace: View {
 
             HStack(spacing: 8) {
                 Toggle("Amend", isOn: $amendMode)
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
+                    .toggleStyle(RebasedCheckboxStyle())
+                    .font(Design.Typography.interface(13))
                     .disabled(operationState != nil && !canAmendPausedRebase)
                 Text("Last commit")
                     .font(.caption)
@@ -898,6 +870,9 @@ struct RebasedCommitWorkspace: View {
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
                 Spacer()
+                Text("\(stagedEntries.count) staged")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -905,15 +880,19 @@ struct RebasedCommitWorkspace: View {
             TextEditor(text: $commitMessage)
                 .font(.system(.body, design: .monospaced))
                 .scrollContentBackground(.hidden)
-                .padding(10)
-                .frame(minHeight: 66, maxHeight: 92)
-                .background(Design.Colors.chromeInset, in: RoundedRectangle(cornerRadius: 6))
+                .padding(6)
+                .frame(minHeight: 42, maxHeight: 42)
+                .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 4))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                }
                 .overlay(alignment: .topLeading) {
                     if commitMessage.isEmpty {
                         Text("Commit message")
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 16)
-                            .padding(.top, 16)
+                            .padding(.leading, 11)
+                            .padding(.top, 10)
                             .allowsHitTesting(false)
                     }
                 }
@@ -921,27 +900,8 @@ struct RebasedCommitWorkspace: View {
                 .padding(.top, 8)
 
             HStack(spacing: 8) {
-                Button("Template", action: onTemplate)
-                Menu {
-                    Button("Template") { onTemplate() }
-                    Button("Before Commit Checks") { onBeforeCommitSettings() }
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .menuStyle(.borderlessButton)
-                Spacer()
-                Toggle(
-                    "Skip hooks",
-                    isOn: Binding(
-                        get: { skipHooks || alwaysSkipCommitHooks },
-                        set: { skipHooks = $0 }
-                    )
-                )
-                    .toggleStyle(.checkbox)
-                    .font(.caption)
-                    .disabled(alwaysSkipCommitHooks)
                 Button(amendMode ? "Amend" : "Commit", action: onCommit)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(RebasedActionButtonStyle())
                     .disabled(
                         repo == nil
                             || !hasStaged
@@ -961,10 +921,34 @@ struct RebasedCommitWorkspace: View {
                         .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 Button("Commit and Push…", action: onCommitAndPush)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(RebasedActionButtonStyle())
                     .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Spacer(minLength: 0)
+                if skipHooks || alwaysSkipCommitHooks {
+                    Text("Skip hooks")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Menu {
+                    Button("Template") { onTemplate() }
+                    Button("Before Commit Checks") { onBeforeCommitSettings() }
+                    Divider()
+                    Toggle(
+                        "Skip hooks",
+                        isOn: Binding(
+                            get: { skipHooks || alwaysSkipCommitHooks },
+                            set: { skipHooks = $0 }
+                        )
+                    )
+                    .disabled(alwaysSkipCommitHooks)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .accessibilityLabel("Commit Options")
             }
-            .controlSize(.small)
+            .controlSize(.regular)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
@@ -978,49 +962,38 @@ struct RebasedCommitWorkspace: View {
         }
     }
 
-    /// GitStageTree's model creates staged before unstaged when both contain
-    /// files. With an empty/one-sided tree the reference UI keeps the stable
-    /// Unstaged → Staged order, which is also what the empty state displays.
     @ViewBuilder
     var changeGroups: some View {
         ForEach(visibleChangeLists, id: \.name) { list in
-            RebasedChangeListHeader(
-                list: list,
-                onRename: onRenameChangeList,
-                onDelete: onDeleteChangeList,
-                onActivate: onActivateChangeList,
-                onMovePaths: onMovePathsToChangeList,
-                onDropShelfIntoChangeList: onUnshelveIntoChangeList
-            )
-            let listUnstaged = entries(unstagedEntries, in: list)
-            let listStaged = entries(stagedEntries, in: list)
-            if !listUnstaged.isEmpty {
-                unstagedChangeGroup(for: list, entries: listUnstaged)
+            // The common single Default list does not need its own heading.
+            // Custom lists retain their activation, rename and drop targets.
+            if visibleChangeLists.count > 1 || !list.isDefault {
+                RebasedChangeListHeader(
+                    list: list,
+                    onRename: onRenameChangeList,
+                    onDelete: onDeleteChangeList,
+                    onActivate: onActivateChangeList,
+                    onMovePaths: onMovePathsToChangeList,
+                    onDropShelfIntoChangeList: onUnshelveIntoChangeList
+                )
             }
-            if !listStaged.isEmpty {
-                stagedChangeGroup(for: list, entries: listStaged)
-            }
-            if listUnstaged.isEmpty && listStaged.isEmpty {
-                Text("No files")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 22)
-            }
+            let trackedPaths = Set((unstagedEntries + stagedEntries).map(\.path))
+            let tracked = entries.filter { trackedPaths.contains($0.path) }
+            trackedChangeGroup(for: list, entries: entries(tracked, in: list))
         }
     }
 
-    func unstagedChangeGroup(for list: ChangeListInfo, entries: [FileEntry]) -> some View {
+    func trackedChangeGroup(for list: ChangeListInfo, entries: [FileEntry]) -> some View {
         RebasedChangeGroup(
-            title: "Unstaged Files",
+            title: "Changes",
             entries: entries,
             changeListName: list.name,
             changeLists: visibleChangeLists,
             emptyLabel: "No files",
-            statusKind: { $0.unstaged },
-            // This checkbox stages the currently unstaged side of the file.
-            // A partially staged file can appear in both groups, so this must
-            // not mirror the staged bit here.
-            isChecked: { _ in false },
+            statusKind: { $0.unstaged == .unchanged ? $0.staged : $0.unstaged },
+            // Mixed index/worktree changes render an indeterminate checkbox.
+            // Checking stages the remainder; Unstage remains a context action.
+            isChecked: { $0.staged != .unchanged && $0.unstaged == .unchanged },
             onToggle: { entry, checked in
                 if checked { onStage(entry.path) } else { onUnstage(entry.path) }
             },
@@ -1048,55 +1021,7 @@ struct RebasedCommitWorkspace: View {
             groupByDirectory: groupByDirectory,
             expansionCommand: treeExpansionCommand,
             expansionTarget: treeExpansionTarget,
-            onDropPaths: { paths in paths.forEach(onUnstage) },
-            onDropShelf: onUnshelve,
-            onDropShelfIntoChangeList: onUnshelveIntoChangeList,
-            onMovePathsToChangeList: onMovePathsToChangeList,
-            onStashPaths: onStashPaths,
-            onShowHistory: onShowHistory,
-            onDeletePaths: onDeletePaths,
-            onEditGitignore: onEditGitignore,
-            onEditGitExclude: onEditGitExclude
-        )
-    }
-
-    func stagedChangeGroup(for list: ChangeListInfo, entries: [FileEntry]) -> some View {
-        RebasedChangeGroup(
-            title: "Staged Files",
-            entries: entries,
-            changeListName: list.name,
-            changeLists: visibleChangeLists,
-            emptyLabel: "No files",
-            statusKind: { $0.staged },
-            isChecked: { _ in true },
-            onToggle: { entry, checked in
-                if !checked { onUnstage(entry.path) }
-            },
-            onStageWithoutContent: onStageWithoutContent,
-            onSelect: onSelect,
-            onPreviewPath: onPreviewPath,
-            onShowDiffPath: onShowDiffPath,
-            onShowLocalStagedDiffPath: onShowLocalStagedDiffPath,
-            onShowLocalVersionPath: onShowLocalVersionPath,
-            onShowStagedVersionPath: onShowStagedVersionPath,
-            onShowStagedDiffPath: onShowStagedDiffPath,
-            onShowThreeVersionsPath: onShowThreeVersionsPath,
-            selectedPath: previewPath,
-            onPartial: onPartial,
-            binaryPaths: binaryPaths,
-            lfsTrackedPaths: lfsTrackedPaths,
-            lfsPointerPaths: lfsPointerPaths,
-            stagingPresence: stagingPresence,
-            contextSelectedPaths: $contextSelectedPaths,
-            contextEligiblePaths: contextEligiblePaths,
-            onIgnore: onIgnore,
-            onExclude: onExclude,
-            repositoryWorkdir: repositoryWorkdir,
-            onRestore: onRestore,
-            groupByDirectory: groupByDirectory,
-            expansionCommand: treeExpansionCommand,
-            expansionTarget: treeExpansionTarget,
-            onDropPaths: { paths in paths.forEach(onStage) },
+            onDropPaths: { paths in onMovePathsToChangeList(paths, list.name) },
             onDropShelf: onUnshelve,
             onDropShelfIntoChangeList: onUnshelveIntoChangeList,
             onMovePathsToChangeList: onMovePathsToChangeList,
@@ -1267,7 +1192,7 @@ struct RebasedCommitWorkspace: View {
                     Image(systemName: stashes.isEmpty || !stashesExpanded ? "chevron.right" : "chevron.down")
                         .font(.caption2.weight(.bold))
                     Text("Stashes")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(Design.Typography.interface(13, weight: .semibold))
                     Text("\(stashes.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1866,7 +1791,7 @@ struct RebasedCommitWorkspace: View {
                         Image(systemName: "trash")
                             .font(.caption2)
                         Text("Recently Deleted")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Design.Typography.interface(12, weight: .semibold))
                         Text("\(deletedShelves.count)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -2130,7 +2055,7 @@ struct RebasedCommitWorkspace: View {
                     Image(systemName: visibleShelves.isEmpty || !shelvesExpanded ? "chevron.right" : "chevron.down")
                         .font(.caption2.weight(.bold))
                     Text("Shelves")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(Design.Typography.interface(13, weight: .semibold))
                     Text("\(visibleShelves.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -2574,7 +2499,7 @@ struct PatchDiffPreviewView: View {
     func compactButton(_ image: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: image)
-                .font(.system(size: 13, weight: .medium))
+                .font(Design.Typography.interface(13, weight: .medium))
                 .frame(width: 22, height: 22)
         }
         .buttonStyle(.plain)
@@ -2586,7 +2511,7 @@ struct PatchDiffPreviewView: View {
     }
 
     var rebasedBackground: Color {
-        Design.Colors.canvas
+        Design.Colors.surface
     }
 
     var rebasedSurface: Color {

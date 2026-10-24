@@ -64,6 +64,7 @@ targets:
       - path: HostingIntegration.swift
       - path: Localizable.xcstrings
       - path: Assets.xcassets
+      - path: Resources
       # uniffi 生成的 Swift 绑定（引用 arbor-engine 目录，重新 generate 后自动生效）
       - path: ../arbor-engine/generated/swift/arbor_engine.swift
     settings:

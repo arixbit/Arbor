@@ -800,3 +800,54 @@ fn command_log_filter_returns_empty_for_unborn_head() {
     let repo = TestRepo::new().open();
     assert!(repo.log_with_command(Vec::new(), 50).unwrap().is_empty());
 }
+
+#[test]
+fn nested_commit_changes_match_git_files_and_preserve_gitlinks() {
+    let r = TestRepo::new();
+    let base = common::commit(&r.path, "src/Core/Engine.swift", "base", "add nested file");
+    let modified = common::commit(
+        &r.path,
+        "src/Core/Engine.swift",
+        "updated",
+        "modify nested file",
+    );
+    r.git(&["rm", "src/Core/Engine.swift"]);
+    r.git(&["commit", "-m", "delete nested file"]);
+    let deleted = r.git(&["rev-parse", "HEAD"]);
+    r.git(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        &format!("160000,{base},modules/sample"),
+    ]);
+    r.git(&["commit", "-m", "add gitlink"]);
+    let gitlink = r.git(&["rev-parse", "HEAD"]);
+    let repo = r.open();
+
+    for id in [&base, &modified, &deleted, &gitlink] {
+        let expected = r.git(&[
+            "diff-tree",
+            "--root",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            id,
+        ]);
+        let mut actual: Vec<_> = repo
+            .commit_diff(id.clone(), None)
+            .unwrap()
+            .changes
+            .into_iter()
+            .map(|change| change.path)
+            .collect();
+        actual.sort();
+        assert_eq!(
+            actual,
+            expected.lines().map(String::from).collect::<Vec<_>>(),
+            "commit {id}"
+        );
+    }
+    let changes = repo.tree_changes(base, modified).unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].path, "src/Core/Engine.swift");
+}

@@ -118,6 +118,10 @@ final class ArborAppDelegate: NSObject, NSApplicationDelegate {
             // window exists but the SwiftUI surface renders as a black,
             // zero-sized view on launch.
             let hostingView = NSHostingView(rootView: content)
+            // The workspace already includes the full titlebar area. Let the
+            // explicit window minimum govern resizing instead of adding the
+            // hosting view's safe-area inset to its 540pt minimum a second time.
+            hostingView.sizingOptions = []
             hostingView.frame = window.contentView?.bounds ?? NSRect(origin: .zero, size: window.frame.size)
             hostingView.autoresizingMask = [.width, .height]
             window.contentView = hostingView

@@ -99,6 +99,13 @@ pub(crate) fn diff_trees(
                 }
             }
         };
+        // gix also reports directory objects while descending into a tree.
+        // File-level consumers must not count those containers as changes.
+        // Keep blobs, symlinks, gitlinks and file/directory type changes.
+        let is_container = |mode: u32| mode == 0 || mode & 0o170000 == 0o040000;
+        if is_container(item.old_mode) && is_container(item.new_mode) {
+            continue;
+        }
         out.push(item);
     }
     Ok(out)

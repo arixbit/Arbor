@@ -79,6 +79,7 @@ extension ContentView {
                 branchPopup
             }
 
+            HStack(spacing: 0) {
             WorkspaceSplitLayout(
                 persistedSidebarWidth: $savedWorkspaceSidebarWidth,
                 selectedToolWindow: projectWorkspace.toolWindowMode,
@@ -108,7 +109,35 @@ extension ContentView {
                 workspaceSidebar
             } mainContent: {
                 mainContext
+                    .background(Design.Colors.logSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            VStack {
+                Button {
+                    notificationsPresented.toggle()
+                } label: {
+                    Image(systemName: "bell")
+                        .font(.system(size: 17, weight: .regular))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Notifications")
+                .accessibilityLabel("Notifications")
+                .popover(isPresented: $notificationsPresented, arrowEdge: .leading) {
+                    OperationLogView(
+                        feedbackCenter: feedbackCenter,
+                        focusNotificationID: $operationRecovery.logFocusNotificationID
+                    )
+                    .frame(width: 380, height: 480)
+                }
+                Spacer()
+            }
+            .padding(.top, 4)
+            .frame(width: 40)
+            }
+            .padding(.bottom, 4)
+            .background(Design.Colors.workspaceFrame)
 
             RebasedStatusBar(
                 branch: currentBranchName,
@@ -131,7 +160,10 @@ extension ContentView {
                 onFeedbackDetails: { projectWorkspace.feedbackDetailMessage = $0 }
             )
         }
-        .frame(minWidth: 980, minHeight: 540)
+        .frame(minWidth: 980, minHeight: 540 - workspaceTitlebarHeight)
+        .font(Design.Typography.interface())
+        .background(WorkspaceWindowChrome(titlebarHeight: $workspaceTitlebarHeight))
+        .ignoresSafeArea(.container, edges: .top)
         .background(Design.Colors.canvas)
         .onChange(of: projectWorkspace.toolWindowMode, initial: false) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: "arbor.toolWindowMode")

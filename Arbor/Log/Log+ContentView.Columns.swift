@@ -41,12 +41,9 @@ HStack(spacing: 10) {
         logList.viewMode = .graph
     } label: {
         Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
-            .font(.system(size: 13, weight: .semibold))
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .font(Design.Typography.interface(12, weight: .medium))
     }
-    .buttonStyle(.borderedProminent)
-    .tint(Design.Colors.accent)
+    .buttonStyle(RebasedTabButtonStyle(isSelected: true))
 
     if externalLogWindow {
         externalLogRootsMenu
@@ -56,9 +53,9 @@ HStack(spacing: 10) {
 
     Spacer(minLength: 0)
 }
-.padding(.horizontal, 12)
-.padding(.vertical, 7)
-.background(Design.Colors.chrome)
+.padding(.horizontal, 8)
+.frame(height: 36)
+.background(Design.Colors.surface)
 .overlay(alignment: .bottom) { Divider() }
 .onChange(of: logList.viewMode) { _, mode in
     if mode == .graph {

@@ -18,8 +18,8 @@ enum GitStageViewSettings {
         for projectPath: String?,
         defaults: UserDefaults = .standard
     ) -> Bool {
-        guard let key = key(for: projectPath) else { return true }
-        return defaults.object(forKey: key) == nil ? true : defaults.bool(forKey: key)
+        guard let key = key(for: projectPath) else { return false }
+        return defaults.bool(forKey: key)
     }
 
     static func saveIgnoredFilesShown(

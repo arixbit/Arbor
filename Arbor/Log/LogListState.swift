@@ -29,6 +29,7 @@ final class LogListState: ObservableObject {
     @Published var since = ""
     @Published var until = ""
     @Published var advancedFiltersPresented = false
+    @Published var dateFiltersPresented = false
 
     // MARK: - 路径过滤
 

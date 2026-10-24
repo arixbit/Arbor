@@ -463,7 +463,8 @@ final class ArborUISession {
     private func resolve(_ candidate: Candidate) -> XCUIElement? {
         if !candidate.identifier.isEmpty {
             let byIdentifier = root.descendants(matching: candidate.role)
-                .matching(identifier: candidate.identifier).firstMatch
+                .matching(identifier: candidate.identifier)
+                .matching(NSPredicate(format: "label == %@", candidate.label)).firstMatch
             if byIdentifier.exists { return byIdentifier }
         }
         let byLabel = root.descendants(matching: candidate.role)
@@ -497,13 +498,12 @@ final class ArborUISession {
                     break
                 }
             }
-            if !closed { app.typeKey(.escape, modifierFlags: []) }
+            if !closed { closeWindow(top) }
             Thread.sleep(forTimeInterval: 0.3)
         }
     }
 
-    /// Closes the frontmost sheet through its own dismiss button when Escape
-    /// does not work, which is the case for some SwiftUI editor sheets.
+    /// Closes the frontmost sheet through its own dismiss button.
     func closeFrontmostSheet() {
         let deadline = Date().addingTimeInterval(2)
         while Date() < deadline, app.sheets.count > 0 {
@@ -518,9 +518,7 @@ final class ArborUISession {
                     break
                 }
             }
-            if !closed {
-                app.typeKey(.escape, modifierFlags: [])
-            }
+            if !closed { break }
             Thread.sleep(forTimeInterval: 0.25)
         }
     }
@@ -531,19 +529,28 @@ final class ArborUISession {
         closeFrontmostSheet()
         // Transient surfaces (popovers, inline editors, menus) are not always
         // typed as an XCUI popover or menu, and they swallow the next click.
-        // Escape after every surface-changing click dismisses them; ordinary
-        // views ignore it.
-        app.typeKey(.escape, modifierFlags: [])
+        // Click unused title-bar space so dismissal does not synthesize a
+        // keyboard event and trigger third-party input-method authorization.
+        dismissTransientSurface()
         Thread.sleep(forTimeInterval: 0.2)
         let deadline = Date().addingTimeInterval(3)
         while Date() < deadline, app.menus.count > reference.menus || app.popovers.count > 0 {
-            app.typeKey(.escape, modifierFlags: [])
+            dismissTransientSurface()
             Thread.sleep(forTimeInterval: 0.2)
         }
         if app.windows.count > reference.windows, app.state == .runningForeground {
-            app.typeKey("w", modifierFlags: .command)
+            closeWindow(app.windows.element(boundBy: app.windows.count - 1))
             Thread.sleep(forTimeInterval: 0.2)
         }
+    }
+
+    func dismissTransientSurface() {
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.02)).click()
+    }
+
+    private func closeWindow(_ target: XCUIElement) {
+        let close = target.buttons["_XCUI:CloseWindow"].firstMatch
+        if close.exists, close.isHittable { close.click() }
     }
 
     // MARK: - Screenshots
@@ -633,10 +640,13 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// ⌘, opens the Settings scene in its own window.
+    /// Open the Settings scene through the application menu.
     @discardableResult
     func openSettings() -> Bool {
-        app.typeKey(",", modifierFlags: .command)
+        app.menuBars.menuBarItems["Arbor"].click()
+        let settingsItem = app.menuItems.matching(NSPredicate(format: "title BEGINSWITH %@", "Settings")).firstMatch
+        guard settingsItem.waitForExistence(timeout: 3) else { return false }
+        settingsItem.click()
         let deadline = Date().addingTimeInterval(15)
         defer { expectedWindowCount = app.windows.count }
         while Date() < deadline {

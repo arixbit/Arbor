@@ -40,14 +40,9 @@ struct RebasedActivityRail: View {
     let onOpenProject: () -> Void
 
     var body: some View {
-        VStack(spacing: 10) {
-            railButton("checkmark.circle", mode: .commit, help: "Commit")
-            railButton("clock", mode: .log, help: "Log")
-            railButton("list.bullet.rectangle", mode: .operations, help: "Operation Log")
-
-            Divider()
-                .padding(.vertical, 4)
-
+        VStack(spacing: 8) {
+            railButton("slider.horizontal.3", mode: .commit, help: "Commit")
+            Divider().padding(.horizontal, 6)
             Button(action: onOpenProject) {
                 Image(systemName: "folder")
                     .font(.system(size: 15, weight: .medium))
@@ -56,8 +51,6 @@ struct RebasedActivityRail: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Project")
-
-            Spacer()
 
             Menu {
                 Button("Commit") { onSelect(.commit) }
@@ -71,11 +64,15 @@ struct RebasedActivityRail: View {
             .menuStyle(.borderlessButton)
             .foregroundStyle(.secondary)
             .help("More tool windows")
+
+            Spacer()
+            railButton("clock", mode: .log, help: "Log")
+            railButton("list.bullet.rectangle", mode: .operations, help: "Operation Log")
         }
-        .padding(.top, 18)
+        .padding(.top, 4)
         .padding(.bottom, 12)
-        .frame(width: 52)
-        .background(Design.Colors.chrome)
+        .frame(width: 40)
+        .background(Design.Colors.workspaceFrame)
     }
 
     func railButton(_ image: String, mode: ToolWindowMode, help: String) -> some View {
@@ -93,6 +90,8 @@ struct RebasedActivityRail: View {
         .buttonStyle(.plain)
         .foregroundStyle(selectedMode == mode ? .primary : .secondary)
         .help(help)
+        .accessibilityLabel(LocalizedStringKey(help))
+        .accessibilityAddTraits(selectedMode == mode ? .isSelected : [])
     }
 }
 
@@ -442,29 +441,29 @@ struct RebasedTopBar<BranchMenu: View>: View {
                 HStack(spacing: 8) {
                     Image(systemName: "square.stack.3d.up.fill")
                         .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(projectName)
-                            .font(.system(size: 14, weight: .semibold))
-                            .lineLimit(1)
-                        if let projectPath {
-                            Text(projectPath)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
+                    Text(projectName)
+                        .font(Design.Typography.interface(13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     Image(systemName: "chevron.down")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.secondary)
                 }
             }
             .menuStyle(.borderlessButton)
-            .help("Open project")
+            .frame(maxWidth: 240)
+            .fixedSize(horizontal: true, vertical: false)
+            .help(projectPath ?? projectName)
 
-            Divider().frame(height: 22)
+            HStack(spacing: 4) {
+                toolbarButton("arrow.down.left", title: "Update", action: onUpdate)
+                toolbarButton("arrow.up.right", title: "Push", action: onPush)
+            }
+            .disabled(!hasRepository || isLoading)
 
             branchMenu
+                .frame(maxWidth: 260, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
 
             GitMergeRebaseWidget(
                 items: operationItems,
@@ -476,15 +475,21 @@ struct RebasedTopBar<BranchMenu: View>: View {
 
             Spacer(minLength: 24)
 
-            HStack(spacing: 4) {
-                toolbarButton("arrow.down.circle", title: "Update", action: onUpdate)
-                toolbarButton("checkmark.circle", title: "Commit", action: onCommit)
-                toolbarButton("arrow.up.circle", title: "Push", action: onPush)
-                toolbarButton("arrow.triangle.2.circlepath", title: "Fetch", action: onFetch)
+            Button(action: onSearch) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 30, height: 30)
             }
-            .disabled(!hasRepository || isLoading)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Search")
+            .help("Search")
 
-            Menu("More Git Actions") {
+            Menu {
+                Button("Commit", action: onCommit)
+                Button("Fetch", action: onFetch)
+                Button("Refresh", action: onRefresh)
+                Divider()
                 Button("Quick Git Actions…") { onQuickAction(.quickActions) }
                 Divider()
                 Button("Show Log") { onQuickAction(.showLog) }
@@ -513,37 +518,32 @@ struct RebasedTopBar<BranchMenu: View>: View {
                     Divider()
                     Button("Fetch Full History…") { onQuickAction(.fetchUnshallow) }
                 }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 28, height: 28)
             }
             .menuStyle(.borderlessButton)
             .disabled(!hasRepository || isLoading)
+            .accessibilityLabel("More Git Actions")
             .help("More Git Actions")
 
-            Button(action: onRefresh) {
-                Image(systemName: isLoading ? "progress.indicator" : "arrow.clockwise")
-                    .font(.system(size: 14, weight: .medium))
+            Menu {
+                AppLanguageMenu()
+                SettingsLink {
+                    Label("Settings…", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "gearshape")
                     .frame(width: 28, height: 28)
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
             .foregroundStyle(.secondary)
-            .disabled(!hasRepository || isLoading)
-            .accessibilityLabel("Refresh")
-            .help("Refresh")
-
-            AppLanguageMenu()
-
-            Button(action: onSearch) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Search")
-            .help("Search")
+            .accessibilityLabel("Settings")
+            .help("Settings")
         }
-        .padding(.leading, 70)
-        .padding(.trailing, 18)
-        .padding(.vertical, 10)
+        .padding(.leading, 90)
+        .padding(.trailing, 12)
+        .frame(height: 43)
         .background(Design.Colors.chromeElevated)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
@@ -571,15 +571,15 @@ struct RebasedTabButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+            .font(Design.Typography.interface(13))
             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 10)
-            .background(Color.clear)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(isSelected ? Color.accentColor : Color.clear)
-                    .frame(height: 2)
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(isSelected ? Color.primary.opacity(0.06) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 5))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(isSelected ? Color.primary.opacity(0.12) : Color.clear, lineWidth: 1)
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
     }
@@ -694,8 +694,7 @@ struct RebasedChangeGroup: View {
     @State var collapsedFolders: Set<String> = []
     @State var rowsCache = ChangeTreeRowsCache()
 
-    /// Folders this group can collapse. A group without folders has nothing to
-    /// expand or collapse.
+    /// Folders whose expansion is tracked inside this group.
     var folderPaths: Set<String> {
         Set(treeRows.compactMap { $0.entry == nil ? $0.path : nil })
     }
@@ -705,10 +704,10 @@ struct RebasedChangeGroup: View {
     /// expanded again, and an enabled button that cannot act is a clickable
     /// no-op.
     var expansionState: ChangeTreeExpansionState {
-        guard !folderPaths.isEmpty else { return ChangeTreeExpansionState() }
+        guard !entries.isEmpty else { return ChangeTreeExpansionState() }
         return ChangeTreeExpansionState(
             canExpand: !isExpanded || !collapsedFolders.isEmpty,
-            canCollapse: isExpanded && folderPaths.count > collapsedFolders.count
+            canCollapse: isExpanded
         )
     }
 
@@ -802,31 +801,45 @@ struct RebasedChangeGroup: View {
 
     var body: some View {
         Group {
-            Button {
-                guard !entries.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
+            HStack(spacing: 6) {
+                Button {
+                    guard !entries.isEmpty else { return }
                     isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
+                } label: {
                     Image(systemName: entries.isEmpty || !isExpanded ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
-                    Text(title)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("\(entries.count) files")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                        .font(.system(size: 10))
+                        .frame(width: 12, height: 24)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LocalizedStringKey(title))
+                ZStack {
+                    Toggle("", isOn: Binding(
+                        get: { !entries.isEmpty && entries.allSatisfy(isChecked) },
+                        set: { checked in entries.forEach { onToggle($0, checked) } }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(RebasedCheckboxStyle(
+                        labelsHidden: true,
+                        isMixed: entries.contains(where: { $0.staged != .unchanged }) && !entries.allSatisfy(isChecked)
+                    ))
+                    .accessibilityLabel("Stage group: \(String(localized: String.LocalizationValue(title)))")
+                    .disabled(entries.isEmpty)
+                }
+                Text(LocalizedStringKey(title))
+                    .font(Design.Typography.interface(13, weight: title == "Changes" ? .semibold : .regular))
+                Text("\(entries.count) files")
+                    .font(Design.Typography.interface(12))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .padding(.top, 8)
+            .frame(height: 24)
+            .padding(.horizontal, 4)
+            .background(title == "Changes" ? Color.primary.opacity(0.07) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .padding(.top, 2)
             .onChange(of: expansionCommand) { _, _ in
                 isExpanded = expansionTarget
-                collapsedFolders = expansionTarget
-                    ? []
-                    : Set(treeRows.filter { $0.entry == nil }.map(\.path))
+                collapsedFolders = expansionTarget ? [] : folderPaths
             }
 
             if entries.isEmpty {
@@ -886,7 +899,7 @@ struct RebasedChangeGroup: View {
                 Image(systemName: collapsedFolders.contains(row.path) ? "folder" : "folder.fill")
                     .foregroundStyle(.secondary)
                 Text(row.name)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Design.Typography.interface(12, weight: .medium))
                     .lineLimit(1)
                 Spacer(minLength: 4)
             }
@@ -907,41 +920,36 @@ struct RebasedChangeGroup: View {
                     set: { onToggle(entry, $0) }
                 ))
                 .labelsHidden()
-                .toggleStyle(.checkbox)
+                .toggleStyle(RebasedCheckboxStyle(
+                    labelsHidden: true,
+                    isMixed: entry.staged != .unchanged && entry.unstaged != .unchanged
+                ))
+                .accessibilityLabel("Stage \(entry.path)")
+                .accessibilityHint(Text(LocalizedStringKey(
+                    entry.staged != .unchanged && entry.unstaged != .unchanged ? "Partially staged" : ""
+                )))
 
-                // A file with both index and worktree changes is represented
-                // in both GitStageTree groups. The unstaged-side checkbox is
-                // indeterminate, not simply empty; otherwise the user cannot
-                // tell a partially staged file from a wholly unstaged one.
-                if !isChecked(entry),
-                   entry.staged != .unchanged,
-                   entry.unstaged != .unchanged {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.accentColor)
-                        .frame(width: 12, height: 12)
-                        .overlay {
-                            Rectangle()
-                                .fill(Color.white)
-                                .frame(width: 6, height: 2)
-                        }
-                        .allowsHitTesting(false)
-                }
             }
             .frame(width: 16, height: 16)
-            StatusBadge(kind: statusKind(entry))
+            Image(systemName: repositoryFileSymbol(for: entry.path))
+                .font(Design.Typography.interface(13))
+                .foregroundStyle(repositoryFileIconColor(for: entry.path))
+                .frame(width: 16)
             // `URL(fileURLWithPath:)` resolves relative change paths against
             // the process working directory. That both ran a `getcwd` syscall
             // for every row of every render and displayed the checkout's
             // absolute parent path instead of the repository-relative folder.
             // Change paths are already repository-relative, so split them
             // directly.
-            Text(groupByDirectory ? changeTreeRowName(entry.path) : entry.path)
+            Text(changeTreeRowName(entry.path))
+                .font(Design.Typography.interface(13))
+                .foregroundStyle(ChangeBadge.color(statusKind(entry)))
                 .lineLimit(1)
-            if groupByDirectory {
+            if !groupByDirectory {
                 let parentPath = changeTreeRowParentPath(entry.path)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 if !parentPath.isEmpty, parentPath != "." {
-                    Text("/\(parentPath)")
+                    Text(parentPath)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -978,6 +986,11 @@ struct RebasedChangeGroup: View {
                     .help("二进制文件：diff/行级暂存按降级策略处理")
             }
             Spacer(minLength: 4)
+            if entry.staged != .unchanged && entry.unstaged != .unchanged {
+                Text("Partially staged")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Button(action: { onPartial(entry.path) }) {
                 Image(systemName: "ellipsis")
             }
@@ -986,7 +999,7 @@ struct RebasedChangeGroup: View {
             .help("Partial stage")
         }
         .padding(.leading, CGFloat(depth) * 14 + 4)
-        .padding(.vertical, 3)
+        .frame(minHeight: 24)
         .padding(.horizontal, 4)
         .background(
             selectedPath == entry.path
@@ -1165,6 +1178,62 @@ struct RebasedChangeGroup: View {
                 Label("Delete…", systemImage: "trash")
             }
             .help("Delete the selected paths from disk. Git keeps tracking the deletion.")
+        }
+    }
+}
+
+/// Quiet outlined actions match the reference while retaining native Buttons.
+struct RebasedActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Design.Typography.interface(13))
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(configuration.isPressed ? Color.primary.opacity(0.06) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+            .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 1) }
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// Outline artwork with native Toggle semantics for VoiceOver and UI automation.
+struct RebasedCheckboxStyle: ToggleStyle {
+    var labelsHidden = false
+    var isMixed = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(configuration.isOn || isMixed ? Color.accentColor : Color.clear)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 2)
+                            .strokeBorder(configuration.isOn || isMixed ? Color.accentColor : Design.Colors.checkboxBorder, lineWidth: 1)
+                    }
+                    .overlay {
+                        if isMixed {
+                            Rectangle().fill(.white).frame(width: 8, height: 2)
+                        } else if configuration.isOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+                if !labelsHidden { configuration.label }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }
+                .toggleStyle(.checkbox)
         }
     }
 }

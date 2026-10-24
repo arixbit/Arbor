@@ -7,12 +7,14 @@ final class LinearBekGraphSnapshot {
     let maxLane: Int
     let commitIDs: Set<String>
     let mergeIDs: Set<String>
+    let colorIndexes: [Int]
 
-    init(controller: LinearBekGraphController, maxLane: Int, commitIDs: Set<String>) {
+    init(controller: LinearBekGraphController, maxLane: Int, commitIDs: Set<String>, colorIndexes: [Int]) {
         self.controller = controller
         self.maxLane = maxLane
         self.commitIDs = commitIDs
         self.mergeIDs = controller.graph.mergeIDs
+        self.colorIndexes = colorIndexes
     }
 }
 
@@ -69,13 +71,45 @@ final class LinearBekGraphCache {
             maxLane: previous?.maxLane ?? commits.reduce(0) { result, commit in
                 max(result, Int(commit.lane), Int(commit.parentLanes.max() ?? 0))
             },
-            commitIDs: previous?.commitIDs ?? Set(commits.map(identity))
+            commitIDs: previous?.commitIDs ?? Set(commits.map(identity)),
+            colorIndexes: previous?.colorIndexes ?? logGraphColorIndexes(commits: commits)
         )
         self.commits = commits
         self.rootQualifiedIdentity = rootQualifiedIdentity
         snapshot = result
         return result
     }
+}
+
+/// Drawing lanes can be reused by unrelated branch tips. Reserve branch colors
+/// before walking parents so another tip cannot recolor the current branch.
+func logGraphColorIndexes(commits: [CommitInfo]) -> [Int] {
+    let rowByRootID = Dictionary(uniqueKeysWithValues: commits.enumerated().map { row, commit in
+        ("\(commit.repositoryPath ?? "")\u{1f}\(commit.id)", row)
+    })
+    var indexes = [Int?](repeating: nil, count: commits.count)
+    var next = 0
+    for row in commits.indices where commits[row].isHead || !commits[row].refs.isEmpty || !commits[row].remoteRefs.isEmpty {
+        indexes[row] = next
+        next += 1
+    }
+    for row in commits.indices {
+        if indexes[row] == nil {
+            indexes[row] = next
+            next += 1
+        }
+        for (parentIndex, id) in commits[row].parentIds.enumerated() {
+            let key = "\(commits[row].repositoryPath ?? "")\u{1f}\(id)"
+            guard let parent = rowByRootID[key], indexes[parent] == nil else { continue }
+            if parentIndex == 0 {
+                indexes[parent] = indexes[row]
+            } else {
+                indexes[parent] = next
+                next += 1
+            }
+        }
+    }
+    return indexes.map { $0 ?? 0 }
 }
 
 

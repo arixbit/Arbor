@@ -8,16 +8,16 @@ extension ContentView {
 @ViewBuilder
 var logWorkspace: some View {
     GeometryReader { geometry in
-        // Both columns need their minimum plus the native 12pt divider.
+        // Both columns need their minimum plus the native 6pt divider.
         // Below that width, drill into details without sacrificing the list
         // or persisting a temporary, compressed divider position.
-        let showsInlineInspector = geometry.size.width >= 420 + 12 + 460
+        let showsInlineInspector = geometry.size.width >= 540 + 6 + 280
         Group {
             if showsInlineInspector {
                 WorkspaceHorizontalSplit(
                     persistedLeftWidth: $savedLogGraphWidth,
-                    minimumLeftWidth: 420,
-                    minimumRightWidth: 460
+                    minimumLeftWidth: 540,
+                    minimumRightWidth: 280
                 ) {
                     logGraphPanel
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -7,6 +7,7 @@ struct ArborApp: App {
     @AppStorage("arbor.appLanguage") private var appLanguageRawValue = AppLanguage.defaultLanguage.rawValue
 
     init() {
+        Design.Typography.registerFonts()
         ArborAppIconController.install()
         migrateLegacyPersistedStatusCaches()
         let savedPath = UserDefaults.standard.string(forKey: "arbor.git.executable") ?? ""

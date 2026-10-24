@@ -112,6 +112,8 @@ struct ContentView: View {
     let externalLogUIManager: ExternalLogManager?
     let externalLogTabsPersistenceKey: String?
     @StateObject var feedbackCenter = FeedbackCenter()
+    @State var notificationsPresented = false
+    @State var workspaceTitlebarHeight: CGFloat = 0
     @StateObject var credentialAuth = CredentialAuthController()
     // ContentView is also hosted by the AppKit fallback window used when a
     // repository path is passed on the command line. SceneStorage is only
@@ -125,22 +127,15 @@ struct ContentView: View {
     @AppStorage("arbor.projectPanelExpanded.v3") var projectPanelExpanded = true
     // With both tool windows expanded the Commit surface takes the upper half,
     // matching the reference split; the divider stays draggable.
-    @AppStorage("arbor.toolWindowHeight.v2") var toolWindowHeight: Double = 470
-    // The reference window gives the left tool-window column 628pt of a 1642pt
-    // window (docs/visual-baseline.md): 52pt activity rail + 564pt panel +
-    // 12pt divider. Measuring against the reference rather than guessing keeps
-    // the Commit list and the project tree the same width as the app this is
-    // modelled on. The versioned key lets an installation that stored a
-    // narrower column pick the new width up.
-    @AppStorage("arbor.workspaceSidebarWidth.v11") var savedWorkspaceSidebarWidth: Double = 564
+    @AppStorage("arbor.toolWindowHeight.v3") var toolWindowHeight: Double = 466
+    // 40pt activity rail + 582pt panel + 6pt divider = 628pt at the
+    // matched reference size. The new key adopts this round's geometry.
+    @AppStorage("arbor.workspaceSidebarWidth.v12") var savedWorkspaceSidebarWidth: Double = 582
     // The Log editor has its own graph/details splitter. Its graph/table side
     // is the dominant column in the reference frame; the details inspector is
     // the narrower right-hand column.
-    // Aligning the left column with the reference (628pt) leaves ~1000pt for
-    // the Log workspace. The details inspector holds commit metadata, the
-    // three commit actions and the changes browser, which need ~460pt before
-    // they clip; the graph/table keeps the remainder.
-    @AppStorage("arbor.logGraphWidth.v6") var savedLogGraphWidth: Double = 545
+    // At 1642pt this leaves a 280pt inspector beside the dominant Log table.
+    @AppStorage("arbor.logGraphWidth.v8") var savedLogGraphWidth: Double = 688
     // These are the same three persistent Log presentation properties exposed
     // by rebased's VcsLog UI actions. They are deliberately state, not layout
     // hacks: changing them must not reload or replace the selected commit.
@@ -149,8 +144,9 @@ struct ContentView: View {
     @AppStorage("arbor.log.diffPreviewVertical.v1") var logDiffPreviewVertical = false
     @AppStorage("arbor.log.compactReferences.v2") var logCompactReferences = true
     @AppStorage("arbor.log.commitColumns.v1") var logShowCommitColumns = false
-    @AppStorage("arbor.log.authorColumn.v1") var logShowAuthorColumn = false
-    @AppStorage("arbor.log.dateColumn.v1") var logShowDateColumn = false
+    @AppStorage("arbor.log.authorColumn.v1") var logShowAuthorColumn = true
+    @AppStorage("arbor.log.dateColumn.v1") var logShowDateColumn = true
+    @AppStorage("arbor.log.columnHeaders.v1") var logShowColumnHeaders = false
     @AppStorage("arbor.log.hashColumn.v1") var logShowHashColumn = false
     @AppStorage("arbor.log.rootColumn.v1") var logShowRootColumn = false
     @AppStorage("arbor.log.signatureColumn.v1") var logShowSignatureColumn = false

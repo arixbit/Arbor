@@ -2,6 +2,69 @@
 
 ## Unreleased
 
+Workspace: the Commit and Log workbenches were re-laid out against the
+reference window and the remaining per-pixel gaps closed.
+
+- The 82 pt two-row header is one 43 pt row: project menu, Update/Push, branch
+  widget and merge/rebase status on the left, search, a Git overflow menu
+  (Commit, Fetch, Refresh, quick actions) and a settings menu that also holds
+  the language picker on the right. The activity rail is 40 pt, the left column
+  stays 628 pt at the matched size, and Commit/Project/Log sit on white rounded
+  cards over a light frame with a 40 pt notifications rail on the far right
+- Commit mode lists changed files only: index and worktree state for one path
+  are merged into a single row with an explicit staged / partially staged
+  meaning, Unversioned Files is always its own group and starts collapsed, and
+  Ignored Files stays behind Show Ignored. The commit editor is a 126-140 pt
+  footer instead of a 180-240 pt pane, so the tree gets the height
+- The Log table uses 26 pt rows, author and date columns on and column headers
+  off by default (both remain in Log Columns). The inspector is a 280 pt column
+  whose metadata sits below the changes browser, with commit actions in a menu;
+  a wide changes list keeps tree and diff side by side and a narrow one stacks
+  them. Filters are ordered Text/Regex/Case, Branch, User, Date, Paths, with
+  separate named User and Date popovers and 28 pt fields that still fit a
+  980 pt window
+- Branch colors are assigned per referenced tip and inherited through the
+  first parent instead of following the drawing lane, so two tips that reuse a
+  lane no longer share a color and a tag keeps its parent's. The graph gutter
+  shrinks to the lanes actually in use and curved edges reuse one path for
+  drawing and hit testing
+- The project tree is a plain list with a collapsible repository root row (name
+  and path) and shares one file-type symbol and color table with Changes and
+  the commit inspector, so a Swift file reads the same in all three
+- The main window's 540 pt minimum is now measured from the real title bar
+  instead of being added to it, so the scene can no longer bottom out at 572 pt
+
+Typography: interface text uses the Inter the reference ships with.
+
+- 12-13 pt labels, file names, tabs and metadata are Inter Regular/SemiBold;
+  native captions and monospaced code keep the system faces. Both OTFs and the
+  SIL OFL 1.1 license ship in the app bundle and are registered explicitly, and
+  missing Chinese glyphs still fall back to the system font
+- Log and inspector dates are two-digit-year `dd/MM/yy` with the 12-hour marker
+  following the interface language (`05/01/24 5:00 PM`, `05/01/24 下午5:00`)
+  rather than the reference's system-language mix
+
+Engine: a commit no longer counts its directories as changed files.
+
+- `diff_trees` dropped tree objects that gix reports while descending, which
+  inflated nested commits; blobs, symlinks, gitlinks and file/directory type
+  changes are kept, and a new regression compares `commit_diff` with
+  `git diff-tree --name-only -r` for nested add/modify/delete plus a gitlink
+
+UI tests: the suites drive menus and windows instead of typing keys.
+
+- Settings, paste, menu dismissal and window closing use the menu bar, the
+  clipboard and the window's close button, so a run no longer trips the
+  third-party input-method authorization prompt
+- The capture suite asserts the 540 pt minimum on the real SwiftUI window,
+  keeps the filter bar reachable at 980 pt, and reads the compact inspector's
+  actions from its menu. The smoke suite adds grouping/staging state
+  transitions and Skip hooks through Commit Options
+
+Docs: `docs/commit-ui-comparison.md` is the before picture and
+`docs/commit-ui-round1.md` through `round3.md` record each pass, including the
+screenshots in `docs/images/commit-ui-comparison/`.
+
 Changes: the changes list and the project tree can now delete paths from disk.
 
 - IntelliJ's `$Delete` in the Stage tree is a platform action, so the id-level

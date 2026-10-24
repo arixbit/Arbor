@@ -60,27 +60,6 @@ struct LogCommitInspectorView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if showsMetadata {
                 VSplitView {
-                    Group {
-                        if commits.count == 1 {
-                            CommitDetailsMetadataView(
-                                commit: commits[0],
-                                repositoryForCommit: repositoryForCommit,
-                                remotes: remotesForCommit(commits[0]),
-                                onReverted: onReverted,
-                                onCherryPicked: onCherryPicked,
-                                onRevertRequested: onRevertRequested,
-                                onCherryPickRequested: onCherryPickRequested,
-                                onCreateBranch: onCreateBranch
-                            )
-                        } else {
-                            LogMultiMetadataView(
-                                commits: commits,
-                                onCreateBranch: onCreateBranch
-                            )
-                        }
-                    }
-                    .frame(minHeight: 170, idealHeight: commits.count > 1 ? 250 : 300, maxHeight: .infinity)
-
                     LogChangesBrowserView(
                         repo: repo,
                         repositoryForCommit: repositoryForCommit,
@@ -107,6 +86,27 @@ struct LogCommitInspectorView: View {
                         affectedHistoryPath: affectedHistoryPath
                     )
                     .frame(minHeight: 180, idealHeight: 390, maxHeight: .infinity)
+
+                    Group {
+                        if commits.count == 1 {
+                            CommitDetailsMetadataView(
+                                commit: commits[0],
+                                repositoryForCommit: repositoryForCommit,
+                                remotes: remotesForCommit(commits[0]),
+                                onReverted: onReverted,
+                                onCherryPicked: onCherryPicked,
+                                onRevertRequested: onRevertRequested,
+                                onCherryPickRequested: onCherryPickRequested,
+                                onCreateBranch: onCreateBranch
+                            )
+                        } else {
+                            LogMultiMetadataView(
+                                commits: commits,
+                                onCreateBranch: onCreateBranch
+                            )
+                        }
+                    }
+                    .frame(minHeight: 120, idealHeight: 240, maxHeight: 280)
                 }
             } else {
                 LogChangesBrowserView(
@@ -172,7 +172,8 @@ struct CommitDetailsMetadataView: View {
             onCherryPickRequested: onCherryPickRequested,
             showsMetadata: true,
             showsDiffPreview: false,
-            showsChanges: false
+            showsChanges: false,
+            compactMetadata: true
         )
     }
 }

@@ -303,6 +303,7 @@ struct ProjectFileTreeView: View {
     @State private var error: String?
     @State private var loading = false
     @State private var statusCache = ProjectFileTreeStatusCache()
+    @State private var rootExpanded = true
 
     private var statusIndex: ProjectFileTreeStatusIndex {
         statusCache.index(for: entries.hashValue) { ProjectFileTreeStatusIndex(entries: entries) }
@@ -328,7 +329,7 @@ struct ProjectFileTreeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(selection: $selection) {
-                        Section("Project Files") {
+                        DisclosureGroup(isExpanded: $rootExpanded) {
                             ForEach(rootEntries, id: \.path) { entry in
                                 FileTreeNodeView(
                                     repo: repo,
@@ -351,10 +352,31 @@ struct ProjectFileTreeView: View {
                                     resolvedConflictPaths: resolvedConflictPaths,
                                     onRevertResolved: onRevertResolved
                                 )
+                                .listRowSeparator(.hidden)
                             }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder")
+                                    .foregroundStyle(.secondary)
+                                Text(repo.displayName())
+                                    .fontWeight(.semibold)
+                                    .lineLimit(1)
+                                if let workdir = repo.workdir() {
+                                    Text((workdir as NSString).abbreviatingWithTildeInPath)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                            }
+                            .font(Design.Typography.interface(12))
+                            .help(repo.workdir() ?? repo.displayName())
                         }
+                        .listRowSeparator(.hidden)
                     }
-                    .listStyle(.sidebar)
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Design.Colors.surface)
+                    .environment(\.defaultMinListRowHeight, 24)
                 }
             } else {
                 Text("Open a project to show its file tree")
@@ -368,6 +390,7 @@ struct ProjectFileTreeView: View {
         }
         .onChange(of: projectFileTreeRepositoryIdentity(workdir: repo?.workdir())) { _, _ in
             rootEntries = []
+            rootExpanded = true
             if let repo { loadRoot(repo) }
         }
     }
@@ -454,11 +477,13 @@ private struct FileTreeNodeView: View {
                             resolvedConflictPaths: resolvedConflictPaths,
                             onRevertResolved: onRevertResolved
                         )
+                        .listRowSeparator(.hidden)
                     }
                 }
             } label: {
                 treeLabel(systemImage: expanded ? "folder.fill" : "folder", name: entry.name, isDirectory: true)
             }
+            .listRowSeparator(.hidden)
             .onChange(of: expanded) { _, isExpanded in
                 if isExpanded && !loaded { loadChildren() }
             }
@@ -470,6 +495,7 @@ private struct FileTreeNodeView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .listRowSeparator(.hidden)
             .listRowBackground(selection == entry.path ? Design.Colors.selection : .clear)
         }
     }
@@ -478,16 +504,15 @@ private struct FileTreeNodeView: View {
         let kind = statusKind
         return HStack(spacing: Design.Spacing.sm) {
             Image(systemName: systemImage)
-                .foregroundStyle(isDirectory ? Design.Colors.accent : (statusColor(kind) ?? Design.Colors.secondary))
+                .foregroundStyle(isDirectory ? Design.Colors.secondary : repositoryFileIconColor(for: name))
                 .frame(width: 16)
             Text(name)
-                .font(Design.Typography.codeSmall)
+                .font(Design.Typography.interface(13))
                 .foregroundStyle(statusColor(kind) ?? .primary)
                 .opacity(name.hasPrefix(".") ? 0.62 : 1)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
         .contextMenu {
             Button("Copy Relative Path") {
                 onCopyPath(entry.path)
@@ -646,19 +671,9 @@ private struct FileTreeNodeView: View {
     }
 
     private func fileSymbol(for name: String) -> String {
-        switch (name as NSString).pathExtension.lowercased() {
-        case "swift", "rs", "py", "js", "ts", "tsx", "jsx", "c", "h", "cpp", "cc", "java", "go":
-            return "doc.text"
-        case "json", "yaml", "yml", "toml", "xml":
-            return "curlybraces"
-        case "md", "txt", "rst":
-            return "doc.plaintext"
-        case "png", "jpg", "jpeg", "gif", "webp":
-            return "photo"
-        default:
-            return "doc"
-        }
+        repositoryFileSymbol(for: name)
     }
+
 }
 
 struct ProjectEmptyStateView: View {
@@ -807,5 +822,25 @@ struct CurrentRevisionView: View {
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
         }
+    }
+}
+
+/// Shared file-type symbols keep Project, Changes and commit details consistent.
+func repositoryFileIconColor(for path: String) -> Color {
+    (path as NSString).pathExtension.lowercased() == "swift" ? .red : .secondary
+}
+
+func repositoryFileSymbol(for path: String) -> String {
+    let name = (path as NSString).lastPathComponent
+    if name == ".gitignore" { return "slash.circle" }
+    switch (name as NSString).pathExtension.lowercased() {
+    case "swift": return "swift"
+    case "rs", "py", "js", "ts", "tsx", "jsx", "c", "h", "cpp", "cc", "java", "go":
+        return "chevron.left.forwardslash.chevron.right"
+    case "json", "yaml", "yml", "toml", "xml": return "curlybraces"
+    case "md", "rst": return "text.document"
+    case "txt", "log": return "text.alignleft"
+    case "png", "jpg", "jpeg", "gif", "webp": return "photo"
+    default: return "doc"
     }
 }

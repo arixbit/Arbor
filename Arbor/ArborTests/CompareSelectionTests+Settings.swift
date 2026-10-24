@@ -13,18 +13,18 @@ extension CompareSelectionTests {
         let firstProjectAlias = "/workspace/one/../one"
         let secondProject = "/workspace/two"
 
-        XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: firstProject, defaults: defaults))
-        XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: secondProject, defaults: defaults))
-        XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: nil, defaults: defaults))
-
-        GitStageViewSettings.saveIgnoredFilesShown(false, for: firstProject, defaults: defaults)
-
         XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: firstProject, defaults: defaults))
-        XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: firstProjectAlias, defaults: defaults))
-        XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: secondProject, defaults: defaults))
+        XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: secondProject, defaults: defaults))
+        XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: nil, defaults: defaults))
 
         GitStageViewSettings.saveIgnoredFilesShown(true, for: firstProject, defaults: defaults)
+
         XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: firstProject, defaults: defaults))
+        XCTAssertTrue(GitStageViewSettings.ignoredFilesShown(for: firstProjectAlias, defaults: defaults))
+        XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: secondProject, defaults: defaults))
+
+        GitStageViewSettings.saveIgnoredFilesShown(false, for: firstProject, defaults: defaults)
+        XCTAssertFalse(GitStageViewSettings.ignoredFilesShown(for: firstProject, defaults: defaults))
     }
 
     func testGitAnnotationSettingsMatchIntellijDefaultsAndPersistOptions() {

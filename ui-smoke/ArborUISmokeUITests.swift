@@ -45,7 +45,7 @@ final class ArborUISmokeUITests: XCTestCase {
         // PATH default is disabled while the selection already is the default:
         // two controls is the correct expectation for a fresh profile.
         try sweepScreen(named: "settings", toolWindow: "commit", minimumControls: 2) { session in
-            XCTAssertTrue(session.openSettings(), "⌘, did not open a Settings window")
+            XCTAssertTrue(session.openSettings(), "the application menu did not open a Settings window")
         }
     }
 
@@ -95,6 +95,62 @@ final class ArborUISmokeUITests: XCTestCase {
 /// read from the accessibility tree.
 final class ArborUISmokeContractUITests: XCTestCase {
     @MainActor
+    func testChangesGroupingPreservesStagingAndPartialState() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.toolWindowMode", "commit", "-arbor.toolWindowExpanded", "YES"]
+        session.launch()
+        defer { session.terminate() }
+
+        let app = session.window.checkBoxes["Stage src/App.swift"].firstMatch
+        let engine = session.window.checkBoxes["Stage src/Core/Engine.swift"].firstMatch
+        XCTAssertTrue(app.waitForExistence(timeout: 10))
+        XCTAssertTrue(engine.isHittable)
+        func waitForValue(_ value: String, _ checkbox: XCUIElement) {
+            let expectation = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in String(describing: checkbox.value ?? "") == value },
+                object: checkbox
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
+        }
+        waitForValue("0", app)
+        waitForValue("1", engine)
+        XCTAssertFalse(session.window.checkBoxes["Stage src/Untracked.swift"].exists,
+                       "untracked files should start collapsed")
+        XCTAssertFalse(session.window.staticTexts["Ignored Files"].exists)
+
+        app.click()
+        waitForValue("1", app)
+        XCTAssertTrue(session.window.staticTexts["2 staged"].waitForExistence(timeout: 5))
+        let path = fixture.appendingPathComponent("src/App.swift")
+        var content = try String(contentsOf: path, encoding: .utf8)
+        content += "\n// a new worktree edit after staging\n"
+        try Data(content.utf8).write(to: path)
+        XCTAssertTrue(session.window.staticTexts["Partially staged"].firstMatch.waitForExistence(timeout: 10))
+        waitForValue("0", app)
+        app.click()
+        waitForValue("1", app)
+        app.rightClick()
+        let unstage = session.app.menuItems["Unstage"].firstMatch
+        XCTAssertTrue(unstage.waitForExistence(timeout: 5))
+        unstage.click()
+        waitForValue("0", app)
+        XCTAssertTrue(session.window.staticTexts["1 staged"].waitForExistence(timeout: 5))
+
+        session.window.buttons["Unversioned Files"].firstMatch.click()
+        let untracked = session.window.checkBoxes["Stage src/Untracked.swift"].firstMatch
+        XCTAssertTrue(untracked.waitForExistence(timeout: 5))
+        session.window.checkBoxes["Stage group: Unversioned Files"].firstMatch.click()
+        XCTAssertTrue(session.window.staticTexts["2 staged"].waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.checkBoxes["Stage src/Untracked.swift"].exists)
+        session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
+        XCTAssertTrue(session.window.staticTexts["3 staged"].waitForExistence(timeout: 10))
+        session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
+        XCTAssertTrue(session.window.staticTexts["0 staged"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
     func testCommitOptionCheckboxesToggle() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
@@ -103,7 +159,7 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
 
-        for label in ["Amend", "Skip hooks"] {
+        for label in ["Amend"] {
             let toggle = session.window.checkBoxes[label].firstMatch
             XCTAssertTrue(toggle.waitForExistence(timeout: 10), "\(label) checkbox is missing")
             let before = String(describing: toggle.value)
@@ -116,6 +172,17 @@ final class ArborUISmokeContractUITests: XCTestCase {
             }
             XCTAssertNotEqual(after, before, "clicking \(label) did not change its value")
         }
+
+        let options = session.window.descendants(matching: .any)["Commit Options"].firstMatch
+        options.click()
+        let skipHooks = session.app.menuItems["Skip hooks"].firstMatch
+        XCTAssertTrue(skipHooks.waitForExistence(timeout: 5))
+        skipHooks.click()
+        XCTAssertTrue(session.window.staticTexts["Skip hooks"].firstMatch.waitForExistence(timeout: 5),
+                      "the active hook preference should remain visible after the menu closes")
+        options.click()
+        skipHooks.click()
+        XCTAssertFalse(session.window.staticTexts["Skip hooks"].firstMatch.exists)
     }
 }
 
@@ -247,7 +314,8 @@ final class ArborUISmokeFeedbackUITests: XCTestCase {
         defer { session.terminate() }
 
         let before = session.screenState()
-        session.window.buttons["Fetch"].firstMatch.click()
+        session.window.descendants(matching: .any)["More Git Actions"].firstMatch.click()
+        session.app.menuItems["Fetch"].firstMatch.click()
 
         let deadline = Date().addingTimeInterval(15)
         var after = session.screenState()

@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 
 /// Captures the two surfaces the visual baseline compares, at the same window
 /// size, from this app and from the reference application.
@@ -15,22 +16,40 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     func testCaptureArborCommitAndLog() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let layoutArguments = [
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+            "-arbor.workspaceSidebarWidth.v12", "582",
+            "-arbor.toolWindowHeight.v3", "466",
+            "-arbor.logGraphWidth.v8", "688",
+            "-arbor.log.showDetails.v1", "YES",
+            "-arbor.log.branches.visible.v1", "NO",
+        ]
 
         // The Commit surface: the app restores the last tool window unless the
         // stored preference is overridden, so both states are requested
         // explicitly instead of depending on whatever ran before.
         do {
             let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
-            session.extraLaunchArguments = ["-arbor.toolWindowMode", "commit"]
+            session.extraLaunchArguments = layoutArguments + ["-arbor.toolWindowMode", "commit"]
             session.launch()
             resize(session.window, to: Self.targetSize, label: "arbor-commit")
             capture(window: session.window, named: "arbor-commit")
+            // Ask below the supported height to verify the actual scene's
+            // minimum, including its native titlebar, rather than a test host.
+            resize(session.window, to: CGSize(width: 980, height: 500), label: "arbor-commit-minimum")
+            XCTAssertEqual(session.window.frame.width, 980, accuracy: 2)
+            XCTAssertEqual(session.window.frame.height, 540, accuracy: 2)
+            let commitAndPush = session.window.buttons["Commit and Push…"].firstMatch
+            XCTAssertTrue(session.window.frame.contains(commitAndPush.frame))
+            capture(window: session.window, named: "arbor-commit-minimum")
             session.terminate()
         }
 
         // The Log surface: the Log tool window with the project tree.
         do {
             let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+            session.extraLaunchArguments = layoutArguments
             session.launch()
             XCTAssertTrue(session.openProjectTree(), "the activity rail did not open the project tree")
             resize(session.window, to: Self.targetSize, label: "arbor-log")
@@ -57,8 +76,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         )
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.extraLaunchArguments = [
-            "-arbor.workspaceSidebarWidth.v11", "564",
-            "-arbor.logGraphWidth.v6", "545",
+            "-arbor.workspaceSidebarWidth.v12", "582",
+            "-arbor.logGraphWidth.v8", "688",
             "-arbor.log.branches.visible.v1", "NO",
             "-arbor.log.alignLabels.v1", "NO",
         ]
@@ -76,12 +95,12 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
                     NSPredicate(format: "value BEGINSWITH %@", String(commit.subject.prefix(18)))
                 ).firstMatch
                 XCTAssertTrue(subject.exists)
-                XCTAssertEqual(row.frame.height, 31, accuracy: 1)
+                XCTAssertEqual(row.frame.height, 26, accuracy: 1)
                 XCTAssertLessThanOrEqual(subject.frame.height, row.frame.height,
                                          "a long subject escaped its row at \(width)pt: \(subject.frame)")
                 XCTAssertEqual(subject.frame.midY, row.frame.midY, accuracy: 1)
                 if let previousRow {
-                    XCTAssertEqual(row.frame.minY - previousRow.minY, 31, accuracy: 1)
+                    XCTAssertEqual(row.frame.minY - previousRow.minY, 26, accuracy: 1)
                 }
                 previousRow = row.frame
             }
@@ -108,8 +127,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.extraLaunchArguments = [
-            "-arbor.workspaceSidebarWidth.v11", "564",
-            "-arbor.logGraphWidth.v6", "545",
+            "-arbor.workspaceSidebarWidth.v12", "582",
+            "-arbor.logGraphWidth.v8", "688",
         ]
         session.launch()
         defer { session.terminate() }
@@ -129,7 +148,6 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(session.window.frame.width - width), 2)
             XCTAssertGreaterThanOrEqual(bar.frame.width, 399, "the Log column collapsed at \(width)pt")
             for control in [
-                session.window.buttons["Author and date filters"],
                 session.window.checkBoxes["Follow current branch"],
                 session.window.buttons["Refresh log"],
             ] {
@@ -141,6 +159,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
                     session.window.textFields["log-text-filter"],
                     session.window.menuButtons["log-path-filter"],
                     branchMenu,
+                    session.window.buttons["log-user-filter"],
+                    session.window.buttons["log-date-filter"],
                 ] {
                     XCTAssertTrue(control.isHittable)
                     XCTAssertTrue(bar.scrollViews.firstMatch.frame.contains(control.frame), "filter overflows at the baseline width: \(control.frame)")
@@ -148,7 +168,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             } else {
                 let filters = bar.scrollViews.firstMatch
                 filters.hover()
-                filters.scroll(byDeltaX: -600, deltaY: 0)
+                filters.scroll(byDeltaX: 600, deltaY: 0)
                 let branchVisible = XCTNSPredicateExpectation(
                     predicate: NSPredicate { _, _ in
                         filters.frame.insetBy(dx: -1, dy: -1).contains(branchMenu.frame)
@@ -177,8 +197,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let sheet = session.window.sheets.firstMatch
         let editor = sheet.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        editor.click()
-        editor.typeText("src/" + String(repeating: "long-path-", count: 12) + "Missing.swift")
+        paste("src/" + String(repeating: "long-path-", count: 12) + "Missing.swift", into: editor, app: session.app)
         sheet.buttons["Apply"].click()
         XCTAssertTrue(session.window.staticTexts["No commits match the current filters"].waitForExistence(timeout: 10))
         let bar = session.window.descendants(matching: .any)["log-filter-bar"].firstMatch
@@ -209,19 +228,19 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let closeInspector = session.window.buttons["log-close-inspector"]
         // Seed widths through the real dividers: launch-argument defaults
         // would override the persisted widths that this test needs to verify.
-        dragDivider(in: session.window, atX: bar.frame.minX - 16,
+        dragDivider(in: session.window, atX: bar.frame.minX - 13,
                     by: session.window.frame.minX + 474 - bar.frame.minX)
         XCTAssertFalse(openInspector.exists, "the wide window should show both columns")
-        dragDivider(in: session.window, atX: bar.frame.maxX + 16,
-                    by: 480 - bar.frame.width)
+        dragDivider(in: session.window, atX: bar.frame.maxX + 13,
+                    by: 620 - bar.frame.width)
 
         // Exercise both native dividers before checking that a compact visit
         // does not overwrite the user's chosen widths.
         let originalWidth = bar.frame.width
-        dragDivider(in: session.window, atX: bar.frame.maxX + 16, by: -40)
+        dragDivider(in: session.window, atX: bar.frame.maxX + 13, by: -40)
         XCTAssertLessThan(bar.frame.width, originalWidth - 20)
         let originalOrigin = bar.frame.minX
-        dragDivider(in: session.window, atX: originalOrigin - 16, by: -40)
+        dragDivider(in: session.window, atX: originalOrigin - 13, by: -40)
         XCTAssertLessThan(bar.frame.minX, originalOrigin - 20)
         let savedBarFrame = bar.frame
         let savedBarOffset = savedBarFrame.minX - session.window.frame.minX
@@ -240,16 +259,20 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertTrue(closeInspector.waitForExistence(timeout: 5))
             XCTAssertFalse(bar.exists, "the covered graph must not remain in the accessibility tree")
             XCTAssertTrue(session.window.staticTexts["Initial commit"].firstMatch.isHittable)
+            let actions = session.window.descendants(matching: .any)["Commit Actions"].firstMatch
+            XCTAssertTrue(actions.isHittable)
+            actions.click()
             for label in ["Revert Commit", "Cherry-pick", "Create Branch from Commit"] {
-                let action = session.window.buttons[label]
+                let action = session.app.menuItems[label].firstMatch
                 XCTAssertTrue(action.isHittable, "\(label) is clipped at \(size)")
-                XCTAssertTrue(session.window.frame.contains(action.frame))
             }
+            session.dismissTransientSurface()
             XCTAssertTrue(session.window.staticTexts["Changes"].firstMatch.isHittable)
             capture(window: session.window, named: "log-details-\(Int(size.width))")
 
             // The compact inspector shares the normal dialog presenter.
-            session.window.buttons["Create Branch from Commit"].click()
+            actions.click()
+            session.app.menuItems["Create Branch from Commit"].firstMatch.click()
             let sheet = session.window.sheets.firstMatch
             XCTAssertTrue(sheet.waitForExistence(timeout: 5))
             sheet.buttons["Cancel"].click()
@@ -271,7 +294,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         XCTAssertEqual(session.window.staticTexts.matching(identifier: "Initial commit").count, 2)
 
         // Commit mode retains the same readable Log alongside staging.
-        let commitButton = try XCTUnwrap(session.railButton("checkmark.circle"))
+        let commitButton = try XCTUnwrap(session.railButton("slider.horizontal.3"))
         commitButton.click()
         resize(session.window, to: CGSize(width: 980, height: 1015), label: "commit-log-columns")
         XCTAssertGreaterThanOrEqual(bar.frame.width, 519)
@@ -280,19 +303,18 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     }
 
     @MainActor
-    func testAuthorFilterAppliesWhenDoneIsClicked() throws {
+    func testAuthorAndDateFiltersApplyAndClear() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.launch()
         defer { session.terminate() }
 
-        let filters = session.window.buttons["Author and date filters"]
+        let filters = session.window.buttons["log-user-filter"]
         filters.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         let author = session.app.textFields["User"].firstMatch
         XCTAssertTrue(author.waitForExistence(timeout: 5))
-        author.click()
-        author.typeText("author-with-no-matching-commits")
+        paste("author-with-no-matching-commits", into: author, app: session.app)
         session.app.buttons["Done"].click()
         let empty = session.window.staticTexts["No commits match the current filters"]
         XCTAssertTrue(empty.waitForExistence(timeout: 10), "Done did not apply the author filter")
@@ -303,6 +325,42 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         clear.click()
         session.app.buttons["Done"].click()
         XCTAssertTrue(session.window.staticTexts["Initial commit"].firstMatch.waitForExistence(timeout: 10))
+
+        let dates = session.window.buttons["log-date-filter"]
+        dates.click()
+        let since = session.app.textFields["Since"].firstMatch
+        XCTAssertTrue(since.waitForExistence(timeout: 5))
+        paste("2030-01-01", into: since, app: session.app)
+        session.app.buttons["Done"].click()
+        XCTAssertTrue(empty.waitForExistence(timeout: 10), "Done did not apply the date filter")
+        dates.click()
+        session.app.buttons["Clear"].firstMatch.click()
+        session.app.buttons["Done"].click()
+        XCTAssertTrue(session.window.staticTexts["Initial commit"].firstMatch.waitForExistence(timeout: 10))
+    }
+
+    /// The Edit menu avoids XCTest switching to a third-party input method and
+    /// triggering the system's input-source authorization dialog.
+    @MainActor
+    private func paste(_ text: String, into field: XCUIElement, app: XCUIApplication) {
+        let board = NSPasteboard.general
+        let saved = (board.pasteboardItems ?? []).map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
+        defer {
+            board.clearContents()
+            board.writeObjects(saved)
+        }
+        board.clearContents()
+        board.setString(text, forType: .string)
+        field.click()
+        app.menuBars.menuBarItems["Edit"].click()
+        app.menuItems["Paste"].firstMatch.click()
+        XCTAssertEqual(field.value as? String, text)
     }
 
     // MARK: - Rebased

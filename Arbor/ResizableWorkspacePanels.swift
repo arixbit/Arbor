@@ -1,6 +1,53 @@
 import SwiftUI
 import AppKit
 
+/// Keep the real window buttons centered within the 43pt workspace header.
+struct WorkspaceWindowChrome: NSViewRepresentable {
+    @Binding var titlebarHeight: CGFloat
+
+    func makeNSView(context: Context) -> WindowChromeAnchor { WindowChromeAnchor() }
+    func updateNSView(_ view: WindowChromeAnchor, context: Context) {
+        view.onTitlebarHeightChange = { titlebarHeight = $0 }
+        view.needsLayout = true
+    }
+
+    final class WindowChromeAnchor: NSView {
+        var onTitlebarHeightChange: ((CGFloat) -> Void)?
+        private var reportedTitlebarHeight: CGFloat?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in self?.alignWindowButtons() }
+        }
+
+        override func layout() {
+            super.layout()
+            alignWindowButtons()
+        }
+
+        private func alignWindowButtons() {
+            guard let window else { return }
+            // SwiftUI's content minimum excludes the titlebar even though
+            // the workspace draws into it. Keep 540pt as the window minimum.
+            let titlebarHeight = window.frame.height - window.contentLayoutRect.height
+            if reportedTitlebarHeight != titlebarHeight {
+                reportedTitlebarHeight = titlebarHeight
+                DispatchQueue.main.async { [weak self] in
+                    self?.onTitlebarHeightChange?(titlebarHeight)
+                }
+            }
+            for (index, kind) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
+                guard let button = window.standardWindowButton(kind), let parent = button.superview else { continue }
+                let center = parent.convert(
+                    NSPoint(x: 20 + CGFloat(index) * 20, y: window.frame.height - 21.5), from: nil
+                )
+                button.setFrameOrigin(NSPoint(x: center.x - button.frame.width / 2,
+                                              y: center.y - button.frame.height / 2))
+            }
+        }
+    }
+}
+
 struct WorkspacePanelHeader: View {
     let title: LocalizedStringKey
     let systemImage: String
@@ -30,7 +77,7 @@ struct WorkspacePanelHeader: View {
                         .font(.caption2.weight(.bold))
                         .frame(width: 12)
                     Label(title, systemImage: systemImage)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Design.Typography.interface(12, weight: .semibold))
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -68,8 +115,8 @@ struct WorkspacePanelResizeHandle: View {
             .frame(height: 7)
             .overlay {
                 Capsule()
-                .fill(Color.primary.opacity(0.18))
-                    .frame(width: 42, height: 2)
+                    .fill(Color.primary.opacity(0.10))
+                    .frame(width: 28, height: 1)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -100,7 +147,7 @@ final class WorkspaceNativeSplitView: NSSplitView {
     var onResizeEnded: (() -> Void)?
     var onLayout: (() -> Void)?
 
-    override var dividerThickness: CGFloat { 12 }
+    override var dividerThickness: CGFloat { 6 }
 
     override func layout() {
         super.layout()
@@ -111,32 +158,9 @@ final class WorkspaceNativeSplitView: NSSplitView {
     }
 
     override func drawDivider(in rect: NSRect) {
-        NSColor.separatorColor.withAlphaComponent(0.48).setFill()
-        NSBezierPath(roundedRect: NSRect(
-            x: rect.midX - 3.5,
-            y: rect.midY - 29,
-            width: 7,
-            height: 58
-        ), xRadius: 3.5, yRadius: 3.5).fill()
-
-        // Rebased exposes a small bidirectional grip at the midpoint. Keep
-        // it inside the native divider so it remains visual feedback for the
-        // same live NSSplitView drag, instead of adding a second SwiftUI
-        // gesture layer that would reintroduce layout hitching.
-        let grip = NSBezierPath()
-        grip.move(to: NSPoint(x: rect.midX - 4, y: rect.midY))
-        grip.line(to: NSPoint(x: rect.midX + 4, y: rect.midY))
-        grip.move(to: NSPoint(x: rect.midX - 4, y: rect.midY))
-        grip.line(to: NSPoint(x: rect.midX - 1, y: rect.midY + 2.5))
-        grip.move(to: NSPoint(x: rect.midX - 4, y: rect.midY))
-        grip.line(to: NSPoint(x: rect.midX - 1, y: rect.midY - 2.5))
-        grip.move(to: NSPoint(x: rect.midX + 4, y: rect.midY))
-        grip.line(to: NSPoint(x: rect.midX + 1, y: rect.midY + 2.5))
-        grip.move(to: NSPoint(x: rect.midX + 4, y: rect.midY))
-        grip.line(to: NSPoint(x: rect.midX + 1, y: rect.midY - 2.5))
-        NSColor.secondaryLabelColor.withAlphaComponent(0.9).setStroke()
-        grip.lineWidth = 1.2
-        grip.stroke()
+        // A hairline boundary keeps the panels distinct without a large grip.
+        NSColor.separatorColor.withAlphaComponent(0.25).setFill()
+        NSRect(x: rect.midX - 0.5, y: rect.minY, width: 1, height: rect.height).fill()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -168,6 +192,16 @@ struct NativeWorkspaceColumns<SidebarContent: View, MainContent: View>: NSViewRe
 
         init(parent: NativeWorkspaceColumns) {
             self.parent = parent
+        }
+
+        func splitView(
+            _ splitView: NSSplitView,
+            effectiveRect proposedEffectiveRect: NSRect,
+            forDrawnRect drawnRect: NSRect,
+            ofDividerAt dividerIndex: Int
+        ) -> NSRect {
+            // Keep a 12pt drag target around the visually narrow separator.
+            proposedEffectiveRect.insetBy(dx: -3, dy: 0)
         }
 
         func splitView(
@@ -370,7 +404,7 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
                 onSelect: onSelectToolWindow,
                 onOpenProject: onOpenProject
             )
-            .frame(width: 52)
+            .frame(width: 40)
 
             if sidebarVisible {
                 NativeWorkspaceColumns(
