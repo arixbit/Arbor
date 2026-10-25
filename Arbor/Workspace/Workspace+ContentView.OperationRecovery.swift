@@ -110,12 +110,12 @@ func publishOperationRecoveryNotice(
     let kindTitle = operationRecoveryKindTitle(state.kind)
     let detail: String
     if state.conflictedFiles.isEmpty {
-        detail = "A \(kindTitle) operation is paused in this repository."
+        detail = String(localized: "A %@ operation is paused in this repository.").replacingOccurrences(of: "%@", with: kindTitle)
     } else {
-        detail = "\(state.conflictedFiles.count) conflicted file(s) must be resolved before continuing."
+        detail = String(localized: "%lld conflicted file(s) must be resolved before continuing.").replacingOccurrences(of: "%lld", with: String(state.conflictedFiles.count))
     }
     feedbackCenter.warning(
-        "\(kindTitle) recovery available",
+        String(localized: "%@ recovery available").replacingOccurrences(of: "%@", with: kindTitle),
         detail: detail,
         nextStep: "Continue, Skip, or Abort the operation from the recovery actions.",
         additionalActions: operationRecoveryFeedbackActions(

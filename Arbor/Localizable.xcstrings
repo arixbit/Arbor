@@ -24082,6 +24082,126 @@
           }
         }
       }
+    },
+    "%@ recovery available" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 恢复可用"
+          }
+        }
+      }
+    },
+    "%lld conflicted file(s) must be resolved before continuing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续前必须解决 %lld 个冲突文件。"
+          }
+        }
+      }
+    },
+    "%lld unresolved" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个未解决"
+          }
+        }
+      }
+    },
+    "A %@ operation is paused in this repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此仓库中有一个 %@ 操作已暂停。"
+          }
+        }
+      }
+    },
+    "Cherry-pick in progress" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cherry-pick 进行中"
+          }
+        }
+      }
+    },
+    "Commit Merge" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交 Merge"
+          }
+        }
+      }
+    },
+    "Continue Cherry-pick" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续 Cherry-pick"
+          }
+        }
+      }
+    },
+    "Continue Rebase" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续 Rebase"
+          }
+        }
+      }
+    },
+    "Continue Revert" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续 Revert"
+          }
+        }
+      }
+    },
+    "Merge in progress" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge 进行中"
+          }
+        }
+      }
+    },
+    "Rebase paused" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rebase 已暂停"
+          }
+        }
+      }
+    },
+    "Revert in progress" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revert 进行中"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

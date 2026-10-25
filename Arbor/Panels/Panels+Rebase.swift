@@ -23,19 +23,19 @@ struct GitMergeRebaseWidgetItem: Identifiable {
 
     var continueTitle: String {
         switch operation {
-        case .merge: return "Commit Merge"
-        case .rebase: return "Continue Rebase"
-        case .cherryPick: return "Continue Cherry-pick"
-        case .revert: return "Continue Revert"
+        case .merge: return String(localized: "Commit Merge")
+        case .rebase: return String(localized: "Continue Rebase")
+        case .cherryPick: return String(localized: "Continue Cherry-pick")
+        case .revert: return String(localized: "Continue Revert")
         }
     }
 
     var widgetTitle: String {
         switch operation {
-        case .merge: return "Merge in progress"
-        case .rebase: return "Rebase paused"
-        case .cherryPick: return "Cherry-pick in progress"
-        case .revert: return "Revert in progress"
+        case .merge: return String(localized: "Merge in progress")
+        case .rebase: return String(localized: "Rebase paused")
+        case .cherryPick: return String(localized: "Cherry-pick in progress")
+        case .revert: return String(localized: "Revert in progress")
         }
     }
 
