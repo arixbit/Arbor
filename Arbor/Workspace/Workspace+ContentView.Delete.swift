@@ -69,7 +69,7 @@ func confirmDeletePaths() {
             }
         }
 
-        await MainActor.run {
+        await MainActor.run { [deleted, unresolved, failures] in
             let deletedSet = Set(deleted)
             self.clearDeletedPathSelection(deletedSet)
             if !deleted.isEmpty {
