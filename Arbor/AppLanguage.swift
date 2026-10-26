@@ -108,3 +108,10 @@ struct AppLanguageSettingsSection: View {
         }
     }
 }
+
+extension AppLanguage {
+    /// Locale for AppKit alerts and other code paths without a SwiftUI environment.
+    static var interfaceLocale: Locale {
+        resolve(UserDefaults.standard.string(forKey: "arbor.appLanguage")).locale
+    }
+}

@@ -328,6 +328,7 @@ extension ContentView {
         }
         .sheet(isPresented: $credentialAuth.isPresented) {
             CredentialDialogView(controller: credentialAuth)
+                .environment(\.locale, appLocale)
         }
         .sheet(item: $remoteWorkspace.multiRootRemoteConfigAggregateContext) { context in
             MultiRootRemoteConfigDialogView(

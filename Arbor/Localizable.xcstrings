@@ -4406,7 +4406,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "e.g. HEAD:refs/heads/release"
+            "value" : "例如 HEAD:refs/heads/release"
           }
         }
       }
@@ -6657,7 +6657,14 @@
       }
     },
     "Last successful authentication: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次认证方式：%@"
+          }
+        }
+      }
     },
     "Last successful SSH authentications" : {
       "localizations" : {
@@ -9009,7 +9016,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passphrase"
+            "value" : "口令"
           }
         }
       }
@@ -9030,7 +9037,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Password or Token"
+            "value" : "密码或访问令牌"
           }
         }
       }
@@ -9342,7 +9349,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Publish branch / set upstream"
+            "value" : "发布分支 / 设置 upstream"
           }
         }
       }
@@ -9466,7 +9473,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pull with Rebase"
+            "value" : "以 Rebase 方式 Pull"
           }
         }
       }
@@ -10249,7 +10256,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reset"
+            "value" : "重置"
           }
         }
       }
@@ -11376,7 +11383,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Save"
+            "value" : "保存"
           }
         }
       }
@@ -11419,7 +11426,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Save to Keychain"
+            "value" : "保存到钥匙串"
           }
         }
       }
@@ -15118,7 +15125,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Use custom refspec"
+            "value" : "使用自定义 refspec"
           }
         }
       }
@@ -15204,7 +15211,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Username"
+            "value" : "用户名"
           }
         }
       }
@@ -20239,7 +20246,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Push tags"
+            "value" : "推送标签"
           }
         }
       }
@@ -25200,6 +25207,726 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用自定义提交信息"
+          }
+        }
+      }
+    },
+    "No fast-forward" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不 fast-forward"
+          }
+        }
+      }
+    },
+    "Squash commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "squash 提交"
+          }
+        }
+      }
+    },
+    "Do not commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不提交"
+          }
+        }
+      }
+    },
+    "Do not run Git hooks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不运行 Git hooks"
+          }
+        }
+      }
+    },
+    "Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认"
+          }
+        }
+      }
+    },
+    "Push Up to Commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推送到指定提交"
+          }
+        }
+      }
+    },
+    "All tags" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有标签"
+          }
+        }
+      }
+    },
+    "Tags reachable from current branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前分支可达的标签"
+          }
+        }
+      }
+    },
+    "Only overwrite the remote branch if it still points to the commit you last saw." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅当远程分支仍指向你最近看到的提交时才覆盖。"
+          }
+        }
+      }
+    },
+    "Overwrite the remote branch directly; commits pushed by others may be lost." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接覆盖远程分支，可能丢失其他人推送的提交。"
+          }
+        }
+      }
+    },
+    "Rebase — Resolve Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rebase — 解决冲突"
+          }
+        }
+      }
+    },
+    "Cherry-pick — Resolve Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cherry-pick — 解决冲突"
+          }
+        }
+      }
+    },
+    "Revert — Resolve Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revert — 解决冲突"
+          }
+        }
+      }
+    },
+    "Stash — Resolve Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stash — 解决冲突"
+          }
+        }
+      }
+    },
+    "Apply Patch — Resolve Conflicts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用补丁 — 解决冲突"
+          }
+        }
+      }
+    },
+    "Complete Stash Apply" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成 Stash 应用"
+          }
+        }
+      }
+    },
+    "Complete Apply Patch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成补丁应用"
+          }
+        }
+      }
+    },
+    "Rollback Apply Patch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回滚补丁应用"
+          }
+        }
+      }
+    },
+    "Skip Commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过提交"
+          }
+        }
+      }
+    },
+    "SSH Key Passphrase" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 密钥口令"
+          }
+        }
+      }
+    },
+    "Git Authentication Required" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要 Git 身份验证"
+          }
+        }
+      }
+    },
+    "SSH key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSH 密钥"
+          }
+        }
+      }
+    },
+    "Git remote" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 远程"
+          }
+        }
+      }
+    },
+    "retry %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 次尝试"
+          }
+        }
+      }
+    },
+    "Always preview before pushing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推送前始终预览"
+          }
+        }
+      }
+    },
+    "Preview protected branches only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅预览受保护分支"
+          }
+        }
+      }
+    },
+    "Push automatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动推送"
+          }
+        }
+      }
+    },
+    "Open Push options after a successful Commit and Push commit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit and Push 成功后打开 Push 选项。"
+          }
+        }
+      }
+    },
+    "Push ordinary branches directly; show Push options for protected branches or roots that cannot be pushed automatically." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "普通分支直接推送；受保护分支或无法自动推送的 root 显示 Push 选项。"
+          }
+        }
+      }
+    },
+    "Push ordinary branches directly after the commit. Missing remotes and detached roots still open the Push flow." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交后直接推送普通分支。缺少远程或处于 detached 状态的 root 仍打开 Push 流程。"
+          }
+        }
+      }
+    },
+    "Delete merged local branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除已合并的本地分支"
+          }
+        }
+      }
+    },
+    "Propose deleting merged local branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示删除已合并的本地分支"
+          }
+        }
+      }
+    },
+    "Do nothing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不做任何操作"
+          }
+        }
+      }
+    },
+    "After a successful merge, delete the eligible local source branch automatically." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并成功后自动删除符合条件的本地源分支。"
+          }
+        }
+      }
+    },
+    "After a successful merge, offer a one-click action to delete the eligible local source branch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并成功后提供一键删除符合条件的本地源分支的操作。"
+          }
+        }
+      }
+    },
+    "Keep the source branch after a successful merge." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并成功后保留源分支。"
+          }
+        }
+      }
+    },
+    "Skip empty cherry-picks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过空的 cherry-pick"
+          }
+        }
+      }
+    },
+    "Create empty commits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建空提交"
+          }
+        }
+      }
+    },
+    "Use Git's stash stack and restore the index with --index." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Git 的 stash 栈，并通过 --index 恢复索引。"
+          }
+        }
+      }
+    },
+    "Use Arbor's persistent Shelf model; the default IntelliJ behavior." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Arbor 的持久化 Shelf 模型；这是 IntelliJ 的默认行为。"
+          }
+        }
+      }
+    },
+    "Move HEAD and keep the index and working tree unchanged." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动 HEAD，保持索引和工作区不变。"
+          }
+        }
+      }
+    },
+    "Reset the index while keeping working-tree files unchanged." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置索引，保持工作区文件不变。"
+          }
+        }
+      }
+    },
+    "Reset the index and working tree; uncommitted changes may be discarded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置索引和工作区；未提交的更改可能被丢弃。"
+          }
+        }
+      }
+    },
+    "Keep non-overlapping local changes and reject overlapping ones." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留不重叠的本地更改，拒绝重叠的更改。"
+          }
+        }
+      }
+    },
+    "Mixed line endings (CRLF/LF)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "混合换行符（CRLF/LF）"
+          }
+        }
+      }
+    },
+    "Detached HEAD" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detached HEAD"
+          }
+        }
+      }
+    },
+    "Large staged files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "较大的已暂存文件"
+          }
+        }
+      }
+    },
+    "Windows-incompatible file names" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 不兼容的文件名"
+          }
+        }
+      }
+    },
+    "Raw blob (None)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始 blob（None）"
+          }
+        }
+      }
+    },
+    "Checkout filters (Filters)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "checkout 过滤器（Filters）"
+          }
+        }
+      }
+    },
+    "Textconv driver (Textconv)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "textconv 驱动（Textconv）"
+          }
+        }
+      }
+    },
+    "Automatic (not decided)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动（未决定）"
+          }
+        }
+      }
+    },
+    "Execute branch operations on all roots" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所有 root 上执行分支操作"
+          }
+        }
+      }
+    },
+    "Use the selected repository only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅使用选中的仓库"
+          }
+        }
+      }
+    },
+    "Git default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 默认"
+          }
+        }
+      }
+    },
+    "Fetch and prune tags" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetch 并清理标签"
+          }
+        }
+      }
+    },
+    "Fetch all tags" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fetch 所有标签"
+          }
+        }
+      }
+    },
+    "Do not fetch tags" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不 Fetch 标签"
+          }
+        }
+      }
+    },
+    "Keep Arbor's explicit root-qualified selection until a project policy is chosen." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在选择项目策略前，保留 Arbor 显式的 root 限定选择。"
+          }
+        }
+      }
+    },
+    "Same-name branch actions may target every matching Git root in the project." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同名分支操作可能作用于项目中每个匹配的 Git root。"
+          }
+        }
+      }
+    },
+    "Branch-row actions stay scoped to their owning Git root; explicit multi-selection remains available." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支行操作仍限定在所属 Git root 内；显式多选仍然可用。"
+          }
+        }
+      }
+    },
+    "Follow Git's normal tag-following behavior." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "遵循 Git 默认的标签跟随行为。"
+          }
+        }
+      }
+    },
+    "Use --prune-tags so deleted remote tags are removed locally." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 --prune-tags，使远程已删除的标签在本地同步删除。"
+          }
+        }
+      }
+    },
+    "Use --tags to fetch every tag from each fetched remote." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 --tags 从每个已 Fetch 的远程获取全部标签。"
+          }
+        }
+      }
+    },
+    "Use --no-tags for fetches that should not update local tags." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对不应更新本地标签的 Fetch 使用 --no-tags。"
+          }
+        }
+      }
+    },
+    "Use global Git setting" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用全局 Git 设置"
+          }
+        }
+      }
+    },
+    "%lld loaded" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已加载 %lld"
+          }
+        }
+      }
+    },
+    "%lld outgoing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待推送 %lld"
+          }
+        }
+      }
+    },
+    "Loading outgoing commits…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载待推送提交…"
+          }
+        }
+      }
+    },
+    "No outgoing commits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有待推送的提交"
+          }
+        }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码"
+          }
+        }
+      }
+    },
+    "Log In" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
           }
         }
       }

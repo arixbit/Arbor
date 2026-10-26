@@ -304,6 +304,7 @@ extension ContentView {
                     )
                 }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $pushWorkspace.showDialog) {
             PushDialogView(
@@ -366,6 +367,7 @@ extension ContentView {
                 },
                 repo: repo
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(item: $pushWorkspace.multiRootPushContext) { context in
             PushDialogView(
@@ -409,6 +411,7 @@ extension ContentView {
                 showsSSHConfigurationAction: false,
                 repo: context.repo
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(item: $remoteWorkspace.multiRootRemoteConfigContext) { context in
             RemoteConfigDialogView(
@@ -443,31 +446,34 @@ extension ContentView {
             beforeCommitSettingsSheet
         }
         .sheet(isPresented: $gitSettings.showProjectGitSettings) {
-            if let projectPath = projectWorkspace.path {
-                ProjectGitIncomingChangesSettingsView(
-                    projectPath: projectPath,
-                    rootPaths: GitExecutableSettings.registeredRoots(
+            Group {
+                if let projectPath = projectWorkspace.path {
+                    ProjectGitIncomingChangesSettingsView(
                         projectPath: projectPath,
-                        repositoryRoot: repo?.workdir(),
-                        discoveredRoots: multiRootWorkspace.roots.map(\.path)
-                    ),
-                    onSaved: {
-                        if let repo {
-                            _ = try? repo.setGitExecutableOverride(
-                                path: GitExecutableSettings.projectOverride(for: projectPath)
+                        rootPaths: GitExecutableSettings.registeredRoots(
+                            projectPath: projectPath,
+                            repositoryRoot: repo?.workdir(),
+                            discoveredRoots: multiRootWorkspace.roots.map(\.path)
+                        ),
+                        onSaved: {
+                            if let repo {
+                                _ = try? repo.setGitExecutableOverride(
+                                    path: GitExecutableSettings.projectOverride(for: projectPath)
+                                )
+                            }
+                            gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(
+                                for: projectPath
                             )
+                            gitSettings.projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
+                            gitSettings.projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
                         }
-                        gitSettings.projectIncomingCheckStrategyRaw = GitIncomingCheckStrategySettings.projectRawValue(
-                            for: projectPath
-                        )
-                        gitSettings.projectFetchTagsMode = GitFetchTagsSettings.mode(for: projectPath)
-                        gitSettings.projectUpdateMethod = GitUpdateMethodSettings.method(for: projectPath)
-                    }
-                )
-            } else {
-                Text("Open a Git project before changing project Git settings.")
-                    .padding(24)
+                    )
+                } else {
+                    Text("Open a Git project before changing project Git settings.")
+                        .padding(24)
+                }
             }
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $gitSettings.showUpdateProjectOptions) {
             if let projectPath = projectWorkspace.path {
@@ -875,6 +881,7 @@ extension ContentView {
                 },
                 onFetch: fetchPullDialogRemote
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $rebaseWorkspace.showActionDialog) {
             RebasedRebaseDialog(

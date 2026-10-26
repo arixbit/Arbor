@@ -207,12 +207,12 @@ struct GitPushSettingsSection: View {
                 .foregroundStyle(.secondary)
             Picker("After Commit and Push", selection: $pushAfterCommitPreview) {
                 ForEach(GitPushAfterCommitPreviewChoice.allCases) { choice in
-                    Text(choice.title).tag(choice.rawValue)
+                    Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
             .pickerStyle(.menu)
             if let choice = GitPushAfterCommitPreviewChoice(rawValue: pushAfterCommitPreview) {
-                Text(choice.detail)
+                Text(LocalizedStringKey(choice.detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

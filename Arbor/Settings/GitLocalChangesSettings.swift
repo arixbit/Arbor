@@ -130,12 +130,12 @@ struct GitLocalChangesSavePolicySettingsSection: View {
         Section("Local Changes Preservation") {
             Picker("Save local changes as", selection: $policy) {
                 ForEach(GitLocalChangesSavePolicyChoice.allCases) { choice in
-                    Text(choice.title).tag(choice.rawValue)
+                    Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
             .pickerStyle(.menu)
             if let choice = GitLocalChangesSavePolicyChoice(rawValue: policy) {
-                Text(choice.detail)
+                Text(LocalizedStringKey(choice.detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -211,7 +211,7 @@ struct GitCherryPickSettingsSection: View {
         Section("Cherry-pick") {
             Picker("When the result is empty", selection: $emptyPolicy) {
                 ForEach(GitCherryPickEmptyPolicyChoice.allCases) { choice in
-                    Text(choice.title).tag(choice.rawValue)
+                    Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
             .pickerStyle(.menu)
@@ -231,12 +231,12 @@ struct GitMergeSettingsSection: View {
         Section("Merge") {
             Picker("After merging a local branch", selection: $deleteOnMerge) {
                 ForEach(GitDeleteOnMergeOption.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
+                    Text(LocalizedStringKey(option.title)).tag(option.rawValue)
                 }
             }
             .pickerStyle(.menu)
             if let option = GitDeleteOnMergeOption(rawValue: deleteOnMerge) {
-                Text(option.detail)
+                Text(LocalizedStringKey(option.detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

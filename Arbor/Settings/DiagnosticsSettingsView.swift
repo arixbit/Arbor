@@ -98,7 +98,7 @@ struct DiagnosticsSettingsView: View {
 
                 Picker("Historical file content", selection: $gitRevisionContentModeRaw) {
                     ForEach(GitRevisionContentMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
+                        Text(LocalizedStringKey(mode.title)).tag(mode.rawValue)
                     }
                 }
                 Text("Controls Revision Browser content: raw blobs, checkout filters, or the path's textconv driver. Filters is the IntelliJ-compatible default; external conversion remains an explicit safety setting for other attribute-aware operations.")

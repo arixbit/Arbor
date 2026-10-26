@@ -80,7 +80,10 @@ func presentCommitWarningDecision(
         guard !seenSettings.contains(warning.setting) else { continue }
 
         let alert = NSAlert()
-        alert.messageText = String(localized: "Commit warning: \(warning.setting.title)")
+        alert.messageText = String(
+            format: localizedArborString("Commit warning: %@", locale: AppLanguage.interfaceLocale),
+            localizedArborString(warning.setting.title, locale: AppLanguage.interfaceLocale)
+        )
         let prefix = warning.rootLabel.isEmpty ? "" : "\(warning.rootLabel): "
         alert.informativeText = String(localized: "\(prefix)\(warning.message)")
         alert.alertStyle = .warning

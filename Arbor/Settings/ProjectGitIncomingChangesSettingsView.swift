@@ -192,12 +192,12 @@ struct ProjectGitIncomingChangesSettingsView: View {
                     )
                     Picker("Save local changes as", selection: $localChangesSavePolicy) {
                         ForEach(GitLocalChangesSavePolicyChoice.allCases) { policy in
-                            Text(policy.title).tag(policy)
+                            Text(LocalizedStringKey(policy.title)).tag(policy)
                         }
                     }
                     .pickerStyle(.menu)
                     .disabled(!useProjectLocalChangesSavePolicy)
-                    Text(localChangesSavePolicy.detail)
+                    Text(LocalizedStringKey(localChangesSavePolicy.detail))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(
@@ -246,12 +246,12 @@ struct ProjectGitIncomingChangesSettingsView: View {
                     )
                     Picker("After Commit and Push", selection: $pushAfterCommitPreview) {
                         ForEach(GitPushAfterCommitPreviewChoice.allCases) { choice in
-                            Text(choice.title).tag(choice)
+                            Text(LocalizedStringKey(choice.title)).tag(choice)
                         }
                     }
                     .pickerStyle(.menu)
                     .disabled(!useProjectPushAfterCommitPreview)
-                    Text(pushAfterCommitPreview.detail)
+                    Text(LocalizedStringKey(pushAfterCommitPreview.detail))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(
@@ -290,11 +290,11 @@ struct ProjectGitIncomingChangesSettingsView: View {
                 Section("Reset") {
                     Picker("Default reset mode", selection: $resetMode) {
                         ForEach(GitResetModeChoice.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                            Text(LocalizedStringKey(mode.title)).tag(mode)
                         }
                     }
                     .pickerStyle(.menu)
-                    Text(resetMode.detail)
+                    Text(LocalizedStringKey(resetMode.detail))
                         .font(.caption)
                         .foregroundStyle(resetMode == .hard ? .red : .secondary)
                     Text("Reset dialogs remember the last mode selected in this project. Hard reset remains explicitly destructive and requires confirmation in the dialog.")
@@ -346,7 +346,7 @@ struct ProjectGitIncomingChangesSettingsView: View {
                     )
                     Picker("Default tag mode", selection: $projectPushTagMode) {
                         ForEach(PushDialogTagMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
+                            Text(LocalizedStringKey(mode.title)).tag(mode)
                         }
                     }
                     .pickerStyle(.menu)

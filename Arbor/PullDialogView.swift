@@ -99,6 +99,7 @@ struct PullDialogView: View {
     @State private var remoteName: String
     @State private var branchName: String
     @State private var selectedOptions: Set<GitPullDialogOption>
+    @Environment(\.locale) private var locale
 
     init(
         snapshots: [GitRootBranchSnapshot],
@@ -178,13 +179,13 @@ struct PullDialogView: View {
     private var selectedOptionsSummary: String {
         let titles = GitPullDialogOption.allCases
             .filter { selectedOptions.contains($0) }
-            .map(\.title)
-        return titles.isEmpty ? "Default" : titles.joined(separator: ", ")
+            .map { localizedArborString($0.title, locale: locale) }
+        return titles.isEmpty ? localizedArborString("Default", locale: locale) : titles.joined(separator: ", ")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(defaultRebase ? "Pull with Rebase" : "Pull")
+            Text(LocalizedStringKey(defaultRebase ? "Pull with Rebase" : "Pull"))
                 .font(.title3)
                 .bold()
 
@@ -258,9 +259,9 @@ struct PullDialogView: View {
                                     toggle(option)
                                 } label: {
                                     if selectedOptions.contains(option) {
-                                        Label(option.title, systemImage: "checkmark")
+                                        Label(LocalizedStringKey(option.title), systemImage: "checkmark")
                                     } else {
-                                        Text(option.title)
+                                        Text(LocalizedStringKey(option.title))
                                     }
                                 }
                                 .disabled(!option.isSuitable(with: selectedOptions))
@@ -276,7 +277,7 @@ struct PullDialogView: View {
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
-                Button(defaultRebase ? "Pull with Rebase" : "Pull") {
+                Button(LocalizedStringKey(defaultRebase ? "Pull with Rebase" : "Pull")) {
                     submit()
                 }
                 .keyboardShortcut(.defaultAction)

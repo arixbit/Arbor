@@ -355,6 +355,7 @@ struct CredentialDialogView: View {
     @State private var username = ""
     @State private var secret = ""
     @State private var saveToKeychain = true
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -363,7 +364,7 @@ struct CredentialDialogView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(LocalizedStringKey(title))
                         .font(.headline)
                     Text(hostLine)
                         .font(.caption)
@@ -426,7 +427,7 @@ struct CredentialDialogView: View {
 
             if let request = controller.request,
                let method = controller.lastSuccessfulMethod(for: request) {
-                Text("Last successful authentication: \(method == "publickey" ? "SSH key" : "Password")")
+                Text("Last successful authentication: \(localizedArborString(method == "publickey" ? "SSH key" : "Password", locale: locale))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -471,12 +472,17 @@ struct CredentialDialogView: View {
         let kind: String
         switch request.kind {
         case .hostKey:
-            kind = "SSH host"
+            kind = localizedArborString("SSH host", locale: locale)
         case .passphrase:
-            kind = "SSH key"
+            kind = localizedArborString("SSH key", locale: locale)
         default:
-            kind = "Git remote"
+            kind = localizedArborString("Git remote", locale: locale)
         }
-        return "\(kind) · \(request.host)\(request.attempt > 1 ? " · retry \(request.attempt)" : "")"
+        var line = "\(kind) · \(request.host)"
+        if request.attempt > 1 {
+            line += " · " + localizedArborString("retry %lld", locale: locale)
+                .replacingOccurrences(of: "%lld", with: String(request.attempt))
+        }
+        return line
     }
 }

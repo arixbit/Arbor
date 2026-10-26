@@ -116,6 +116,7 @@ struct PushDialogView: View {
     @State private var sourceRevision: String
     @State private var force = false
     @State private var forceWithLease: Bool
+    @Environment(\.locale) private var locale
 
     init(
         remotes: [RemoteInfo],
@@ -258,7 +259,7 @@ struct PushDialogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(mode.title).font(.title3).bold()
+            Text(LocalizedStringKey(mode.title)).font(.title3).bold()
             if remotes.isEmpty {
                 Group {
                     if mode.allowsCommitOnlyFallbackWithoutRemote {
@@ -329,8 +330,14 @@ struct PushDialogView: View {
                 if effectiveForce {
                     Toggle("Use force-with-lease (safer)", isOn: $forceWithLease)
                     Text(forceWithLease
-                        ? "仅当远程仍指向你最近看到的提交时才覆盖。"
-                        : "直接覆盖远程分支，可能丢失其他人的提交。")
+                        ? localizedArborString(
+                            "Only overwrite the remote branch if it still points to the commit you last saw.",
+                            locale: locale
+                        )
+                        : localizedArborString(
+                            "Overwrite the remote branch directly; commits pushed by others may be lost.",
+                            locale: locale
+                        ))
                         .font(.caption)
                         .foregroundStyle(forceWithLease ? Color.secondary : Color.orange)
                 }
@@ -340,7 +347,7 @@ struct PushDialogView: View {
                     if pushTags {
                         Picker("Tag mode", selection: $pushTagMode) {
                             ForEach(PushDialogTagMode.allCases) { tagMode in
-                                Text(tagMode.title).tag(tagMode)
+                                Text(LocalizedStringKey(tagMode.title)).tag(tagMode)
                             }
                         }
                     }
@@ -374,7 +381,7 @@ struct PushDialogView: View {
                         Button("Configure Remotes…") { onConfigureRemotes() }
                     }
                 } else {
-                    Button(remotes.isEmpty ? "提交" : mode.actionTitle) {
+                    Button(LocalizedStringKey(remotes.isEmpty ? "Commit" : mode.actionTitle)) {
                         onPush(
                             remotes.isEmpty ? nil : remote,
                             normalizedTargetBranch.isEmpty ? nil : normalizedTargetBranch,
@@ -422,20 +429,32 @@ struct PushDialogView: View {
                 if outgoingCommitsLoading {
                     ProgressView().controlSize(.small)
                 }
-                Text(repo == nil
-                    ? "\(displayedCommits.count) loaded"
-                    : "\(displayedCommits.count) outgoing")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if repo == nil {
+                    Text("\(displayedCommits.count) loaded")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(displayedCommits.count) outgoing")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if let outgoingCommitsError {
                 Text(outgoingCommitsError).font(.caption).foregroundStyle(.red)
             } else if displayedCommits.isEmpty {
-                Text(outgoingCommitsLoading
-                    ? "Loading outgoing commits…"
-                    : (repo == nil ? "No local commits loaded" : "No outgoing commits"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if outgoingCommitsLoading {
+                    Text("Loading outgoing commits…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if repo == nil {
+                    Text("No local commits loaded")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("No outgoing commits")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 5) {
@@ -691,7 +710,7 @@ struct MultiRootPushOptionsDialog: View {
             if pushTags {
                 Picker("Tag mode", selection: $pushTagMode) {
                     ForEach(PushDialogTagMode.allCases) { tagMode in
-                        Text(tagMode.title).tag(tagMode)
+                        Text(LocalizedStringKey(tagMode.title)).tag(tagMode)
                     }
                 }
             }
