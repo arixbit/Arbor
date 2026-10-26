@@ -98,10 +98,7 @@ struct RebasedMultiRootRenameBranchDialog: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Rename Branch")
                 .font(.title3.weight(.semibold))
-            Text(
-                String(localized: "Rename %@ in Git roots")
-                    .replacingOccurrences(of: "%@", with: oldName)
-            )
+            Text("Rename \(oldName) in Git roots")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             TextField("New branch name", text: $newName)
@@ -147,10 +144,7 @@ struct RebasedMultiRootRenameBranchDialog: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else {
-                Text(
-                    String(localized: "%@ repositories selected")
-                        .replacingOccurrences(of: "%@", with: String(selectedRootPaths.count))
-                )
+                Text("\(selectedRootPaths.count) repositories selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

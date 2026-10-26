@@ -13,8 +13,13 @@ func branchRenameConflictMessage(
 ) -> String? {
     let oldName = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
     let newName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !newName.isEmpty else { return "A branch name is required." }
-    guard newName != oldName else { return "The new name must be different." }
+    let locale = AppLanguage.interfaceLocale
+    guard !newName.isEmpty else {
+        return localizedArborString("A branch name is required.", locale: locale)
+    }
+    guard newName != oldName else {
+        return localizedArborString("The new name must be different.", locale: locale)
+    }
 
     let localConflicts = localBranchNames.filter { name in
         guard name != oldName else { return false }
@@ -23,7 +28,13 @@ func branchRenameConflictMessage(
             || newName.hasPrefix(name + "/")
     }
     if !localConflicts.isEmpty {
-        return "Branch \(newName) conflicts with an existing local branch."
+        return String(
+            format: localizedArborString(
+                "Branch %@ conflicts with an existing local branch.",
+                locale: locale
+            ),
+            newName
+        )
     }
 
     let remoteShortNames = remoteBranchNames.map { name in
@@ -31,7 +42,10 @@ func branchRenameConflictMessage(
         return String(name[name.index(after: slash)...])
     }
     if remoteShortNames.contains(newName) {
-        return "Branch \(newName) clashes with a remote branch."
+        return String(
+            format: localizedArborString("Branch %@ clashes with a remote branch.", locale: locale),
+            newName
+        )
     }
     return nil
 }

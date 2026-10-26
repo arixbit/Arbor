@@ -666,6 +666,7 @@ extension ContentView {
                 },
                 onCancel: dismissNewBranchDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $worktreeWorkspace.showCreateDialog) {
             RebasedNewWorktreeDialog(
@@ -740,6 +741,7 @@ extension ContentView {
                 },
                 onCancel: dismissMultiRootNewBranchDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $branchWorkspace.showMultiRootRenameDialog) {
             RebasedMultiRootRenameBranchDialog(
@@ -759,6 +761,7 @@ extension ContentView {
                 },
                 onCancel: dismissMultiRootRenameBranchDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $branchWorkspace.showRenameDialog) {
             RebasedSingleRootRenameBranchDialog(
@@ -783,6 +786,7 @@ extension ContentView {
                 },
                 onCancel: dismissSingleRootRenameBranchDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $branchWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteBranchDialog(
@@ -797,6 +801,7 @@ extension ContentView {
                 },
                 onCancel: dismissMultiRootDeleteBranchDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $tagWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteTagDialog(
@@ -811,6 +816,7 @@ extension ContentView {
                 },
                 onCancel: dismissMultiRootDeleteTagDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $branchWorkspace.showMultiRootRemoteDeleteDialog) {
             RebasedMultiRootRemoteDeleteBranchDialog(
@@ -827,6 +833,7 @@ extension ContentView {
                 },
                 onCancel: dismissMultiRootRemoteDeleteDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $mergeWorkspace.showActionDialog) {
             RebasedMergeDialog(

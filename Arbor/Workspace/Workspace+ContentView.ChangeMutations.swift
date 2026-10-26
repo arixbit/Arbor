@@ -119,7 +119,7 @@ func validateMultiRootRenameName(_ value: String) -> String? {
     let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !candidate.isEmpty else { return nil }
     guard candidate != branchWorkspace.multiRootRenameOldName else {
-        return String(localized: "The new name must be different.")
+        return localizedArborString("The new name must be different.", locale: AppLanguage.interfaceLocale)
     }
     let selected = multiRootWorkspace.branchSnapshots.filter { snapshot in
         branchWorkspace.multiRootRenameSelectedRootPaths.contains(snapshot.rootPath)

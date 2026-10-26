@@ -94,17 +94,14 @@ struct RebasedMultiRootBranchDeleteRecoveryView: View {
                     .font(.title3.weight(.semibold))
                 Spacer()
             }
-            Text(
-                String(localized: "The branch %@ was deleted from the selected repositories.")
-                    .replacingOccurrences(of: "%@", with: branchName)
-            )
+            Text("The branch \(branchName) was deleted from the selected repositories.")
                 .foregroundStyle(.secondary)
             List(contexts, id: \.id) { context in
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.triangle.branch")
                         .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(context.rootPath ?? String(localized: "Repository"))
+                        Text(context.rootPath ?? localizedArborString("Repository", locale: AppLanguage.interfaceLocale))
                             .lineLimit(1)
                         Text(context.preview.tipId)
                             .font(.system(.caption, design: .monospaced))
@@ -112,7 +109,7 @@ struct RebasedMultiRootBranchDeleteRecoveryView: View {
                     }
                     Spacer()
                     if !context.preview.unmergedCommits.isEmpty {
-                        Text(String(localized: "unmerged"))
+                        Text(localizedArborString("unmerged", locale: AppLanguage.interfaceLocale))
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -121,10 +118,7 @@ struct RebasedMultiRootBranchDeleteRecoveryView: View {
             }
             .listStyle(.inset)
             HStack {
-                Text(
-                    String(localized: "%@ repositories available to restore")
-                        .replacingOccurrences(of: "%@", with: String(contexts.count))
-                )
+                Text("\(contexts.count) repositories available to restore")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -195,22 +189,14 @@ struct RebasedMultiRootDeleteBranchDialog: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Delete Branch")
                 .font(.title3.weight(.semibold))
-            Text(
-                String(localized: "Delete %@ from Git roots")
-                    .replacingOccurrences(of: "%@", with: branchName)
-            )
+            Text("Delete \(branchName) from Git roots")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(
-                String(localized: "Unmerged branches are force-deleted like IntelliJ's multi-repository operation; their exact tips remain available for restore.")
-            )
+            Text("Unmerged branches are force-deleted like IntelliJ's multi-repository operation; their exact tips remain available for restore.")
                 .font(.caption)
                 .foregroundStyle(.orange)
             if currentBranchRepositories > 0 {
-                Text(
-                    String(localized: "%@ repositories are currently on this branch and will be skipped.")
-                        .replacingOccurrences(of: "%@", with: String(currentBranchRepositories))
-                )
+                Text("\(currentBranchRepositories) repositories are currently on this branch and will be skipped.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -250,10 +236,7 @@ struct RebasedMultiRootDeleteBranchDialog: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else {
-                Text(
-                    String(localized: "%@ repositories selected")
-                        .replacingOccurrences(of: "%@", with: String(selectedRootPaths.count))
-                )
+                Text("\(selectedRootPaths.count) repositories selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
