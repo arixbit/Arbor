@@ -580,6 +580,14 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(pushSheet.waitForNonExistence(timeout: 10), "Push sheet did not close")
 
         session.app.activate()
+        let window = session.window
+        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
+            .withOffset(CGVector(dx: -2, dy: -2))
+        corner.press(forDuration: 0.3, thenDragTo: corner.withOffset(CGVector(
+            dx: 980 - window.frame.width, dy: 640 - window.frame.height
+        )))
+        XCTAssertEqual(window.frame.width, 980, accuracy: 2)
+        XCTAssertEqual(window.frame.height, 640, accuracy: 2)
         XCTAssertTrue(session.openBranchesPopover())
         let actions = session.app.menuButtons["操作"].firstMatch
         XCTAssertTrue(actions.waitForExistence(timeout: 5))
@@ -594,8 +602,16 @@ final class ArborUIUserFlowUITests: XCTestCase {
             .matching(NSPredicate(format: "value == %@", "使用全局 Git 设置"))
             .firstMatch
         XCTAssertTrue(incoming.waitForExistence(timeout: 5))
+        let save = sheet.buttons["保存"].firstMatch
+        let cancel = sheet.buttons["取消"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isHittable, "Save is outside the sheet")
+        XCTAssertTrue(cancel.isHittable, "Cancel is outside the sheet")
+        XCTAssertTrue(session.window.frame.contains(save.frame))
+        XCTAssertTrue(session.window.frame.contains(cancel.frame))
         session.recordScreenshot(named: "project-git-settings-zh-Hans")
-        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        click(cancel)
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
         print("USER_FLOW_PASS chinese-operation-dialogs")
     }
 

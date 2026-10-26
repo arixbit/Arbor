@@ -17,6 +17,7 @@
 | 已通过 | 中文 Pull、Push 与项目 Git 设置页实测：Pull 选项菜单、Push 标签模式、设置弹窗标题与 picker 均显示中文；完整套件扩到 13/13。 |
 | 已通过 | 文案审计新增 computed title、重复翻译键和英文占位检查；清理 24 个 computed title，审计 0 缺键、0 缺翻译、0 重复。 |
 | 已通过 | 多仓库新建/重命名/删除分支弹窗中文实测：标题、仓库选择、数量、校验文案与按钮均为中文；完整套件扩到 14/14。 |
+| 已通过 | 项目 Git 设置弹窗改为限高滚动布局；980×640 下标题、滚动区与保存/取消均可见且可点击。 |
 | 已通过 | 现有代码已提交并推送 `origin/main`；包含本轮全部修复的 `3126162` 已通过 GitHub Rust / Swift 完整 CI。 |
 | 操作受阻 | 当前无执行阻塞。此前审批拒绝已解除，提交、推送、构建、UI 执行和附件导出均已恢复。 |
 | 与 Rebased 行为不同 | 首次打开同一临时仓库，Rebased 1.1.13 要求确认项目可信，Arbor 直接进入工作区。本轮保留这一流程差异。 |
@@ -74,7 +75,7 @@ Push/Fetch/Pull 用户路径的远端均为临时本地仓库，HTTPS/SSH 身份
 12. **Pull/Push 等 sheet 不继承应用语言。** 只有 Merge sheet 曾显式传入 locale，Pull、Push（含多 root）和凭据弹窗仍是英文。现在这些 sheet 都显式应用 `appLocale`；「项目 Git 设置」同样处理。中文实测覆盖 Pull 选项菜单、Push 标签模式与设置弹窗标题。
 13. **Push 按钮硬编码中文和英文选项。** `Button(remotes.isEmpty ? "提交" : mode.actionTitle)` 在英文界面也显示「提交」；改为本地化键。同时补齐发布分支、Push 标签、自定义 refspec、待推送提交计数、用户名/口令/钥匙串等中文；策略与选项标题改用 `LocalizedStringKey`。
 14. **翻译补充文件重复键静默覆盖。** `scripts/i18n-zh-hans-additions.json` 中 `Push tags` 出现两次，后者把新译文覆盖回英文；已删除重复项。静态审计只看 catalog 覆盖，发现不了这种重复，后续应加入重复键检查。
-15. **项目 Git 设置弹窗尺寸溢出（未修复）。** 弹窗固定宽 500 pt，内容高于窗口且部分控件与底部按钮在可视区外，截图可见右侧帮助文本被裁切。本轮只确认中文化，不声称该页布局已验收；建议单独改成有限高度 + 内部滚动。
+15. **项目 Git 设置弹窗尺寸溢出。** 弹窗固定宽 500 pt，内容高于窗口，底部按钮与右侧帮助文本在可视区外。现改为 860×620 弹窗，内部 `Form` 使用 grouped 样式并限定 820×460 视口滚动，页脚固定；980×640 下标题、滚动区与保存/取消均可见可点。
 16. **多仓库分支弹窗仍为英文。** 新建/重命名/删除分支的 sheet 没有传递 `appLocale`，`String(localized:)` 拼接标题和校验文案也绕过应用语言。现在所有分支弹窗 sheet 都应用 `appLocale`；重命名/删除标题改用插值，`validateMultiRootRenameName`、`branchRenameConflictMessage`、删除提示及 `unmerged`/`Repository` 标签都走应用语言。中文实测重命名弹窗显示“新名称必须不同。”，删除弹窗显示未合并分支说明。
 17. **静态审计盲区让「缺翻译 0」虚高。** `i18n-audit.py` 原先只扫描字面量，漏掉 computed `title`、重复翻译键和英文占位。现已加入 computed title 的 catalog 检查、`i18n-zh-hans-additions.json` 重复键检查（`Push tags` 曾被重复键覆盖回英文）和英文占位告警；并清理 24 个 computed title（收藏、子模块操作、LFS/hooks 状态、Smart Cherry-pick 等）。审计现为 1,637 个字面量、89 个 computed title，全部有 zh-Hans。
 
@@ -112,7 +113,7 @@ Reset 测试等待 HEAD、index 和恢复快照全部就绪后再核对结果，
 
 ![中文 Push 弹窗：标签模式、发布分支与待推送计数](images/ui-user-flow-audit/push-dialog-zh-hans.png)
 
-![中文项目 Git 设置：标题与 picker 中文化；弹窗尺寸溢出待修](images/ui-user-flow-audit/project-git-settings-zh-hans.png)
+![980×640 中文项目 Git 设置：标题、滚动区与页脚按钮均可见](images/ui-user-flow-audit/project-git-settings-zh-hans.png)
 
 ![中文多仓库新建分支弹窗](images/ui-user-flow-audit/multi-root-new-branch-zh-hans.png)
 
@@ -162,7 +163,8 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 6. **测试依赖宿主输入法。** 宿主拼音输入法激活时，直接键入会被组合成候选而留下空字段，首轮完整套件 7 项失败。输入已改为 Edit 菜单粘贴并校验；拼音激活状态下完整套件复跑 13/13。
 7. **审计本身也会漏。** computed title 与重复翻译键都不在旧扫描范围；`Push tags` 曾被重复键覆盖回英文而审计仍报 0 缺翻译。现已把这两类检查加入审计并作为失败条件，同时为术语表保留的英文词维护白名单。
 8. **多仓库分支弹窗同样漏语言。** 新建/重命名/删除弹窗未拿到 `appLocale`，`String(localized:)` 校验文案也仍是英文；三个弹窗已按同一方式修复并由中文专项核对标题、数量、校验和按钮。
-9. **弹窗语言未随应用切换。** Pull/Push/凭据/项目 Git 设置此前未拿到 `appLocale`；中文主窗口仍显示英文控件。现已在各 sheet 显式传递 locale，并由中文专项截图核对。项目 Git 设置弹窗的尺寸溢出作为已知问题保留，不作为本轮已修项。
+9. **设置弹窗内容不可达。** 项目 Git 设置弹窗原为固定宽 500 pt 且高度随内容膨胀，页脚按钮落在窗口外。现为 860×620、内部滚动、页脚固定；980×640 下保存/取消可点击，并补了 UI 断言。
+10. **弹窗语言未随应用切换。** Pull/Push/凭据/项目 Git 设置此前未拿到 `appLocale`；中文主窗口仍显示英文控件。现已在各 sheet 显式传递 locale，并由中文专项截图核对。项目 Git 设置弹窗的尺寸溢出作为已知问题保留，不作为本轮已修项。
 
 ## 验证记录与复跑入口
 
@@ -181,6 +183,7 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 - 中文 Pull/Push/设置专项（含设置弹窗）通过：`build/user-flow-audit/dialog-zh-12/20261026-141555.xcresult`；完整用户路径 13/13：`build/user-flow-audit/dialogs-final2/20261026-141753.xcresult`；改动后 Swift 736 项：`build/user-flow-audit/swift-unit-dialogs.xcresult`。
 - 审计扩展后的完整用户路径 13/13：`build/user-flow-audit/audit-cleanup2/20261026-144309.xcresult`；Swift 736 项 0 失败：`build/user-flow-audit/swift-unit-audit.xcresult`。
 - 多仓库分支弹窗中文专项 1/1：`build/user-flow-audit/mr-dialogs-4/20261026-150443.xcresult`；完整用户路径 14/14：`build/user-flow-audit/multidialog-final/20261026-150658.xcresult`；Swift 736 项：`build/user-flow-audit/swift-unit-multidialog.xcresult`。
+- 设置弹窗限高布局后：中文专项 1/1 `build/user-flow-audit/settings-layout-12/20261026-171702.xcresult`；完整用户路径 14/14 `build/user-flow-audit/settings-final/20261026-171835.xcresult`；Swift 736 项 `build/user-flow-audit/swift-unit-settings.xcresult`。
 - 导出截图、无障碍树和清单保留在 `build/user-flow-audit/`。
 - 最后追加的中文数量 UI 断言已执行通过；恢复提示同时经过最新截图核对。
 
