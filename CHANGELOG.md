@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.26 - 2026-10-26
+
+Chinese dialog coverage across the multi-root branch workflow, with a
+scrollable project settings sheet and a stricter localization audit.
+
+- The multi-root branch popup keeps full branch names for Git actions, so
+  cross-root merge, rename and delete entries stay available for names with
+  slashes. Merge, new/rename/delete branch, tag and remote-branch deletion, and
+  the interactive rebase editor follow the selected application language.
+- Pull, Push, credential and Project Git Settings dialogs receive the app
+  locale. Merge strategies, tag modes, outgoing counts, reset modes, commit
+  warnings and change-preservation choices are translated, including the
+  update-method and project-scope notes.
+- Project Git Settings now scrolls inside a bounded sheet; Save and Cancel
+  remain reachable at 980×640.
+- The localization audit checks computed titles, assigned error/status
+  messages, duplicate translation keys and English placeholders. Hosting,
+  remote, patch, submodule and file-history error messages are localized.
+- User-flow tests enter text through the Edit menu, so they no longer depend
+  on the host input method. The suite now covers 14 journeys, including the
+  Chinese multi-root branch, tag, remote and rebase dialogs.
+
 ## 1.0.25 - 2026-10-26
 
 Git operations and Chinese interface fixes, with a more compact Commit, Log
