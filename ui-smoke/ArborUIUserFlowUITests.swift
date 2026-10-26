@@ -112,13 +112,36 @@ final class ArborUIUserFlowUITests: XCTestCase {
         item.click()
     }
 
+    /// Paste through the Edit menu instead of sending keystrokes: XCTest typing
+    /// composes ASCII through whichever input method the host has active, which
+    /// leaves fields empty (or with the wrong text) when a Chinese layout is on.
     private func enter(_ value: String, into field: XCUIElement) {
-        click(field)
-        session.app.menuBars.menuBarItems["Edit"].click()
-        session.app.menuItems["Select All"].firstMatch.click()
-        // Type directly: other applications may update the shared clipboard
-        // while the test is navigating menus.
-        session.app.typeText(value)
+        let board = NSPasteboard.general
+        let saved = (board.pasteboardItems ?? []).map { item -> NSPasteboardItem in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
+        defer {
+            board.clearContents()
+            board.writeObjects(saved)
+        }
+        for _ in 1...3 {
+            click(field)
+            session.app.menuBars.menuBarItems["Edit"].click()
+            let selectAll = session.app.menuItems["Select All"].firstMatch
+            XCTAssertTrue(selectAll.waitForExistence(timeout: 5))
+            click(selectAll)
+            board.clearContents()
+            XCTAssertTrue(board.setString(value, forType: .string))
+            session.app.menuBars.menuBarItems["Edit"].click()
+            let paste = session.app.menuItems["Paste"].firstMatch
+            XCTAssertTrue(paste.waitForExistence(timeout: 5))
+            click(paste)
+            if field.value as? String == value { return }
+        }
         XCTAssertEqual(field.value as? String, value)
     }
 
@@ -402,6 +425,129 @@ final class ArborUIUserFlowUITests: XCTestCase {
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
         try eventually("returned-window-stash") { try self.git("status", "--porcelain").isEmpty }
         XCTAssertFalse(try git("stash", "list").isEmpty)
+    }
+
+    func test11ChineseMultiRootBranchesFitMinimumWindow() throws {
+        let project = root.appendingPathComponent("frontend")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        repo = project
+        try prepare()
+        let backend = project.appendingPathComponent("backend")
+        try git("init", "--initial-branch=main", backend.path, at: project)
+        try git("config", "user.name", "Arbor User Flow", at: backend)
+        try git("config", "user.email", "flow@arbor.invalid", at: backend)
+        try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Backend initial", at: backend)
+        try Data("backend/\n".utf8).write(to: repo.appendingPathComponent(".git/info/exclude"))
+        let longBranch = "feature/localization-audit-with-a-deliberately-long-branch-name"
+        for directory in [repo!, backend] {
+            try git("switch", "-c", longBranch, at: directory)
+            try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Branch tip", at: directory)
+            try git("switch", "main", at: directory)
+        }
+        let heads = try [repo!, backend].map { try git("rev-parse", "HEAD", at: $0) }
+        session = ArborUISession(fixture: project, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.appLanguage", "zh-Hans"]
+        session.launch()
+        let window = session.window
+        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
+            .withOffset(CGVector(dx: -2, dy: -2))
+        corner.press(forDuration: 0.3, thenDragTo: corner.withOffset(CGVector(
+            dx: 980 - window.frame.width, dy: 640 - window.frame.height
+        )))
+        XCTAssertEqual(window.frame.width, 980, accuracy: 2)
+        XCTAssertEqual(window.frame.height, 640, accuracy: 2)
+        XCTAssertTrue(session.openBranchesPopover())
+        func capturePopup(_ name: String) {
+            let attachment = XCTAttachment(screenshot: session.app.popovers.firstMatch.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        capturePopup("multi-root-branches-zh-Hans-980")
+        let tree = XCTAttachment(string: session.app.debugDescription)
+        tree.name = "multi-root-branches-chinese-tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+        let popup = session.app.popovers.firstMatch
+        let references = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
+        XCTAssertTrue(references.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(references.frame.height, 300)
+        XCTAssertTrue(session.app.staticTexts["2 个仓库"].firstMatch.waitForExistence(timeout: 5))
+        for title in ["提交变更…", "新建分支…", "检出 Tag 或版本…"] {
+            let buttons = session.app.buttons.matching(NSPredicate(format: "label == %@", title))
+            XCTAssertEqual(buttons.count, 1, "Duplicate or untranslated action: \(title)")
+            XCTAssertTrue(popup.frame.contains(buttons.firstMatch.frame), "Action overflows: \(title)")
+            XCTAssertTrue(references.frame.contains(buttons.firstMatch.frame))
+        }
+        let actions = popup.menuButtons["操作"].firstMatch
+        XCTAssertTrue(actions.isHittable)
+        XCTAssertTrue(popup.frame.contains(actions.frame))
+        click(actions)
+        XCTAssertTrue(session.app.menuItems["配置远程…"].firstMatch.isEnabled)
+        XCTAssertFalse(session.app.menuItems["远程操作…"].firstMatch.exists)
+        actions.click()
+        let search = session.app.textFields["过滤分支"].firstMatch
+        XCTAssertTrue(popup.frame.contains(search.frame))
+        func pasteSearch(_ text: String) {
+            XCTAssertEqual(search.value as? String, "")
+            enter(text, into: search)
+        }
+        pasteSearch("backend")
+        let repository = session.app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "backend")).firstMatch
+        click(repository)
+        let allRepositories = session.app.buttons["所有仓库"].firstMatch
+        XCTAssertTrue(allRepositories.waitForExistence(timeout: 5))
+        XCTAssertTrue(session.app.staticTexts["1 个仓库"].firstMatch.exists)
+        XCTAssertTrue(session.app.staticTexts["位于 backend"].firstMatch.exists)
+        pasteSearch("localization-audit")
+        let branch = references.staticTexts[String(longBranch.split(separator: "/").last!)].firstMatch
+        XCTAssertTrue(branch.waitForExistence(timeout: 5))
+        XCTAssertTrue(branch.isHittable)
+        XCTAssertTrue(references.frame.contains(branch.frame))
+        XCTAssertTrue(references.staticTexts["没有贮藏"].firstMatch.exists)
+        capturePopup("multi-root-branch-search-zh-Hans-980")
+        let branchMenu = try XCTUnwrap(references.menuButtons.allElementsBoundByIndex.first {
+            !$0.frame.isEmpty && abs($0.frame.midY - branch.frame.midY) < 3
+        })
+        click(branchMenu)
+        let merge = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中合并…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(merge)
+        let sheet = session.app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(sheet.staticTexts["合并分支"].firstMatch.exists)
+        XCTAssertTrue(sheet.staticTexts["在 Git roots 中 Merge \(longBranch)"].firstMatch.exists)
+        XCTAssertTrue(sheet.staticTexts["已选择 2 个仓库"].firstMatch.exists)
+        XCTAssertTrue(sheet.staticTexts["自动（可用时 fast-forward）"].firstMatch.exists)
+        for name in ["frontend", "backend"] {
+            XCTAssertTrue(sheet.checkBoxes.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch.exists)
+        }
+        session.recordScreenshot(named: "multi-root-branch-merge-cancel-zh-Hans-980")
+        click(sheet.buttons["取消"].firstMatch)
+        XCTAssertFalse(sheet.exists)
+        XCTAssertTrue(session.openBranchesPopover())
+        XCTAssertTrue(session.app.staticTexts["2 个仓库"].firstMatch.waitForExistence(timeout: 5))
+        pasteSearch("backend")
+        click(repository)
+        XCTAssertTrue(allRepositories.waitForExistence(timeout: 5))
+        click(allRepositories)
+        // Leaving the repository scope restores the speed-search text, as in IntelliJ.
+        XCTAssertEqual(search.value as? String, "backend")
+        XCTAssertFalse(session.app.buttons["所有仓库"].firstMatch.exists)
+        XCTAssertFalse(session.app.staticTexts["位于 backend"].firstMatch.exists)
+        XCTAssertTrue(session.app.staticTexts["1 个仓库"].firstMatch.exists)
+        click(search)
+        session.app.menuBars.menuBarItems["Edit"].click()
+        click(session.app.menuItems["Select All"].firstMatch)
+        search.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+        XCTAssertEqual(search.value as? String, "")
+        XCTAssertTrue(session.app.staticTexts["2 个仓库"].firstMatch.waitForExistence(timeout: 5))
+        for (index, directory) in [repo!, backend].enumerated() {
+            XCTAssertEqual(try git("rev-parse", "HEAD", at: directory), heads[index])
+            XCTAssertEqual(try git("branch", "--show-current", at: directory), "main")
+            XCTAssertEqual(try git("status", "--porcelain", at: directory), "")
+        }
+        print("USER_FLOW_PASS chinese-multi-root-branches")
     }
 
     func test10ChineseConflictControlsFitMinimumWindow() throws {
