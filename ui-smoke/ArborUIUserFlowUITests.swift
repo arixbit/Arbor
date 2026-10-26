@@ -550,6 +550,52 @@ final class ArborUIUserFlowUITests: XCTestCase {
         print("USER_FLOW_PASS chinese-multi-root-branches")
     }
 
+    func test12ChineseOperationDialogsUseTranslatedOptions() throws {
+        try prepare()
+        launch(language: "zh-Hans")
+        menu("Pull…")
+        let pull = session.app.buttons["Pull"].firstMatch
+        XCTAssertTrue(pull.waitForExistence(timeout: 10))
+        XCTAssertTrue(session.app.staticTexts["默认"].firstMatch.waitForExistence(timeout: 5))
+        let modify = session.app.menuButtons["修改…"].firstMatch
+        XCTAssertTrue(modify.waitForExistence(timeout: 5))
+        click(modify)
+        XCTAssertTrue(session.app.menuItems["仅 fast-forward"].firstMatch.waitForExistence(timeout: 5))
+        session.recordScreenshot(named: "pull-options-zh-Hans")
+        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        click(session.app.buttons["取消"].firstMatch)
+        XCTAssertFalse(pull.exists)
+
+        menu("Push…")
+        let pushTags = session.app.checkBoxes["推送标签"].firstMatch
+        XCTAssertTrue(pushTags.waitForExistence(timeout: 10))
+        click(pushTags)
+        let tagMode = session.app.popUpButtons
+            .matching(NSPredicate(format: "value == %@ OR label == %@", "所有标签", "所有标签"))
+            .firstMatch
+        XCTAssertTrue(tagMode.waitForExistence(timeout: 5))
+        session.recordScreenshot(named: "push-options-zh-Hans")
+        click(session.app.buttons["取消"].firstMatch)
+
+        XCTAssertTrue(session.openBranchesPopover())
+        let actions = session.app.menuButtons["操作"].firstMatch
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
+        click(actions)
+        let projectSettings = session.app.menuItems["项目 Git 设置…"].firstMatch
+        XCTAssertTrue(projectSettings.waitForExistence(timeout: 5))
+        click(projectSettings)
+        let sheet = session.app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(sheet.staticTexts["项目 Git 设置"].firstMatch.exists)
+        let incoming = sheet.popUpButtons
+            .matching(NSPredicate(format: "value == %@", "使用全局 Git 设置"))
+            .firstMatch
+        XCTAssertTrue(incoming.waitForExistence(timeout: 5))
+        session.recordScreenshot(named: "project-git-settings-zh-Hans")
+        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        print("USER_FLOW_PASS chinese-operation-dialogs")
+    }
+
     func test10ChineseConflictControlsFitMinimumWindow() throws {
         try prepareConflict()
         XCTAssertThrowsError(try git("merge", "topic"))
