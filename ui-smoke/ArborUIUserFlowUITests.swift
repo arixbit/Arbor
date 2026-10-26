@@ -599,6 +599,81 @@ final class ArborUIUserFlowUITests: XCTestCase {
         print("USER_FLOW_PASS chinese-operation-dialogs")
     }
 
+    func test13ChineseMultiRootBranchDialogs() throws {
+        let project = root.appendingPathComponent("frontend")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        repo = project
+        try prepare()
+        let backend = project.appendingPathComponent("backend")
+        try git("init", "--initial-branch=main", backend.path, at: project)
+        try git("config", "user.name", "Arbor User Flow", at: backend)
+        try git("config", "user.email", "flow@arbor.invalid", at: backend)
+        try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Backend initial", at: backend)
+        try Data("backend/\n".utf8).write(to: repo.appendingPathComponent(".git/info/exclude"))
+        for directory in [repo!, backend] {
+            try git("branch", "shared", at: directory)
+        }
+        launch(language: "zh-Hans")
+        XCTAssertTrue(session.openBranchesPopover())
+        click(session.app.buttons["新建分支…"].firstMatch)
+        let sheet = session.app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(sheet.staticTexts["新建分支"].firstMatch.exists)
+        XCTAssertTrue(sheet.staticTexts["在 Git 根仓库中创建"].firstMatch.exists)
+        XCTAssertTrue(sheet.staticTexts["已选择 2 个仓库"].firstMatch.exists)
+        XCTAssertTrue(sheet.checkBoxes["全部仓库"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-new-branch-zh-Hans")
+        click(sheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+
+        session.app.activate()
+        XCTAssertTrue(session.openBranchesPopover())
+        let references = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
+        XCTAssertTrue(references.waitForExistence(timeout: 5))
+        enter("shared", into: session.app.textFields["过滤分支"].firstMatch)
+        let row = references.staticTexts["shared"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let rowMenu = try XCTUnwrap(references.menuButtons.allElementsBoundByIndex.first {
+            !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 3
+        })
+        click(rowMenu)
+        let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(rename)
+        let renameSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(renameSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(renameSheet.staticTexts["在 Git roots 中重命名 shared"].firstMatch.exists)
+        XCTAssertTrue(renameSheet.staticTexts["已选择 2 个仓库"].firstMatch.exists)
+        XCTAssertTrue(renameSheet.staticTexts["新名称必须不同。"].firstMatch.exists)
+        XCTAssertTrue(renameSheet.buttons["重命名"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-rename-branch-zh-Hans")
+        click(renameSheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(renameSheet.waitForNonExistence(timeout: 5))
+
+        session.app.activate()
+        XCTAssertTrue(session.openBranchesPopover())
+        let referencesAgain = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
+        XCTAssertTrue(referencesAgain.waitForExistence(timeout: 5))
+        enter("shared", into: session.app.textFields["过滤分支"].firstMatch)
+        let rowAgain = referencesAgain.staticTexts["shared"].firstMatch
+        XCTAssertTrue(rowAgain.waitForExistence(timeout: 5))
+        let rowMenuAgain = try XCTUnwrap(referencesAgain.menuButtons.allElementsBoundByIndex.first {
+            !$0.frame.isEmpty && abs($0.frame.midY - rowAgain.frame.midY) < 3
+        })
+        click(rowMenuAgain)
+        let delete = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中删除…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(delete)
+        let deleteSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(deleteSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(deleteSheet.staticTexts["从 Git root 删除 shared"].firstMatch.exists)
+        XCTAssertTrue(deleteSheet.buttons["删除"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-delete-branch-zh-Hans")
+        click(deleteSheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(deleteSheet.waitForNonExistence(timeout: 5))
+        print("USER_FLOW_PASS chinese-multi-root-branch-dialogs")
+    }
+
     func test10ChineseConflictControlsFitMinimumWindow() throws {
         try prepareConflict()
         XCTAssertThrowsError(try git("merge", "topic"))
