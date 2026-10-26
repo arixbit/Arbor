@@ -140,7 +140,7 @@ final class HostingWorkspaceModel: ObservableObject {
         guard let pullRequest = pullRequests.first(where: { $0.id == selectedPullRequestID }) else {
             detailLoadGeneration &+= 1
             detail = nil
-            detailError = "The selected pull request is no longer in this list."
+            detailError = localizedArborString("The selected pull request is no longer in this list.", locale: AppLanguage.interfaceLocale)
             isDetailLoading = false
             return
         }
@@ -191,7 +191,7 @@ final class HostingWorkspaceModel: ObservableObject {
               detail.pullRequest.id == pullRequestID,
               let expectedHeadRevision = detail.headRevision,
               !expectedHeadRevision.isEmpty else {
-            detailError = "Reload the selected pull request before submitting a review."
+            detailError = localizedArborString("Reload the selected pull request before submitting a review.", locale: AppLanguage.interfaceLocale)
             return false
         }
         do {
@@ -218,7 +218,7 @@ final class HostingWorkspaceModel: ObservableObject {
               detail.pullRequest.id == pullRequestID,
               let expectedHeadRevision = detail.headRevision,
               !expectedHeadRevision.isEmpty else {
-            detailError = "Reload the selected pull request before merging."
+            detailError = localizedArborString("Reload the selected pull request before merging.", locale: AppLanguage.interfaceLocale)
             return false
         }
         do {
@@ -242,7 +242,7 @@ final class HostingWorkspaceModel: ObservableObject {
         guard let repository,
               let pullRequestID = selectedPullRequestID,
               detail?.pullRequest.id == pullRequestID else {
-            detailError = "Reload the selected pull request before closing it."
+            detailError = localizedArborString("Reload the selected pull request before closing it.", locale: AppLanguage.interfaceLocale)
             return false
         }
         do {
@@ -261,7 +261,7 @@ final class HostingWorkspaceModel: ObservableObject {
         guard let repository,
               let pullRequestID = selectedPullRequestID,
               detail?.pullRequest.id == pullRequestID else {
-            detailError = "Reload the selected pull request before changing its approval."
+            detailError = localizedArborString("Reload the selected pull request before changing its approval.", locale: AppLanguage.interfaceLocale)
             return false
         }
         do {

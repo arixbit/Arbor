@@ -570,7 +570,7 @@ struct FileReferenceComparisonView: View {
                         self.historyAfterID = history.last?.id
                         self.canLoadMoreHistory = history.count == Int(fileHistoryPageSize)
                         if loadedChoices.isEmpty {
-                            self.diffError = "No file history is available for this path."
+                            self.diffError = localizedArborString("No file history is available for this path.", locale: AppLanguage.interfaceLocale)
                         }
                     }
                 } catch {
@@ -580,7 +580,7 @@ struct FileReferenceComparisonView: View {
                         self.choices = []
                         self.isLoadingReferences = false
                         self.referenceLoadError = "\(error)"
-                        self.diffError = "Unable to load file history."
+                        self.diffError = localizedArborString("Unable to load file history.", locale: AppLanguage.interfaceLocale)
                     }
                 }
                 return

@@ -603,7 +603,7 @@ struct DiffDetailView: View {
         let generation = loadGeneration
         let r1 = rev1, r2 = rev2, ws = ignoreWhitespace
         guard let plan = diffPatchGitCommand(revision1: r1, revision2: r2, path: path) else {
-            diffError = "Revision must be a ref-like token without whitespace or a leading '-'."
+            diffError = localizedArborString("Revision must be a ref-like token without whitespace or a leading '-'.", locale: AppLanguage.interfaceLocale)
             patchPlan = nil
             return
         }
@@ -673,7 +673,7 @@ struct DiffDetailView: View {
                     paths: paths,
                     options: options
                 ) else {
-                    self.diffError = "Patch export failed: the selected base directory does not contain this path."
+                    self.diffError = localizedArborString("Patch export failed: the selected base directory does not contain this path.", locale: AppLanguage.interfaceLocale)
                     return
                 }
 

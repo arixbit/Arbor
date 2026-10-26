@@ -26370,6 +26370,216 @@
           }
         }
       }
+    },
+    "No file history is available for this path." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此路径没有可用的文件历史。"
+          }
+        }
+      }
+    },
+    "Patch details are unavailable; using file selection." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补丁详情不可用；改用文件选择。"
+          }
+        }
+      }
+    },
+    "Patch export failed: the selected base directory does not contain this path." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补丁导出失败：所选基准目录不包含此路径。"
+          }
+        }
+      }
+    },
+    "Project Git executable path must not be empty." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目 Git 可执行文件路径不能为空。"
+          }
+        }
+      }
+    },
+    "Reload the selected pull request before changing its approval." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先重新加载所选拉取请求，再修改审批。"
+          }
+        }
+      }
+    },
+    "Reload the selected pull request before closing it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先重新加载所选拉取请求，再关闭。"
+          }
+        }
+      }
+    },
+    "Reload the selected pull request before merging." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先重新加载所选拉取请求，再合并。"
+          }
+        }
+      }
+    },
+    "Reload the selected pull request before submitting a review." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先重新加载所选拉取请求，再提交评审。"
+          }
+        }
+      }
+    },
+    "Remote URL check failed; see the operation feedback for details." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程 URL 校验失败；详情请查看操作反馈。"
+          }
+        }
+      }
+    },
+    "Remote URL is required" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必须填写远程 URL"
+          }
+        }
+      }
+    },
+    "Remote name is required" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必须填写远程名称"
+          }
+        }
+      }
+    },
+    "Repository working directory is unavailable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库工作目录不可用。"
+          }
+        }
+      }
+    },
+    "Revision must be a ref-like token without whitespace or a leading '-'." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本必须是类似 ref 的标记，不能包含空白或以 '-' 开头。"
+          }
+        }
+      }
+    },
+    "Selected base directory must be inside the repository." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选基准目录必须位于仓库内。"
+          }
+        }
+      }
+    },
+    "Testing…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在测试…"
+          }
+        }
+      }
+    },
+    "The parent repository has no worktree." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "父仓库没有工作区。"
+          }
+        }
+      }
+    },
+    "The repository for this change is no longer available." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此变更所属的仓库已不可用。"
+          }
+        }
+      }
+    },
+    "The selected pull request is no longer in this list." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选拉取请求已不在列表中。"
+          }
+        }
+      }
+    },
+    "The submodule is not initialized or cannot be opened." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块未初始化或无法打开。"
+          }
+        }
+      }
+    },
+    "Unable to load file history." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载文件历史。"
+          }
+        }
+      }
+    },
+    "credential broker unavailable" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "凭据代理不可用"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

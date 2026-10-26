@@ -277,7 +277,7 @@ struct SubmoduleChangeView: View {
         showNestedDiff = true
 
         guard let workdir = repo.workdir() else {
-            nestedDiffError = "The parent repository has no worktree."
+            nestedDiffError = localizedArborString("The parent repository has no worktree.", locale: AppLanguage.interfaceLocale)
             nestedDiffLoading = false
             return
         }
@@ -286,7 +286,7 @@ struct SubmoduleChangeView: View {
             .standardizedFileURL
             .path
         guard let nestedRepo = try? openRepository(path: nestedRoot) else {
-            nestedDiffError = "The submodule is not initialized or cannot be opened."
+            nestedDiffError = localizedArborString("The submodule is not initialized or cannot be opened.", locale: AppLanguage.interfaceLocale)
             nestedDiffLoading = false
             return
         }

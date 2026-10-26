@@ -511,7 +511,7 @@ struct RebasedUnshelveDialog: View {
 
     private func choosePatchBaseDirectory() {
         guard let repositoryRoot = repositoryRootURL else {
-            baseDirectoryError = "Repository working directory is unavailable."
+            baseDirectoryError = localizedArborString("Repository working directory is unavailable.", locale: AppLanguage.interfaceLocale)
             return
         }
         let panel = NSOpenPanel()
@@ -524,7 +524,7 @@ struct RebasedUnshelveDialog: View {
         let root = repositoryRoot.resolvingSymlinksInPath()
         let selected = selectedURL.standardizedFileURL.resolvingSymlinksInPath()
         guard selected.path == root.path || selected.path.hasPrefix(root.path + "/") else {
-            baseDirectoryError = "Selected base directory must be inside the repository."
+            baseDirectoryError = localizedArborString("Selected base directory must be inside the repository.", locale: AppLanguage.interfaceLocale)
             return
         }
         baseDirectoryError = nil
@@ -643,7 +643,7 @@ struct RebasedUnshelveDialog: View {
                     self.isLoadingPatch = false
                     self.previewPath = files.first?.path
                     if files.isEmpty {
-                        self.patchLoadError = "Patch details are unavailable; using file selection."
+                        self.patchLoadError = localizedArborString("Patch details are unavailable; using file selection.", locale: AppLanguage.interfaceLocale)
                     } else {
                         self.initializeHunkSelection()
                         self.loadPreview(files.first?.path)
@@ -654,7 +654,7 @@ struct RebasedUnshelveDialog: View {
                     self.isImportedShelf = suppliedPatch != nil
                         || ((try? repo.shelveIsImported(name: name)) ?? false)
                     self.isLoadingPatch = false
-                    self.patchLoadError = "Patch details are unavailable; using file selection."
+                    self.patchLoadError = localizedArborString("Patch details are unavailable; using file selection.", locale: AppLanguage.interfaceLocale)
                 }
             }
         }

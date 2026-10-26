@@ -540,7 +540,7 @@ struct ProjectGitIncomingChangesSettingsView: View {
 
     private func testProjectGitExecutable() {
         let candidate = projectGitExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        projectGitExecutableStatus = "Testing…"
+        projectGitExecutableStatus = localizedArborString("Testing…", locale: AppLanguage.interfaceLocale)
         projectGitExecutableSaveError = nil
         Task.detached(priority: .userInitiated) {
             do {
@@ -566,7 +566,7 @@ struct ProjectGitIncomingChangesSettingsView: View {
 
         let candidate = projectGitExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else {
-            projectGitExecutableSaveError = "Project Git executable path must not be empty."
+            projectGitExecutableSaveError = localizedArborString("Project Git executable path must not be empty.", locale: AppLanguage.interfaceLocale)
             return false
         }
         do {

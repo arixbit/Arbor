@@ -54,6 +54,15 @@ APPKIT_TITLE_PATTERN = re.compile(
 # so SwiftUI cannot discover their keys. Require the same catalog coverage as
 # literal UI text; call sites must also localize the returned String.
 TITLE_PATTERN = re.compile(r"\b(?:var|func)\s+[A-Za-z_]\w*[Tt]itle\b[^\n{]*\{")
+# Error/status strings are often assigned to a published property and shown
+# later with Text(value), which never reaches the catalog. Catch raw literals
+# at the assignment so new UI messages cannot bypass localization.
+ASSIGNMENT_PATTERN = re.compile(
+    r'^\s*(?:self\.)?[A-Za-z_]\w*'
+    r'(?:Error|Status|Message|Detail|Subtitle|Summary|Hint|Warning|Title|Description)'
+    r'\s*=\s*"((?:\\.|[^"\\])*)"',
+    re.MULTILINE,
+)
 # Git and UI terms the product keeps in English on purpose (I18N_TERMS.md).
 INTENTIONAL_ENGLISH = {
     "Merge",
@@ -171,6 +180,17 @@ def computed_title_literals(path: Path) -> list[tuple[str, int]]:
     return hits
 
 
+def assignment_literals(path: Path) -> list[tuple[str, int]]:
+    """Raw UI strings assigned to error/status-style properties."""
+    source = path.read_text(encoding="utf-8")
+    hits: list[tuple[str, int]] = []
+    for match in ASSIGNMENT_PATTERN.finditer(source):
+        value = decode_swift_string(match.group(1))
+        if value and "\\(" not in value:
+            hits.append((value, line_number(source, match.start())))
+    return hits
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -274,6 +294,18 @@ def main() -> int:
                     f"{swift_file.relative_to(root)}:{line}"
                 )
 
+    assignments: dict[str, list[str]] = {}
+    for raw_path in args.paths:
+        path = (root / raw_path).resolve()
+        files = [path] if path.is_file() else sorted(path.rglob("*.swift"))
+        for swift_file in files:
+            if "Tests" in swift_file.parts:
+                continue
+            for value, line in assignment_literals(swift_file):
+                assignments.setdefault(value, []).append(
+                    f"{swift_file.relative_to(root)}:{line}"
+                )
+
     additions_path = root / "scripts/i18n-zh-hans-additions.json"
     duplicate_additions: dict[str, int] = {}
     if additions_path.exists():
@@ -305,6 +337,20 @@ def main() -> int:
         )
     )
 
+    assignment_missing = sorted(set(assignments) - catalog_keys)
+    assignment_untranslated = sorted(
+        key
+        for key in assignments
+        if key in catalog_keys
+        and (
+            catalog["strings"][key].get("localizations", {}).get("zh-Hans") is None
+            or catalog["strings"][key]["localizations"]["zh-Hans"]
+            .get("stringUnit", {})
+            .get("value")
+            == key
+        )
+    )
+
     print(f"Scanned literals: {len(occurrences)}")
     print(f"Computed title literals: {len(computed_titles)}")
     print(f"Missing catalog keys: {len(missing)}")
@@ -319,6 +365,13 @@ def main() -> int:
     print(f"Untranslated computed titles: {len(title_untranslated)}")
     for key in title_untranslated:
         print(f"TITLE-UNTRANSLATED\t{key}\t{' / '.join(computed_titles[key])}")
+    print(f"Assignment literals: {len(assignments)}")
+    print(f"Missing assignment keys: {len(assignment_missing)}")
+    for key in assignment_missing:
+        print(f"ASSIGNMENT-MISSING\t{key}\t{' / '.join(assignments[key])}")
+    print(f"Untranslated assignment literals: {len(assignment_untranslated)}")
+    for key in assignment_untranslated:
+        print(f"ASSIGNMENT-UNTRANSLATED\t{key}\t{' / '.join(assignments[key])}")
     print(f"Duplicate translation additions: {len(duplicate_additions)}")
     for key, count in sorted(duplicate_additions.items()):
         print(f"DUPLICATE\t{key}\t{count}")
@@ -337,6 +390,8 @@ def main() -> int:
         or introduced
         or title_missing
         or title_untranslated
+        or assignment_missing
+        or assignment_untranslated
         or duplicate_additions
     ) else 0
 

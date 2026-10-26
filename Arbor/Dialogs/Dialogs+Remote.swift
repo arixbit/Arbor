@@ -1193,12 +1193,12 @@ private struct MultiRootRemoteConfigEditorView: View {
                     let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
                     validationMessage = nil
                     guard !trimmedName.isEmpty else {
-                        validationMessage = "Remote name is required"
+                        validationMessage = localizedArborString("Remote name is required", locale: AppLanguage.interfaceLocale)
                         focusedField = .name
                         return
                     }
                     guard !trimmedURL.isEmpty else {
-                        validationMessage = "Remote URL is required"
+                        validationMessage = localizedArborString("Remote URL is required", locale: AppLanguage.interfaceLocale)
                         focusedField = .url
                         return
                     }
@@ -1215,7 +1215,7 @@ private struct MultiRootRemoteConfigEditorView: View {
                         if success {
                             dismiss()
                         } else {
-                            validationMessage = "Remote URL check failed; see the operation feedback for details."
+                            validationMessage = localizedArborString("Remote URL check failed; see the operation feedback for details.", locale: AppLanguage.interfaceLocale)
                             focusedField = .url
                         }
                     }

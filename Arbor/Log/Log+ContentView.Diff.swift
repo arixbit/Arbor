@@ -411,7 +411,7 @@ struct LogStandaloneDiffView: View {
         fileDiff = nil
         diffError = nil
         guard let repo = repositoryForCommit(record.commit) else {
-            diffError = "The repository for this change is no longer available."
+            diffError = localizedArborString("The repository for this change is no longer available.", locale: AppLanguage.interfaceLocale)
             return
         }
         let commitID = record.commit.id

@@ -329,7 +329,7 @@ struct FileContentView: View {
         let handle = GitCancelHandle()
         guard let downloadBroker = broker else {
             lfsDownloading = false
-            lfsError = "credential broker unavailable"
+            lfsError = localizedArborString("credential broker unavailable", locale: AppLanguage.interfaceLocale)
             return
         }
         Task.detached(priority: .userInitiated) {
