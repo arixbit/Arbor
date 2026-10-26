@@ -260,13 +260,17 @@ struct PushDialogView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(mode.title).font(.title3).bold()
             if remotes.isEmpty {
-                Text(mode.allowsCommitOnlyFallbackWithoutRemote
-                    ? "当前仓库没有配置远程；确认后只提交，不推送。"
-                    : "当前仓库没有配置远程；请先配置 remote。")
+                Group {
+                    if mode.allowsCommitOnlyFallbackWithoutRemote {
+                        Text("No remote is configured. Confirm to commit without pushing.")
+                    } else {
+                        Text("No remote is configured. Configure a remote first.")
+                    }
+                }
                     .foregroundStyle(.secondary)
             } else {
                 HStack {
-                    Picker("远程", selection: $remote) {
+                    Picker("Remote", selection: $remote) {
                         ForEach(remotes, id: \.name) { item in
                             Text("\(item.name) · \(item.url)").tag(item.name)
                         }
@@ -309,7 +313,7 @@ struct PushDialogView: View {
                     TextField("Target branch", text: $branch)
                         .textFieldStyle(.roundedBorder)
                 } else {
-                    Picker("分支", selection: $branch) {
+                    Picker("Branch", selection: $branch) {
                         ForEach(branches, id: \.name) { item in
                             Text(item.name).tag(item.name)
                         }

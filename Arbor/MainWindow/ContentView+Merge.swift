@@ -68,11 +68,22 @@ extension ContentView {
     /// presentation here.
     @ViewBuilder
     var conflictResolverOverlays: some View {
-        if operationRecovery.showConflictResolver {
-            singleRootConflictResolverPanel
-        }
-        if operationRecovery.showMultiRootConflictResolver {
-            multiRootConflictResolverPanel
+        GeometryReader { geometry in
+            ZStack(alignment: .trailing) {
+                if operationRecovery.showConflictResolver {
+                    singleRootConflictResolverPanel
+                        .frame(width: min(1000, geometry.size.width - 28),
+                               height: min(680, geometry.size.height - 28))
+                        .padding(14)
+                }
+                if operationRecovery.showMultiRootConflictResolver {
+                    multiRootConflictResolverPanel
+                        .frame(width: min(1060, geometry.size.width - 28),
+                               height: min(700, geometry.size.height - 28))
+                        .padding(14)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .trailing)
         }
     }
 
@@ -85,7 +96,7 @@ extension ContentView {
                         .foregroundStyle(.orange)
                     Text("Resolve Conflicts")
                         .font(.headline)
-                    Text(mergeRevisionsMode.title)
+                    Text(LocalizedStringKey(mergeRevisionsMode.title))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -126,7 +137,6 @@ extension ContentView {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(width: 1000, height: 680)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             .overlay {
                 RoundedRectangle(cornerRadius: 12)
@@ -134,7 +144,6 @@ extension ContentView {
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
-            .padding(14)
             .transition(.move(edge: .trailing).combined(with: .opacity))
             .zIndex(20)
         }
@@ -174,7 +183,6 @@ extension ContentView {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 1060, height: 700)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
@@ -182,7 +190,6 @@ extension ContentView {
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
-        .padding(14)
         .transition(.move(edge: .trailing).combined(with: .opacity))
         .zIndex(21)
     }

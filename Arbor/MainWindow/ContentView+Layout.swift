@@ -532,6 +532,33 @@ extension ContentView {
                 }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { fileWorkspace.selectionModePath != nil },
+            set: { if !$0 { fileWorkspace.selectionModePath = nil } }
+        )) {
+            if let path = fileWorkspace.selectionModePath,
+               let entry = repositoryStatus.entries.first(where: { $0.path == path }) {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Partial stage").font(.headline)
+                        Spacer()
+                        Button("Close") { fileWorkspace.selectionModePath = nil }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                    .padding(12)
+                    Divider()
+                    DiffDetailView(
+                        repo: repo,
+                        entry: entry,
+                        onChanged: refreshAll,
+                        selectionModePath: path,
+                        initialMode: stagingPreviewDiffMode(for: fileWorkspace.previewMode),
+                        refreshToken: fileWorkspace.refreshToken
+                    )
+                }
+                .frame(minWidth: 900, idealWidth: 1120, minHeight: 560, idealHeight: 640)
+            }
+        }
         .sheet(isPresented: $gitSettings.showGpgAgentSettings) {
             GpgAgentSettingsView()
         }

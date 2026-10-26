@@ -24,12 +24,16 @@ CALLS = (
     "TextField",
     "SecureField",
     "CommandMenu",
+    "Picker",
+    "Section",
+    "GroupBox",
+    "ProgressView",
 )
 CALL_PATTERN = re.compile(
     rf"\b(?:{'|'.join(CALLS)})\s*\(\s*\"((?:\\.|[^\"\\])*)\""
 )
 HELP_PATTERN = re.compile(
-    r"\.(?:help|accessibilityLabel)\(\s*\"((?:\\.|[^\"\\])*)\""
+    r"\.(?:help|accessibilityLabel|alert|confirmationDialog|navigationTitle)\(\s*\"((?:\\.|[^\"\\])*)\""
 )
 ARGUMENT_PATTERN = re.compile(
     r"\b(?:title|prompt|description)\s*:\s*\"((?:\\.|[^\"\\])*)\""
@@ -38,7 +42,7 @@ ARGUMENT_PATTERN = re.compile(
 # and AppKit NSAlert properties bypass those initializers. They need the same
 # catalog coverage or a Chinese interface silently shows English.
 LOCALIZED_PATTERN = re.compile(
-    r"\bString\s*\(\s*localized:\s*\"((?:\\.|[^\"\\])*)\""
+    r"\b(?:String\s*\(\s*localized:\s*|localizedArborString\s*\(\s*)\"((?:\\.|[^\"\\])*)\""
 )
 APPKIT_PATTERN = re.compile(
     r"\b(?:messageText|informativeText)\s*=\s*\"((?:\\.|[^\"\\])*)\""

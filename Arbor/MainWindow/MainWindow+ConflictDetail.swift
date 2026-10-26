@@ -18,6 +18,7 @@ func isCurrentConflictLoadRequest(
 }
 
 struct ConflictDetailView: View {
+    @Environment(\.locale) private var locale
     let repo: Repository?
     let path: String
     let onChanged: () -> Void
@@ -81,24 +82,24 @@ struct ConflictDetailView: View {
     /// wrong for rebase, cherry-pick, revert and stash restore.
     var oursSideTitle: String {
         switch operationKind {
-        case .rebase: return String(localized: "Upstream (ours)")
-        case .merge, .cherryPick, .revert: return String(localized: "Current branch (ours)")
-        default: return String(localized: "Ours")
+        case .rebase: return localizedArborString("Upstream (ours)", locale: locale)
+        case .merge, .cherryPick, .revert: return localizedArborString("Current branch (ours)", locale: locale)
+        default: return localizedArborString("Ours", locale: locale)
         }
     }
 
     var theirsSideTitle: String {
         switch operationKind {
-        case .rebase: return String(localized: "Your commit (theirs)")
+        case .rebase: return localizedArborString("Your commit (theirs)", locale: locale)
         case .merge:
             if let source = mergeSourceReference, !source.isEmpty {
-                return String(localized: "%@ (theirs)")
+                return localizedArborString("%@ (theirs)", locale: locale)
                     .replacingOccurrences(of: "%@", with: source)
             }
-            return String(localized: "Merged branch (theirs)")
-        case .cherryPick: return String(localized: "Picked commit (theirs)")
-        case .revert: return String(localized: "Reverted commit (theirs)")
-        default: return String(localized: "Theirs")
+            return localizedArborString("Merged branch (theirs)", locale: locale)
+        case .cherryPick: return localizedArborString("Picked commit (theirs)", locale: locale)
+        case .revert: return localizedArborString("Reverted commit (theirs)", locale: locale)
+        default: return localizedArborString("Theirs", locale: locale)
         }
     }
 
@@ -143,44 +144,50 @@ struct ConflictDetailView: View {
             HStack {
                 Text(isPatchMode ? "Patch conflict: \(path)" : "Conflict: \(path)")
                     .font(.headline).lineLimit(1)
-                Spacer()
-                if patchText != nil {
-                    Button("Patch") { showPatchPreview = true }
-                        .help("View the actual patch for this Apply Patch conflict")
-                    Button("Local Diff") { loadLocalDiff() }
-                        .help("Compare the local conflict stage with the current result editor")
-                }
-                Button("Reset") { resetConflictFile() }
-                    .help("Regenerate conflict markers from the index stages and clear this file's hunk decisions")
-                    .disabled(conflict == nil || conflictIsBinary || saving)
-                if !isPatchMode {
-                    Button("Accept Both") { acceptFile(.both) }
-                        .help("Keep both sides (ours first)")
-                        .disabled(conflict == nil || conflictIsBinary)
-                    Button("Base") { showBase = true }
-                        .help("View the common ancestor")
-                        .disabled(conflict == nil || conflictIsBinary)
-                    Button(externalToolWorking ? (externalToolCancelling ? "Canceling…" : "Cancel") : "External Tool") {
-                        if externalToolWorking {
-                            externalToolCancelling = true
-                            externalToolCancelHandle?.cancel()
-                        } else {
-                            openExternalTool()
+                    .frame(maxWidth: 180, alignment: .leading)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        if patchText != nil {
+                            Button("Patch") { showPatchPreview = true }
+                                .help("View the actual patch for this Apply Patch conflict")
+                            Button("Local Diff") { loadLocalDiff() }
+                                .help("Compare the local conflict stage with the current result editor")
                         }
+                        Button("Reset") { resetConflictFile() }
+                            .help("Regenerate conflict markers from the index stages and clear this file's hunk decisions")
+                            .disabled(conflict == nil || conflictIsBinary || saving)
+                        if !isPatchMode {
+                            Button("Accept Both") { acceptFile(.both) }
+                                .help("Keep both sides (ours first)")
+                                .disabled(conflict == nil || conflictIsBinary)
+                            Button("Base") { showBase = true }
+                                .help("View the common ancestor")
+                                .disabled(conflict == nil || conflictIsBinary)
+                            Button(externalToolWorking ? (externalToolCancelling ? "Canceling…" : "Cancel") : "External Tool") {
+                                if externalToolWorking {
+                                    externalToolCancelling = true
+                                    externalToolCancelHandle?.cancel()
+                                } else {
+                                    openExternalTool()
+                                }
+                            }
+                            .help("Run Git's configured external merge tool")
+                            .disabled(
+                                externalToolCancelling
+                                    || saving
+                                    || repo == nil
+                                    || conflict == nil
+                            )
+                            Button("Settings…") { showExternalToolSettings = true }
+                                .disabled(repo == nil || externalToolWorking || saving)
+                        }
+                        Button("Refresh") { load() }
                     }
-                    .help("Run Git's configured external merge tool")
-                    .disabled(
-                        externalToolCancelling
-                            || saving
-                            || repo == nil
-                            || conflict == nil
-                    )
-                    Button("Settings…") { showExternalToolSettings = true }
-                        .disabled(repo == nil || externalToolWorking || saving)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
-                Button("Refresh") { load() }
                 Button(saving ? "Saving…" : "Mark Resolved") { markResolved() }
                     .disabled(saving || repo == nil || conflict == nil || conflictIsBinary)
+                    .fixedSize()
             }
             .padding(10)
             Divider()
@@ -320,7 +327,7 @@ struct ConflictDetailView: View {
             }
             if let preview = conflictBatchPreview,
                preview.simpleBlocks + preview.oursOnlyBlocks + preview.theirsOnlyBlocks + preview.trueConflictBlocks > 0 {
-                Text("Safe blocks: \(preview.simpleBlocks) simple · \(preview.oursOnlyBlocks) local-only · \(preview.theirsOnlyBlocks) remote-only · \(preview.trueConflictBlocks) overlapping")
+                Text("Safe blocks: \(String(preview.simpleBlocks)) simple · \(String(preview.oursOnlyBlocks)) local-only · \(String(preview.theirsOnlyBlocks)) remote-only · \(String(preview.trueConflictBlocks)) overlapping")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)

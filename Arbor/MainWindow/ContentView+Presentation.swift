@@ -288,7 +288,7 @@ extension ContentView {
         .onChange(of: operationRecovery.showConflictResolver) { _, isPresented in
             if !isPresented { operationRecovery.initialPath = nil }
         }
-        .alert("打开另一个项目？", isPresented: $projectWorkspace.showSwitchAlert) {
+        .alert("Open Another Project?", isPresented: $projectWorkspace.showSwitchAlert) {
             Button("Replace Current Window") { replacePendingProject() }
             Button("New Window") {
                 openWindow(id: "project", value: projectWorkspace.pendingPath)
@@ -296,7 +296,7 @@ extension ContentView {
             }
             Button("Cancel", role: .cancel) { projectWorkspace.pendingPath = nil }
         } message: {
-            Text("当前窗口正在显示 \(projectWorkspace.repository?.displayName() ?? "一个项目")。选择如何打开新项目。")
+            Text("The current window is showing \(projectWorkspace.repository?.displayName() ?? String(localized: "a project")). Choose how to open the new project.")
         }
         .alert("Create .gitignore?", isPresented: Binding(
             get: { fileWorkspace.pendingIgnoreFileCreation != nil },

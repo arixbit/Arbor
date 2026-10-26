@@ -13,6 +13,36 @@ use arbor_engine::{
 
 use common::TestRepo;
 
+#[test]
+fn abort_conflicted_merge_restores_files_and_keeps_unrelated_edits() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "notes.txt", "base\n", "base");
+    common::commit(&r.path, "keep.txt", "original\n", "unrelated file");
+    r.git(&["branch", "topic"]);
+    common::commit(&r.path, "notes.txt", "current\n", "current change");
+    let head = r.git(&["rev-parse", "HEAD"]);
+    r.git(&["checkout", "-q", "topic"]);
+    common::commit(&r.path, "notes.txt", "incoming\n", "incoming change");
+    common::commit(&r.path, "incoming.txt", "added by merge\n", "incoming file");
+    r.git(&["checkout", "-q", "main"]);
+    r.write("keep.txt", "keep my edit\n");
+    r.write("untracked.txt", "keep my untracked file\n");
+    let repo = r.open();
+    assert_eq!(repo.merge("topic".into()).unwrap().conflicts, ["notes.txt"]);
+    assert!(r.read("notes.txt").contains("<<<<<<<"));
+    assert!(r.exists("incoming.txt"));
+
+    repo.merge_abort().unwrap();
+
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(r.read("notes.txt"), "current\n");
+    assert!(!r.exists("incoming.txt"));
+    assert_eq!(r.read("keep.txt"), "keep my edit\n");
+    assert_eq!(r.read("untracked.txt"), "keep my untracked file\n");
+    assert_eq!(r.git(&["diff", "--cached"]), "");
+    assert!(repo.operation_state().unwrap().is_none());
+}
+
 /// 构造文本冲突 -> merge 报冲突 -> conflict_file 三方内容正确 -> resolve(ours) 后干净。
 #[test]
 fn merge_conflict_and_resolve() {

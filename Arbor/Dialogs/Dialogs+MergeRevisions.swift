@@ -127,13 +127,13 @@ struct MergeRevisionsDialogView: View {
                 Text(actionError)
                     .font(.caption)
                     .foregroundStyle(.red)
-        .padding(.horizontal, 12)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 6)
             }
 
             conflictWorkspace
         }
-        .frame(minWidth: compact ? 920 : 1120, minHeight: compact ? 540 : 700)
+        .frame(minWidth: compact ? 640 : 1120, minHeight: compact ? 360 : 700)
         .onAppear {
             loadWorkspaceState()
         }
@@ -175,36 +175,43 @@ struct MergeRevisionsDialogView: View {
         return AnyView(HStack(spacing: 10) {
             Image(systemName: "arrow.triangle.merge")
                 .foregroundStyle(.orange)
-            Text(mode.title)
+            Text(LocalizedStringKey(mode.title))
                 .font(.system(size: 15, weight: .semibold))
-            Spacer()
-            Text("\(conflictPaths.count) conflicted files")
-                .font(.caption)
-                .foregroundStyle(conflictPaths.isEmpty ? .green : .secondary)
-            if !resolvedPaths.isEmpty {
-                Text("\(resolvedPaths.count) resolved")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if !selectedPathsForBatch.isEmpty {
-                Text("\(selectedPathsForBatch.count) selected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button(patchMode ? "Keep Local" : "Accept Ours") { acceptSelectedConflicts(.ours) }
-                    .disabled(batchWorking)
-                Button(patchMode ? "Apply Patch" : "Accept Theirs") { acceptSelectedConflicts(.theirs) }
-                    .disabled(batchWorking)
+                .lineLimit(1)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    Text("\(String(conflictPaths.count)) conflicted files")
+                        .font(.caption)
+                        .foregroundStyle(conflictPaths.isEmpty ? .green : .secondary)
+                    if !resolvedPaths.isEmpty {
+                        Text("\(String(resolvedPaths.count)) resolved")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !selectedPathsForBatch.isEmpty {
+                        Text("\(String(selectedPathsForBatch.count)) selected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button(patchMode ? "Keep Local" : "Accept Ours") { acceptSelectedConflicts(.ours) }
+                            .disabled(batchWorking)
+                        Button(patchMode ? "Apply Patch" : "Accept Theirs") { acceptSelectedConflicts(.theirs) }
+                            .disabled(batchWorking)
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
             if let onAbort {
-                Button(mode.abortTitle, role: .destructive, action: onAbort)
+                Button(LocalizedStringKey(mode.abortTitle), role: .destructive, action: onAbort)
+                    .fixedSize()
             }
             if let onSkip {
                 Button("Skip", action: onSkip)
                     .disabled(!conflictPaths.isEmpty)
             }
-            Button(mode.primaryTitle, action: onComplete)
+            Button(LocalizedStringKey(mode.primaryTitle), action: onComplete)
                 .buttonStyle(.borderedProminent)
                 .disabled(!conflictPaths.isEmpty)
+                .fixedSize()
         }
         .padding(12))
     }

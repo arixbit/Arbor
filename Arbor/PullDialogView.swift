@@ -357,8 +357,7 @@ struct PullDialogView: View {
     }
 
     private func branchDisplayName(_ branch: RemoteBranchInfo) -> String {
-        let prefix = "(branch.remote)/"
-        return branch.name.hasPrefix(prefix) ? String(branch.name.dropFirst(prefix.count)) : branch.name
+        Self.branchDisplayName(branch)
     }
 
     private static func resolveSnapshot(

@@ -127,7 +127,7 @@ struct ArborSelectedGitFileContext: Equatable {
 /// operation state. ProjectCommands must not infer a recovery root from the
 /// project-wide "some operation is active" booleans: in a multi-root project
 /// that could route Continue/Abort to the wrong repository.
-struct ArborVCSOperationContext {
+struct ArborVCSOperationContext: Equatable {
     let rootPath: String
     let kind: OperationKind
     let hasConflicts: Bool

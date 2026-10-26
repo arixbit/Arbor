@@ -107,17 +107,20 @@ func publishOperationRecoveryNotice(
                 }) == true
         )
     guard !hasDedicatedRebaseRecovery else { return false }
+    let locale = AppLanguage.resolve(
+        UserDefaults.standard.string(forKey: "arbor.appLanguage")
+    ).locale
     let kindTitle = operationRecoveryKindTitle(state.kind)
     let detail: String
     if state.conflictedFiles.isEmpty {
-        detail = String(localized: "A %@ operation is paused in this repository.").replacingOccurrences(of: "%@", with: kindTitle)
+        detail = localizedArborString("A %@ operation is paused in this repository.", locale: locale).replacingOccurrences(of: "%@", with: kindTitle)
     } else {
-        detail = String(localized: "%lld conflicted file(s) must be resolved before continuing.").replacingOccurrences(of: "%lld", with: String(state.conflictedFiles.count))
+        detail = localizedArborString("%lld conflicted file(s) must be resolved before continuing.", locale: locale).replacingOccurrences(of: "%lld", with: String(state.conflictedFiles.count))
     }
     feedbackCenter.warning(
-        String(localized: "%@ recovery available").replacingOccurrences(of: "%@", with: kindTitle),
+        localizedArborString("%@ recovery available", locale: locale).replacingOccurrences(of: "%@", with: kindTitle),
         detail: detail,
-        nextStep: "Continue, Skip, or Abort the operation from the recovery actions.",
+        nextStep: localizedArborString("Continue, Skip, or Abort the operation from the recovery actions.", locale: locale),
         additionalActions: operationRecoveryFeedbackActions(
             state: state,
             rootPath: rootPath

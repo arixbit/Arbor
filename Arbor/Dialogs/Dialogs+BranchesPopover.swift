@@ -570,47 +570,22 @@ struct RebasedBranchesPopover: View {
             Divider()
                 .padding(.vertical, 8)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Button(action: { onCommitChanges(); dismiss() }) {
-                    Label("Commit Changes…", systemImage: "checkmark.circle")
-                }
-                .disabled(!hasCommitChanges)
-                .help(
-                    branchPopupActionDisabledDescription(
-                        .commitChanges,
-                        hasHeadCommit: hasHeadCommit,
-                        hasCommitChanges: hasCommitChanges
-                    ) ?? ""
-                )
-                Button(action: { onNewBranch(); dismiss() }) {
-                    Label("New Branch…", systemImage: "plus")
-                }
-                .disabled(!hasHeadCommit)
-                .help(
-                    branchPopupActionDisabledDescription(
-                        .newBranch,
-                        hasHeadCommit: hasHeadCommit
-                    ) ?? ""
-                )
+            Menu("Actions") {
                 Button(action: { onFindMerged(); dismiss() }) {
                     Label("Find Merged Branches…", systemImage: "checkmark.branch")
                 }
                 .disabled(!isFindMergedBranchesActionEnabled(localBranchCounts: [branches.count]))
-                Button(action: { onCheckoutReference(); dismiss() }) {
-                    Label("Checkout Tag or Revision…", systemImage: "arrow.down.to.line")
-                }
                 Button(action: { onCompare(comparisonTarget); dismiss() }) {
                     Label("Compare with Current…", systemImage: "arrow.left.arrow.right")
                 }
                 .disabled(comparisonTarget == currentBranchName)
-                HStack(spacing: 6) {
-                    Button("Update") { onUpdate(false); dismiss() }
-                        .disabled(!hasRemote)
-                    Button("Push") { onPush(); dismiss() }
-                        .disabled(!hasRemote)
-                    Button("Fetch") { onFetch(); dismiss() }
-                        .disabled(!hasRemote)
-                }
+                Divider()
+                Button("Update") { onUpdate(false); dismiss() }
+                    .disabled(!hasRemote)
+                Button("Push") { onPush(); dismiss() }
+                    .disabled(!hasRemote)
+                Button("Fetch") { onFetch(); dismiss() }
+                    .disabled(!hasRemote)
                 Menu("Remote maintenance…") {
                     Button("Fetch All") { onFetchAll(); dismiss() }
                         .disabled(!hasRemote)
@@ -621,28 +596,22 @@ struct RebasedBranchesPopover: View {
                             .disabled(!hasRemote)
                     }
                 }
-                HStack(spacing: 6) {
-                    Button("Merge…") { onMerge(nil); dismiss() }
-                    Button("Rebase…") { onRebase(nil); dismiss() }
-                    Button("Stash…") { onStash(); dismiss() }
-                }
-                HStack(spacing: 6) {
-                    Button("New Tag…") { onNewTag(); dismiss() }
-                    Button("Shelve…") { onShelve(); dismiss() }
-                }
+                Divider()
+                Button("Merge…") { onMerge(nil); dismiss() }
+                Button("Rebase…") { onRebase(nil); dismiss() }
+                Button("Stash…") { onStash(); dismiss() }
+                Button("New Tag…") { onNewTag(); dismiss() }
+                Button("Shelve…") { onShelve(); dismiss() }
+                Divider()
                 SettingsLink {
                     Label("Settings…", systemImage: "gearshape")
                 }
-                .buttonStyle(.link)
-                .padding(.top, 2)
                 Button(action: { onProjectGitSettings(); dismiss() }) {
                     Label("Project Git Settings…", systemImage: "slider.horizontal.3")
                 }
-                .buttonStyle(.link)
                 Button(action: { onConfigureRemotes(); dismiss() }) {
                     Label("Configure Remotes…", systemImage: "server.rack")
                 }
-                .buttonStyle(.link)
             }
             .controlSize(.small)
         }

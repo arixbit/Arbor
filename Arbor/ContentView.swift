@@ -293,5 +293,19 @@ struct ContentView: View {
 
     var body: some View {
         workspacePresentedView
+            .background {
+                ArborWindowCommandContextView(
+                    action: vcsActionContext,
+                    operation: operationRecovery.operation.flatMap { state in
+                        repo?.workdir().map {
+                            ArborVCSOperationContext(
+                                rootPath: $0,
+                                kind: state.kind,
+                                hasConflicts: !state.conflictedFiles.isEmpty
+                            )
+                        }
+                    }
+                )
+            }
     }
 }

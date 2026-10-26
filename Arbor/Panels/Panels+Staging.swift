@@ -275,44 +275,6 @@ struct StagingDiffPreviewView: View {
                 onChanged: onChanged,
                 onClose: { showThreeVersions = false }
             )
-        } else if selectionModePath == path, let path {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle")
-                        .foregroundStyle(.secondary)
-                    Text("Stage line by line · \(path)")
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Button {
-                        selectionModePath = nil
-                    } label: {
-                        Label("Back to preview", systemImage: "eye")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Return to the file diff preview")
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("Hide changes preview")
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Design.Colors.surface)
-
-                DiffDetailView(
-                    repo: repo,
-                    entry: entry,
-                    onChanged: onChanged,
-                    selectionModePath: selectionModePath,
-                    initialMode: stagingPreviewDiffMode(for: previewMode),
-                    refreshToken: refreshToken
-                )
-            }
         } else {
             ordinaryPreview
         }

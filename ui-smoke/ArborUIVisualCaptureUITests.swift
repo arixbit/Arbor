@@ -4,8 +4,8 @@ import AppKit
 /// Captures the two surfaces the visual baseline compares, at the same window
 /// size, from this app and from the reference application.
 ///
-/// The reference app is not driven beyond resizing and switching tool windows:
-/// the screenshots are taken from a real window, not a rendered mock.
+/// Reference captures come from real windows, resized and navigated to the
+/// surface being compared.
 final class ArborUIVisualCaptureUITests: XCTestCase {
     static let targetSize = CGSize(width: 1642, height: 1015)
     static let rebasedBundleIdentifier = "io.github.detachhead.rebased"
@@ -366,6 +366,104 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     // MARK: - Rebased
 
     @MainActor
+    func testBranchPopupReferencesAndActionsStayReachable() throws {
+        continueAfterFailure = false
+        let fixture = ArborUIFixture.repositoryRoot
+            .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.appLanguage", "en"]
+        session.launch()
+        defer { session.terminate() }
+        XCTAssertTrue(session.openBranchesPopover())
+        for title in ["Commit Changes…", "New Branch…", "Checkout Tag or Revision…"] {
+            XCTAssertEqual(session.app.buttons.matching(NSPredicate(format: "label == %@", title)).count, 1)
+        }
+        let references = session.app.scrollViews.containing(.staticText, identifier: "LOCAL BRANCHES").firstMatch
+        let local = session.app.staticTexts["LOCAL BRANCHES"].firstMatch
+        XCTAssertTrue(local.waitForExistence(timeout: 5))
+        XCTAssertTrue(references.frame.contains(local.frame), "The footer hides the branch list")
+        capture(window: session.window, named: "arbor-branch-popup-compact-actions")
+
+        let search = session.app.textFields["Search branches"].firstMatch
+        search.click()
+        session.app.typeText("localization-audit")
+        let longBranch = session.app.staticTexts.matching(
+            NSPredicate(format: "value CONTAINS %@", "localization-audit-with-a-deliberately-long-branch-name")
+        ).firstMatch
+        XCTAssertTrue(longBranch.waitForExistence(timeout: 5))
+        XCTAssertTrue(references.frame.contains(longBranch.frame), "The long branch escapes the list")
+        capture(window: session.window, named: "arbor-branch-popup-long-search")
+
+        let actions = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Actions")).firstMatch
+        actions.click()
+        let merge = session.app.menuItems["Merge…"].firstMatch
+        XCTAssertTrue(merge.waitForExistence(timeout: 5))
+        XCTAssertTrue(merge.isEnabled)
+        merge.click()
+        XCTAssertTrue(session.app.sheets.firstMatch.waitForExistence(timeout: 5))
+        session.app.sheets.firstMatch.buttons["Cancel"].firstMatch.click()
+    }
+
+    @MainActor
+    func testCaptureBranchPopupParity() throws {
+        continueAfterFailure = false
+        let branchCaptureSize = Self.targetSize
+        let fixture = ArborUIFixture.repositoryRoot
+            .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.appendingPathComponent(".git").path))
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        defer { session.terminate() }
+        session.extraLaunchArguments = ["-arbor.appLanguage", "en"]
+        session.launch()
+        resize(session.window, to: branchCaptureSize, label: "arbor-branches")
+        XCTAssertEqual(session.window.frame.width, branchCaptureSize.width, accuracy: 2)
+        XCTAssertEqual(session.window.frame.height, branchCaptureSize.height, accuracy: 2)
+        XCTAssertTrue(session.openBranchesPopover())
+        capture(window: session.window, named: "arbor-branch-popup")
+        session.terminate()
+
+        let rebased = XCUIApplication(bundleIdentifier: Self.rebasedBundleIdentifier)
+        rebased.activate()
+        let trust = rebased.buttons["Trust Project"].firstMatch
+        if trust.waitForExistence(timeout: 2) {
+            let prompt = rebased.windows.firstMatch.textFields.allElementsBoundByIndex
+                .compactMap { $0.value as? String }.joined(separator: " ")
+            guard prompt.contains(fixture.lastPathComponent) else {
+                XCTFail("Rebased trust prompt does not identify the comparison fixture")
+                return
+            }
+            trust.click()
+        }
+        let window = rebased.windows.matching(
+            NSPredicate(format: "title CONTAINS %@", fixture.lastPathComponent)
+        ).firstMatch
+        guard window.waitForExistence(timeout: 15) else {
+            let attachment = XCTAttachment(screenshot: rebased.screenshot())
+            attachment.name = "rebased-project-opening"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("Rebased has not opened the comparison fixture")
+            return
+        }
+        resize(window, to: branchCaptureSize, label: "rebased-branches")
+        XCTAssertEqual(window.frame.width, branchCaptureSize.width, accuracy: 2)
+        // Rebased keeps its current height on this desktop. Record the full
+        // frame below; popup layout comparisons use the matched window width.
+        XCTAssertGreaterThanOrEqual(window.frame.height, branchCaptureSize.height)
+        capture(window: window, named: "rebased-before-branches")
+        let branch = window.buttons["main, menu"].firstMatch
+        XCTAssertTrue(branch.waitForExistence(timeout: 5))
+        branch.click()
+        Thread.sleep(forTimeInterval: 1)
+        capture(window: window, named: "rebased-branch-popup")
+        let tree = XCTAttachment(string: rebased.debugDescription)
+        tree.name = "rebased-branch-popup-tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+    }
+
+    @MainActor
     func testCaptureRebasedCommitAndLog() throws {
         let rebased = XCUIApplication(bundleIdentifier: Self.rebasedBundleIdentifier)
         guard rebased.state != .notRunning else {
@@ -432,6 +530,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     @MainActor
     private func dragCorner(_ window: XCUIElement, by delta: CGVector) {
         let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
+            .withOffset(CGVector(dx: -2, dy: -2))
         corner.press(forDuration: 0.3, thenDragTo: corner.withOffset(delta))
         Thread.sleep(forTimeInterval: 1.0)
     }

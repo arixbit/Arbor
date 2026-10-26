@@ -516,21 +516,27 @@ struct DiffDetailView: View {
                     }
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    TextField("rev1", text: $rev1).textFieldStyle(.roundedBorder).frame(width: 130)
-                    TextField("rev2", text: $rev2).textFieldStyle(.roundedBorder).frame(width: 130)
-                    Button("Compare arbitrary revisions") { compareRevs(entry.path) }
-                        .disabled(rev1.isEmpty || rev2.isEmpty)
-                    if selectionMode {
-                        Text("Click a changed line to select it (change groups are atomic)")
-                            .font(.caption2).foregroundStyle(.secondary)
-                        Text("\(selectedLines.count) lines selected")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button(mode == .worktreeToIndex ? "Stage Selected Lines" : "Unstage Selected Lines") { applyPartial() }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(selectedLines.isEmpty)
+            HStack(spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        TextField("rev1", text: $rev1).textFieldStyle(.roundedBorder).frame(width: 130)
+                        TextField("rev2", text: $rev2).textFieldStyle(.roundedBorder).frame(width: 130)
+                        Button("Compare arbitrary revisions") { compareRevs(entry.path) }
+                            .disabled(rev1.isEmpty || rev2.isEmpty)
+                        if selectionMode {
+                            Text("Click a changed line to select it (change groups are atomic)")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
+                }
+                if selectionMode {
+                    Text("\(selectedLines.count) lines selected")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize()
+                    Button(mode == .worktreeToIndex ? "Stage Selected Lines" : "Unstage Selected Lines") { applyPartial() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedLines.isEmpty)
+                        .fixedSize()
                 }
             }
         }

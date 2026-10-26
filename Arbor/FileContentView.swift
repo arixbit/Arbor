@@ -243,7 +243,7 @@ struct FileContentView: View {
             if let error {
                 messageView(systemImage: "exclamationmark.triangle", text: error, color: Design.Colors.error)
             } else if loading {
-                ProgressView("读取文件…")
+                ProgressView("Loading file…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let content, content.binary {
                 messageView(systemImage: "doc.zipper", text: "二进制文件，无法作为文本查看", color: .secondary)

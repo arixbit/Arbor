@@ -91,80 +91,82 @@ struct MultiRootConflictResolverView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                if !compact {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.triangle.merge")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Git Roots Conflicts")
-                                .font(.headline)
-                            Text("\(roots.count) root\(roots.count == 1 ? "" : "s") pending")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Close", action: onClose)
-                            .controlSize(.small)
-                    }
-                    .padding(12)
-                    Divider()
-                }
-
-                List {
-                    ForEach(roots) { root in
-                        Button {
-                            onSelectRoot(root.rootPath)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: root.isStash || root.isShelf
-                                          ? "archivebox.fill"
-                                          : "exclamationmark.triangle.fill")
-                                        .foregroundStyle(root.isStash || root.isShelf ? .purple : .orange)
-                                    Text(root.displayName)
-                                        .font(.system(size: 13, weight: .semibold))
-                                    Spacer()
-                                    if root.canSkip {
-                                        Text("Skip")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Text(root.relativePath)
+            if !compact || roots.count > 1 {
+                VStack(alignment: .leading, spacing: 0) {
+                    if !compact {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.merge")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Git Roots Conflicts")
+                                    .font(.headline)
+                                Text("\(roots.count) root\(roots.count == 1 ? "" : "s") pending")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                HStack(spacing: 6) {
-                                    Text(root.isStash
-                                         ? "Stash restore"
-                                         : root.isShelf
-                                         ? "Shelf restore"
-                                         : operationLabel(root.operation))
-                                    Text("·")
-                                    Text("\(root.paths.count) conflicted file\(root.paths.count == 1 ? "" : "s")")
-                                }
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
                             }
-                            .padding(.vertical, 3)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Spacer()
+                            Button("Close", action: onClose)
+                                .controlSize(.small)
                         }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-                        .listRowBackground(
-                            root.rootPath == activeRootPath
-                                ? Color.accentColor.opacity(0.16)
-                                : Color.clear
-                        )
+                        .padding(12)
+                        Divider()
                     }
-                }
-                .listStyle(.sidebar)
-            }
-            .frame(width: compact ? 230 : 290)
 
-            Divider()
+                    List {
+                        ForEach(roots) { root in
+                            Button {
+                                onSelectRoot(root.rootPath)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: root.isStash || root.isShelf
+                                              ? "archivebox.fill"
+                                              : "exclamationmark.triangle.fill")
+                                            .foregroundStyle(root.isStash || root.isShelf ? .purple : .orange)
+                                        Text(root.displayName)
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Spacer()
+                                        if root.canSkip {
+                                            Text("Skip")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Text(root.relativePath)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    HStack(spacing: 6) {
+                                        Text(root.isStash
+                                             ? "Stash restore"
+                                             : root.isShelf
+                                             ? "Shelf restore"
+                                             : operationLabel(root.operation))
+                                        Text("·")
+                                        Text("\(root.paths.count) conflicted file\(root.paths.count == 1 ? "" : "s")")
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+                            .listRowBackground(
+                                root.rootPath == activeRootPath
+                                    ? Color.accentColor.opacity(0.16)
+                                    : Color.clear
+                            )
+                        }
+                    }
+                    .listStyle(.sidebar)
+                }
+                .frame(width: compact ? 230 : 290)
+
+                Divider()
+            }
 
             VStack(spacing: 0) {
                 if let error {
@@ -206,7 +208,7 @@ struct MultiRootConflictResolverView: View {
                 }
             }
         }
-        .frame(minWidth: compact ? 980 : 1420, minHeight: compact ? 620 : 760)
+        .frame(minWidth: compact ? 880 : 1420, minHeight: compact ? 420 : 760)
     }
 
     private func operationLabel(_ operation: OperationKind?) -> String {

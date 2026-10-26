@@ -355,6 +355,7 @@ final class MergeEditorBridge: ObservableObject {
 /// 普通冲突为三栏 NSTextView；direct Apply Patch 为结果/patch 双栏，均由
 /// NSViewRepresentable 包进 SwiftUI。
 struct MergeEditorView: NSViewRepresentable {
+    @Environment(\.locale) private var locale
     let ours: String
     let theirs: String
     let initialResult: String
@@ -423,8 +424,8 @@ struct MergeEditorView: NSViewRepresentable {
             stack.orientation = .horizontal
             stack.distribution = .fillEqually
             stack.spacing = 1
-            stack.addView(Self.wrap(resultScroll, title: "Result (editable)", color: .orange), in: .center)
-            stack.addView(Self.wrap(patchScroll, title: "Patch (read-only)", color: .blue), in: .center)
+            stack.addView(Self.wrap(resultScroll, title: localizedArborString("Result (editable)", locale: locale), color: .orange, coordinator: context.coordinator), in: .center)
+            stack.addView(Self.wrap(patchScroll, title: localizedArborString("Patch (read-only)", locale: locale), color: .blue, coordinator: context.coordinator), in: .center)
             stack.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(stack)
             NSLayoutConstraint.activate([
@@ -461,9 +462,9 @@ struct MergeEditorView: NSViewRepresentable {
         stack.orientation = .horizontal
         stack.distribution = .fillEqually
         stack.spacing = 1
-        stack.addView(Self.wrap(oursScroll, title: oursTitle, color: .red), in: .center)
-        stack.addView(Self.wrap(resultScroll, title: "Result (editable)", color: .orange), in: .center)
-        stack.addView(Self.wrap(theirsScroll, title: theirsTitle, color: .green), in: .center)
+        stack.addView(Self.wrap(oursScroll, title: oursTitle, color: .red, coordinator: context.coordinator), in: .center)
+        stack.addView(Self.wrap(resultScroll, title: localizedArborString("Result (editable)", locale: locale), color: .orange, coordinator: context.coordinator), in: .center)
+        stack.addView(Self.wrap(theirsScroll, title: theirsTitle, color: .green, coordinator: context.coordinator), in: .center)
         stack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -476,6 +477,13 @@ struct MergeEditorView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        let titles = patchText != nil
+            ? [localizedArborString("Result (editable)", locale: locale),
+               localizedArborString("Patch (read-only)", locale: locale)]
+            : [oursTitle, localizedArborString("Result (editable)", locale: locale), theirsTitle]
+        for (label, title) in zip(context.coordinator.headers, titles) {
+            label.stringValue = title
+        }
         context.coordinator.patchGutter?.hunks = patchHunks
         context.coordinator.patchGutter?.onSelect = onSelectPatchHunk
         context.coordinator.patchGutter?.onApply = onApplyPatchHunk
@@ -534,9 +542,12 @@ struct MergeEditorView: NSViewRepresentable {
         return (scrollView, textView)
     }
 
-    static func wrap(_ view: NSView, title: String, color: Color) -> NSView {
+    static func wrap(_ view: NSView, title: String, color: Color, coordinator: Coordinator) -> NSView {
         let container = NSView()
-        let label = NSTextField(labelWithString: String(localized: String.LocalizationValue(title)))
+        let label = NSTextField(labelWithString: title)
+        coordinator.headers.append(label)
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.font = NSFont.systemFont(ofSize: 11, weight: .bold)
         label.textColor = NSColor(color)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -546,6 +557,7 @@ struct MergeEditorView: NSViewRepresentable {
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
             label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -8),
             view.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 2),
             view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -555,6 +567,7 @@ struct MergeEditorView: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
+        var headers: [NSTextField] = []
         weak var resultTV: NSTextView?
         weak var patchTV: NSTextView?
         weak var patchGutter: ApplyPatchGutterView?

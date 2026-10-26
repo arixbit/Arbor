@@ -7,6 +7,38 @@ use arbor_engine::{ChangeKind, RebaseAction, RebasePauseReason};
 
 use common::TestRepo;
 
+#[test]
+fn native_rebase_continue_accepts_message_without_launching_an_editor() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "notes.txt", "base\n", "base");
+    r.git(&["branch", "topic"]);
+    common::commit(&r.path, "notes.txt", "current\n", "current change");
+    r.git(&["checkout", "-q", "topic"]);
+    let topic = common::commit(&r.path, "notes.txt", "upstream\n", "upstream change");
+    r.git(&["checkout", "-q", "main"]);
+    r.git(&["config", "core.editor", "false"]);
+    let output = std::process::Command::new("git")
+        .args(["rebase", "topic"])
+        .current_dir(&r.path)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!r
+        .git(&["diff", "--name-only", "--diff-filter=U"])
+        .is_empty());
+    r.write("notes.txt", "current\n");
+    r.git(&["add", "notes.txt"]);
+
+    let outcome = r.open().rebase_continue().unwrap();
+
+    assert!(!outcome.paused);
+    assert_eq!(r.git(&["branch", "--show-current"]), "main");
+    assert_eq!(r.git(&["rev-parse", "HEAD^"]), topic);
+    assert_eq!(r.git(&["log", "-1", "--format=%s"]), "current change");
+    assert_eq!(r.read("notes.txt"), "current\n");
+    assert_eq!(r.git(&["status", "--porcelain"]), "");
+}
+
 /// pick/drop/squash/reword 一次过：最终树去掉被 drop 的文件，HEAD 信息为 reword 文本。
 #[test]
 fn rebase_pick_drop_squash_reword() {

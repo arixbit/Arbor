@@ -13375,7 +13375,29 @@ impl Repository {
                 message: "merge: no merge in progress".into(),
             });
         };
-        restore_head_from_tree(&repo, state.ours, None)?;
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "merge abort requires a non-bare worktree".into(),
+        })?;
+        // Reset the merged index and its affected worktree paths together,
+        // preserving unrelated unstaged and untracked files.
+        // gix writes tree entries without filesystem stat data. Refresh the
+        // clean entries so Git can distinguish them from local edits before
+        // reset --merge. Conflicted/modified paths may make refresh exit 1.
+        crate::gitprocess::git_command_for_working_dir(workdir)
+            .args(["update-index", "--refresh"])
+            .current_dir(workdir)
+            .output()
+            .map_err(EngineError::from_gix)?;
+        let output = crate::gitprocess::git_command_for_working_dir(workdir)
+            .args(["reset", "--merge", &state.ours.to_hex().to_string()])
+            .current_dir(workdir)
+            .output()
+            .map_err(EngineError::from_gix)?;
+        if !output.status.success() {
+            return Err(EngineError::GitOperation {
+                message: format!("merge abort failed: {}", command_output_message(&output)),
+            });
+        }
         clear_merge_state(&repo);
         Ok(())
     }
@@ -23467,6 +23489,8 @@ fn prepare_continue_system_rebase_command(
         command.env("GIT_EDITOR", message_editor);
     } else if raw_message_editor.exists() {
         command.env("GIT_EDITOR", raw_message_editor);
+    } else {
+        command.env("GIT_EDITOR", "true");
     }
     Ok(command)
 }

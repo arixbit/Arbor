@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// AppKit controls do not inherit SwiftUI's locale environment. Select the
+/// matching catalog bundle explicitly when supplying their text.
+func localizedArborString(_ key: String, locale: Locale) -> String {
+    let language = Bundle.preferredLocalizations(
+        from: Bundle.main.localizations, forPreferences: [locale.identifier]
+    ).first
+    let bundle = language.flatMap { Bundle.main.path(forResource: $0, ofType: "lproj") }
+        .flatMap(Bundle.init(path:)) ?? .main
+    return bundle.localizedString(forKey: key, value: key, table: nil)
+}
+
 /// The language used by Arbor's own menus and interface.
 /// This is intentionally separate from the syntax language of an opened file.
 enum AppLanguage: String, CaseIterable, Identifiable {

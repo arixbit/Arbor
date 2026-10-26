@@ -23,19 +23,19 @@ struct GitMergeRebaseWidgetItem: Identifiable {
 
     var continueTitle: String {
         switch operation {
-        case .merge: return String(localized: "Commit Merge")
-        case .rebase: return String(localized: "Continue Rebase")
-        case .cherryPick: return String(localized: "Continue Cherry-pick")
-        case .revert: return String(localized: "Continue Revert")
+        case .merge: return "Commit Merge"
+        case .rebase: return "Continue Rebase"
+        case .cherryPick: return "Continue Cherry-pick"
+        case .revert: return "Continue Revert"
         }
     }
 
     var widgetTitle: String {
         switch operation {
-        case .merge: return String(localized: "Merge in progress")
-        case .rebase: return String(localized: "Rebase paused")
-        case .cherryPick: return String(localized: "Cherry-pick in progress")
-        case .revert: return String(localized: "Revert in progress")
+        case .merge: return "Merge in progress"
+        case .rebase: return "Rebase paused"
+        case .cherryPick: return "Cherry-pick in progress"
+        case .revert: return "Revert in progress"
         }
     }
 
@@ -133,7 +133,7 @@ struct GitMergeRebaseWidget: View {
                                     }
                                 }
                             }
-                            Button(item.continueTitle) {
+                            Button(LocalizedStringKey(item.continueTitle)) {
                                 onOperationAction(.continueOperation, item.rootPath)
                             }
                             .disabled(
@@ -153,13 +153,16 @@ struct GitMergeRebaseWidget: View {
                             onOperationAction(.openRecovery, item.rootPath)
                         }
                     } header: {
-                        Text(item.isCurrent ? item.widgetTitle : "\(item.widgetTitle) · \(item.displayName)")
+                        HStack {
+                            Text(LocalizedStringKey(item.widgetTitle))
+                            if !item.isCurrent { Text("· \(item.displayName)") }
+                        }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: primaryItem.icon)
-                    Text(primaryItem.widgetTitle)
+                    Text(LocalizedStringKey(primaryItem.widgetTitle))
                         .lineLimit(1)
                 }
                 .font(.caption.weight(.semibold))

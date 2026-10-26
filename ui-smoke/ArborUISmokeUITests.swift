@@ -344,3 +344,49 @@ final class ArborUISmokeFeedbackUITests: XCTestCase {
         )
     }
 }
+
+/// The conflict workbench is opened from the merge banner. This test is meant
+/// to run against a fixture that already has an unresolved merge (see
+/// docs/user-flow-audit.md); with the regular fixture it skips instead of
+/// failing the sweep.
+final class ArborUIConflictUITests: XCTestCase {
+    @MainActor
+    func testConflictResolverShowsOperationAwareSides() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.appLanguage", "en"]
+        session.launch()
+        defer { session.terminate() }
+
+        let resolve = session.window.buttons["Resolve Conflicts"].firstMatch
+        let overlayTitle = session.window.staticTexts["Resolve Conflicts"].firstMatch
+        if !overlayTitle.exists {
+            guard resolve.waitForExistence(timeout: 5), resolve.isHittable else {
+                throw XCTSkip("fixture has no unresolved merge")
+            }
+            resolve.click()
+        }
+
+        if !overlayTitle.waitForExistence(timeout: 10) {
+            print("=== CONFLICT TREE AFTER CLICK ===")
+            print(session.window.debugDescription)
+            print("=== END CONFLICT TREE ===")
+            session.recordScreenshot(named: "conflict-after-click")
+            XCTFail("the conflict workbench did not open")
+            return
+        }
+        XCTAssertTrue(
+            session.window.buttons["Accept All Ours"].firstMatch.waitForExistence(timeout: 5)
+                || session.window.buttons["Ours"].firstMatch.waitForExistence(timeout: 5),
+            "the workbench did not expose the ours side"
+        )
+        XCTAssertTrue(
+            session.window.buttons["Accept All Theirs"].firstMatch.exists
+                || session.window.buttons["Theirs"].firstMatch.exists,
+            "the workbench did not expose the theirs side"
+        )
+        session.recordScreenshot(named: "conflict-resolver")
+    }
+}

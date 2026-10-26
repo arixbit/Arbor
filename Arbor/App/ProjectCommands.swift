@@ -2,9 +2,11 @@ import SwiftUI
 
 struct ProjectCommands: Commands {
     @Environment(\.openWindow) private var openWindow
-    @FocusedValue(\.arborRepositoryIsShallow) private var isShallowRepository
-    @FocusedValue(\.arborVCSActionContext) private var actionContext
-    @FocusedValue(\.arborVCSOperationContext) private var operationContext
+    @ObservedObject private var windowContext = ArborWindowCommandContext.shared
+
+    private var actionContext: ArborVCSActionContext? { windowContext.active?.action }
+    private var operationContext: ArborVCSOperationContext? { windowContext.active?.operation }
+    private var isShallowRepository: Bool? { actionContext?.isShallowRepository }
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -16,7 +18,7 @@ struct ProjectCommands: Commands {
             }
         }
 
-        CommandMenu("File") {
+        CommandGroup(replacing: .newItem) {
             Button("Open Project…") {
                 NotificationCenter.default.post(name: .arborOpenProjectPanel, object: nil)
             }
@@ -211,7 +213,11 @@ struct ProjectCommands: Commands {
     }
 
     private func postVCS(_ action: ArborVCSAction) {
-        NotificationCenter.default.post(name: .arborVCSAction, object: action.rawValue)
+        NotificationCenter.default.post(
+            name: .arborVCSAction,
+            object: action.rawValue,
+            userInfo: actionContext?.projectPath.map { ["projectPath": $0] }
+        )
     }
 
     private func postOperationRecovery(

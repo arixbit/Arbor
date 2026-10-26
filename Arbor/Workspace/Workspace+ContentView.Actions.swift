@@ -518,6 +518,10 @@ func selectExternalVCSMoves(
 }
 
 func handleArborVCSActionNotification(_ notification: Notification) {
+    if let target = notification.userInfo?["projectPath"] as? String {
+        guard projectWorkspace.path.map({ URL(fileURLWithPath: $0).standardizedFileURL.path })
+            == URL(fileURLWithPath: target).standardizedFileURL.path else { return }
+    }
     if let request = notification.object as? ArborVCSActionRequest {
         handleVCSActionRequest(request)
         return

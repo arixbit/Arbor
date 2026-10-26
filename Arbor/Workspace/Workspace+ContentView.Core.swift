@@ -157,7 +157,7 @@ func partialMode(_ p: String) {
     fileWorkspace.selectionModePath = p
     fileWorkspace.selection = nil
     fileWorkspace.fileSelection = nil
-    fileWorkspace.previewVisible = true
+    fileWorkspace.previewVisible = false
 }
 
 /// 加载提交信息模板（commit.template）填入提交信息框。

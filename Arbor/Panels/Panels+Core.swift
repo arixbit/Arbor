@@ -997,6 +997,7 @@ struct RebasedChangeGroup: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Partial stage")
+            .accessibilityLabel("Partial stage")
         }
         .padding(.leading, CGFloat(depth) * 14 + 4)
         .frame(minHeight: 24)
