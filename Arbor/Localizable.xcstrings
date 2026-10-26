@@ -26270,6 +26270,106 @@
           }
         }
       }
+    },
+    "Update Project fetches and integrates upstream changes with a merge." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Project 会 Fetch 并整合上游变更（merge）。"
+          }
+        }
+      }
+    },
+    "Update Project fetches and replays local commits on top of upstream." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Project 会 Fetch 并在上游之上重放本地提交（rebase）。"
+          }
+        }
+      }
+    },
+    "This project policy is used by Pull, Update Project, Rebase, Merge, Reset, and smart checkout operations." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目策略用于 Pull、Update Project、Rebase、Merge、Reset 和智能 checkout 操作。"
+          }
+        }
+      }
+    },
+    "This project inherits the application Local Changes Preservation setting." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目继承应用的本地变更保留设置。"
+          }
+        }
+      }
+    },
+    "This project overrides the application Push-after-commit behavior." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目覆盖应用的提交后 Push 行为。"
+          }
+        }
+      }
+    },
+    "This project inherits the application Push-after-commit behavior." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目继承应用的提交后 Push 行为。"
+          }
+        }
+      }
+    },
+    "Show the selected branch on the left and the current working tree on the right." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧显示选中的分支，右侧显示当前工作区。"
+          }
+        }
+      }
+    },
+    "Show the current working tree on the left and the selected branch on the right." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧显示当前工作区，右侧显示选中的分支。"
+          }
+        }
+      }
+    },
+    "This project overrides whether Cherry-pick adds the suffix for commits already reachable from a protected remote branch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目覆盖 Cherry-pick 为受保护远程分支已包含的提交追加后缀的行为。"
+          }
+        }
+      }
+    },
+    "This project inherits the application Cherry-pick suffix setting." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目继承应用的 Cherry-pick 后缀设置。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
