@@ -626,8 +626,17 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try git("config", "user.email", "flow@arbor.invalid", at: backend)
         try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Backend initial", at: backend)
         try Data("backend/\n".utf8).write(to: repo.appendingPathComponent(".git/info/exclude"))
+        try git("push", "origin", "main:refs/heads/remote-shared")
+        try git("remote", "add", "origin", root.appendingPathComponent("remote.git").path, at: backend)
+        try git("fetch", "origin", at: backend)
         for directory in [repo!, backend] {
             try git("branch", "shared", at: directory)
+            try git("switch", "shared", at: directory)
+            try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Shared commit", at: directory)
+            try git("switch", "main", at: directory)
+            try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Tag target", at: directory)
+            try git("tag", "shared-tag", at: directory)
+            try git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "After tag", at: directory)
         }
         launch(language: "zh-Hans")
         XCTAssertTrue(session.openBranchesPopover())
@@ -687,6 +696,76 @@ final class ArborUIUserFlowUITests: XCTestCase {
         session.recordScreenshot(named: "multi-root-delete-branch-zh-Hans")
         click(deleteSheet.buttons["取消"].firstMatch)
         XCTAssertTrue(deleteSheet.waitForNonExistence(timeout: 5))
+
+        session.app.activate()
+        XCTAssertTrue(session.openBranchesPopover())
+        let referencesForTag = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
+        XCTAssertTrue(referencesForTag.waitForExistence(timeout: 5))
+        enter("shared-tag", into: session.app.textFields["过滤分支"].firstMatch)
+        let tagRow = referencesForTag.staticTexts["shared-tag"].firstMatch
+        XCTAssertTrue(tagRow.waitForExistence(timeout: 5))
+        tagRow.rightClick()
+        let tagDelete = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中删除…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(tagDelete)
+        let tagSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(tagSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(tagSheet.staticTexts["删除标签"].firstMatch.exists)
+        XCTAssertTrue(tagSheet.staticTexts["已选择 2 个仓库"].firstMatch.exists)
+        XCTAssertTrue(tagSheet.buttons["删除"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-delete-tag-zh-Hans")
+        click(tagSheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(tagSheet.waitForNonExistence(timeout: 5))
+
+        session.app.activate()
+        XCTAssertTrue(session.openBranchesPopover())
+        let referencesForRemote = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
+        XCTAssertTrue(referencesForRemote.waitForExistence(timeout: 5))
+        enter("remote-shared", into: session.app.textFields["过滤分支"].firstMatch)
+        let remoteRow = referencesForRemote.staticTexts["remote-shared"].firstMatch
+        XCTAssertTrue(remoteRow.waitForExistence(timeout: 5))
+        let remoteMenu = try XCTUnwrap(referencesForRemote.menuButtons.allElementsBoundByIndex.first {
+            !$0.frame.isEmpty && abs($0.frame.midY - remoteRow.frame.midY) < 3
+        })
+        click(remoteMenu)
+        let remoteDelete = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中删除…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(remoteDelete)
+        let remoteSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(remoteSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(remoteSheet.staticTexts["删除远程分支"].firstMatch.exists)
+        XCTAssertTrue(remoteSheet.staticTexts["从 Git root 删除 origin/remote-shared"].firstMatch.exists)
+        XCTAssertTrue(remoteSheet.staticTexts["已选择 2 个仓库"].firstMatch.exists)
+        XCTAssertTrue(remoteSheet.buttons["删除"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-delete-remote-zh-Hans")
+        click(remoteSheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(remoteSheet.waitForNonExistence(timeout: 5))
+
+        session.app.activate()
+        menu("Rebase…")
+        let rebaseDialog = session.app.sheets.firstMatch
+        XCTAssertTrue(rebaseDialog.waitForExistence(timeout: 5))
+        let rebaseFields = rebaseDialog.textFields.allElementsBoundByIndex
+        XCTAssertGreaterThanOrEqual(rebaseFields.count, 2)
+        enter("shared", into: rebaseFields[0])
+        enter("main", into: rebaseFields[1])
+        let interactive = session.app.checkBoxes["交互式"].firstMatch
+        XCTAssertTrue(interactive.waitForExistence(timeout: 5))
+        if String(describing: interactive.value ?? "") != "1" { click(interactive) }
+        let allRoots = session.app.checkBoxes["编辑所有仓库的 Rebase todo"].firstMatch
+        XCTAssertTrue(allRoots.waitForExistence(timeout: 5))
+        if String(describing: allRoots.value ?? "") != "1" { click(allRoots) }
+        click(rebaseDialog.buttons["加载范围"].firstMatch)
+        XCTAssertTrue(rebaseDialog.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "commit"))
+            .firstMatch.waitForExistence(timeout: 5))
+        click(rebaseDialog.buttons["开始 Rebase"].firstMatch)
+        let rebaseEditor = session.app.sheets.firstMatch
+        XCTAssertTrue(rebaseEditor.waitForExistence(timeout: 10))
+        XCTAssertTrue(rebaseEditor.staticTexts["多仓库交互式 Rebase"].firstMatch.exists)
+        XCTAssertTrue(rebaseEditor.buttons["取消"].firstMatch.exists)
+        session.recordScreenshot(named: "multi-root-rebase-editor-zh-Hans")
+        click(rebaseEditor.buttons["取消"].firstMatch)
+        XCTAssertTrue(rebaseEditor.waitForNonExistence(timeout: 10))
         print("USER_FLOW_PASS chinese-multi-root-branch-dialogs")
     }
 

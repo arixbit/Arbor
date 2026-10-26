@@ -19,6 +19,7 @@
 | 已通过 | 多仓库新建/重命名/删除分支弹窗中文实测：标题、仓库选择、数量、校验文案与按钮均为中文；完整套件扩到 14/14。 |
 | 已通过 | 项目 Git 设置弹窗改为限高滚动布局；980×640 下标题、滚动区与保存/取消均可见且可点击。 |
 | 已通过 | 赋值型错误/状态文案纳入审计并本地化：Hosting、远程、补丁、子模块、文件历史等 21 条；完整套件 14/14。 |
+| 已通过 | 多仓库 tag 删除、远程分支删除、交互式 Rebase 编辑器实测：标题、说明、数量与按钮均为中文；取消后不执行操作。 |
 | 已通过 | 现有代码已提交并推送 `origin/main`；包含本轮全部修复的 `3126162` 已通过 GitHub Rust / Swift 完整 CI。 |
 | 操作受阻 | 当前无执行阻塞。此前审批拒绝已解除，提交、推送、构建、UI 执行和附件导出均已恢复。 |
 | 与 Rebased 行为不同 | 首次打开同一临时仓库，Rebased 1.1.13 要求确认项目可信，Arbor 直接进入工作区。本轮保留这一流程差异。 |
@@ -36,7 +37,7 @@ Push/Fetch/Pull 用户路径的远端均为临时本地仓库，HTTPS/SSH 身份
 
 多仓库用例在同一项目内建立两个 Git root（`frontend` 与嵌套的 `backend`），两者都包含长分支 `feature/localization-audit-with-a-deliberately-long-branch-name`。窗口收缩到 980×640 后，逐项核对仓库计数与筛选、长分支搜索、行内菜单的“在多个仓库中合并…”入口、中文 Merge sheet，以及取消后的 Git 状态。
 
-多仓库分支弹窗专项复用同一双 root fixture，并额外创建同名 `shared` 分支；新建弹窗从弹窗动作入口打开，重命名/删除通过共享分支的行菜单打开，全部只点击取消，不执行操作。
+多仓库分支弹窗专项复用同一双 root fixture，并额外创建同名 `shared` 分支、`shared-tag` 标签和 `origin/remote-shared` 远程分支；新建弹窗从弹窗动作入口打开，重命名/删除通过行菜单或右键菜单打开，tag 与远程分支删除通过各自行菜单打开，交互式 Rebase 编辑器通过“编辑所有仓库的 Rebase todo + 交互式”进入。全部只点击取消，不执行操作。
 
 测试输入通过 Edit → Select All → Paste 完成并校验字段值，避免 XCTest 直接键入时被宿主输入法组合成中文。排查中确认：宿主切到简体拼音后，键盘事件会打开候选窗口、字段保持为空，首轮完整套件因此有 7 项失败；改为菜单粘贴后，在拼音输入法保持激活的情况下完整套件 12/12 通过。
 
@@ -55,7 +56,7 @@ Push/Fetch/Pull 用户路径的远端均为临时本地仓库，HTTPS/SSH 身份
 | 09 | 两项目窗口分别操作菜单 | Stash 仅作用于当前项目；关闭第二窗口后首窗口菜单继续可用。 |
 | 10 | 980×640 中文冲突工作台 | 主要按钮位于窗口内，实际完成 Merge；三栏标题跟随应用语言。 |
 | 11 | 980×640 中文多仓库分支弹窗 | 仓库筛选与长分支搜索可达；取消跨仓库 Merge 后两个 root 的 HEAD、当前分支和 status 均未变化。 |
-| 12 | 中文多仓库新建/重命名/删除分支弹窗 | 三个弹窗的标题、已选仓库数量、校验提示和按钮均为中文；全部取消，未改动 Git 状态。 |
+| 12 | 中文多仓库新建/重命名/删除分支、tag 删除、远程分支删除、交互式 Rebase 编辑器 | 标题、仓库选择、数量、校验提示、Rebase 汇总与按钮均为中文；全部取消，未改动 Git 状态。 |
 | Fixture | 创建与检查临时远端 | 初始状态干净，origin/main 与 HEAD 一致。 |
 
 主套件在部分暂存修复前为 10/11；唯一失败项是部分暂存按钮位于横向滚动区域外，修复后用例 01 专项为 1/1。2026-10-26 追加多仓库用例后套件共 12 项，最终整体复跑 12/12 通过；克隆、部分暂存、提交、Push 等全部 Git 断言均在这次运行中重新核对。
@@ -79,7 +80,8 @@ Push/Fetch/Pull 用户路径的远端均为临时本地仓库，HTTPS/SSH 身份
 15. **项目 Git 设置弹窗尺寸溢出。** 弹窗固定宽 500 pt，内容高于窗口，底部按钮与右侧帮助文本在可视区外。现改为 860×620 弹窗，内部 `Form` 使用 grouped 样式并限定 820×460 视口滚动，页脚固定；980×640 下标题、滚动区与保存/取消均可见可点。
 16. **多仓库分支弹窗仍为英文。** 新建/重命名/删除分支的 sheet 没有传递 `appLocale`，`String(localized:)` 拼接标题和校验文案也绕过应用语言。现在所有分支弹窗 sheet 都应用 `appLocale`；重命名/删除标题改用插值，`validateMultiRootRenameName`、`branchRenameConflictMessage`、删除提示及 `unmerged`/`Repository` 标签都走应用语言。中文实测重命名弹窗显示“新名称必须不同。”，删除弹窗显示未合并分支说明。
 17. **赋值型错误文案绕过 catalog。** `detailError = "…"`、`validationMessage = "…"` 这类字符串由 `Text(value)` 直接展示，既不在字面量扫描范围，也不会继承应用语言。已把 21 条 Hosting/远程/补丁/子模块/文件历史文案改为 `localizedArborString(..., locale: .interfaceLocale)`，并新增赋值型字面量审计：出现新的未登记赋值文案会直接失败。Hosting 面板需要远端账号，本轮只做代码与审计验证，未做页面截图。
-18. **静态审计盲区让「缺翻译 0」虚高。** `i18n-audit.py` 原先只扫描字面量，漏掉 computed `title`、重复翻译键和英文占位。现已加入 computed title 的 catalog 检查、`i18n-zh-hans-additions.json` 重复键检查（`Push tags` 曾被重复键覆盖回英文）和英文占位告警；并清理 24 个 computed title（收藏、子模块操作、LFS/hooks 状态、Smart Cherry-pick 等）。审计现为 1,637 个字面量、89 个 computed title，全部有 zh-Hans。
+18. **多仓库剩余 sheet 同样缺 locale。** Rebase 对话框、交互式 Rebase 编辑器、原始 todo、rebase 回滚、远程配置汇总和 upstream 对话框都没有传入 `appLocale`，tag/远程删除标题仍用 `String(localized:)` 拼接。现已全部显式传入 locale；tag/远程删除标题与数量改为插值，Rebase 编辑器的 “shared 变基到 main · 2 个仓库 · 2 个提交”“1 个提交”“已选择 0” 均已中文化。多仓库冲突工作台与 rebase 回滚页共用同一修复，但未单独截图验收。
+19. **静态审计盲区让「缺翻译 0」虚高。** `i18n-audit.py` 原先只扫描字面量，漏掉 computed `title`、重复翻译键和英文占位。现已加入 computed title 的 catalog 检查、`i18n-zh-hans-additions.json` 重复键检查（`Push tags` 曾被重复键覆盖回英文）和英文占位告警；并清理 24 个 computed title（收藏、子模块操作、LFS/hooks 状态、Smart Cherry-pick 等）。审计现为 1,637 个字面量、89 个 computed title，全部有 zh-Hans。
 
 Reset 测试等待 HEAD、index 和恢复快照全部就绪后再核对结果，避免将生成快照时的临时暂存误判为最终状态。分支搜索测试复用已有菜单粘贴方法，避免直接键入触发本机输入法授权提示；菜单定位只匹配有可见边界的 Merge 项，排除隐藏的同名 VCS 菜单。
 
@@ -122,6 +124,12 @@ Reset 测试等待 HEAD、index 和恢复快照全部就绪后再核对结果，
 ![中文多仓库重命名弹窗：校验提示已本地化](images/ui-user-flow-audit/multi-root-rename-branch-zh-hans.png)
 
 ![中文多仓库删除弹窗](images/ui-user-flow-audit/multi-root-delete-branch-zh-hans.png)
+
+![中文多仓库 tag 删除弹窗](images/ui-user-flow-audit/multi-root-delete-tag-zh-hans.png)
+
+![中文多仓库远程分支删除弹窗](images/ui-user-flow-audit/multi-root-delete-remote-zh-hans.png)
+
+![中文多仓库交互式 Rebase 编辑器](images/ui-user-flow-audit/multi-root-rebase-editor-zh-hans.png)
 
 Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出“仅 fast-forward”“不 fast-forward”“squash 提交”等中文选项。Push 弹窗的标签模式显示“所有标签”，待推送计数显示“待推送 0”。两者标题与主按钮仍为 `Pull` / `Push`，与术语表保留英文 Git 术语的约定一致。
 
@@ -166,7 +174,8 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 7. **审计本身也会漏。** computed title 与重复翻译键都不在旧扫描范围；`Push tags` 曾被重复键覆盖回英文而审计仍报 0 缺翻译。现已把这两类检查加入审计并作为失败条件，同时为术语表保留的英文词维护白名单。
 8. **多仓库分支弹窗同样漏语言。** 新建/重命名/删除弹窗未拿到 `appLocale`，`String(localized:)` 校验文案也仍是英文；三个弹窗已按同一方式修复并由中文专项核对标题、数量、校验和按钮。
 9. **赋值型错误文案仍是英文。** Hosting/远程/补丁/子模块等 21 条 `xxxError = "…"` 由 `Text(value)` 直接显示，已改为按应用语言解析；审计新增裸赋值检查，防止回归。Hosting 面板依赖远端账号，未做页面验收。
-10. **设置弹窗内容不可达。** 项目 Git 设置弹窗原为固定宽 500 pt 且高度随内容膨胀，页脚按钮落在窗口外。现为 860×620、内部滚动、页脚固定；980×640 下保存/取消可点击，并补了 UI 断言。
+10. **多仓库剩余弹窗未传 locale。** Rebase/交互式编辑器/回滚/远程汇总/upstream 弹窗已补 `appLocale`，tag/远程删除标题与 Rebase 汇总已中文化；冲突工作台和回滚页仍未逐页截图。
+11. **设置弹窗内容不可达。** 项目 Git 设置弹窗原为固定宽 500 pt 且高度随内容膨胀，页脚按钮落在窗口外。现为 860×620、内部滚动、页脚固定；980×640 下保存/取消可点击，并补了 UI 断言。
 10. **弹窗语言未随应用切换。** Pull/Push/凭据/项目 Git 设置此前未拿到 `appLocale`；中文主窗口仍显示英文控件。现已在各 sheet 显式传递 locale，并由中文专项截图核对。项目 Git 设置弹窗的尺寸溢出作为已知问题保留，不作为本轮已修项。
 
 ## 验证记录与复跑入口
@@ -188,6 +197,7 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 - 多仓库分支弹窗中文专项 1/1：`build/user-flow-audit/mr-dialogs-4/20261026-150443.xcresult`；完整用户路径 14/14：`build/user-flow-audit/multidialog-final/20261026-150658.xcresult`；Swift 736 项：`build/user-flow-audit/swift-unit-multidialog.xcresult`。
 - 设置弹窗限高布局后：中文专项 1/1 `build/user-flow-audit/settings-layout-12/20261026-171702.xcresult`；完整用户路径 14/14 `build/user-flow-audit/settings-final/20261026-171835.xcresult`；Swift 736 项 `build/user-flow-audit/swift-unit-settings.xcresult`。
 - 赋值型文案审计后：完整用户路径 14/14 `build/user-flow-audit/assignment-final/20261026-175602.xcresult`；Swift 736 项 `build/user-flow-audit/swift-unit-assignment.xcresult`。
+- 多仓库剩余对话框（tag/远程删除、Rebase 编辑器）专项 1/1：`build/user-flow-audit/mr-dialogs-15/20261026-233409.xcresult`；完整用户路径 14/14：`build/user-flow-audit/multidialog-final3/20261026-235310.xcresult`；Swift 736 项：`build/user-flow-audit/swift-unit-step3.xcresult`。完整套件第一次运行出现一次 test09 焦点丢失（重跑 1/1 通过），记录为环境抖动。
 - 导出截图、无障碍树和清单保留在 `build/user-flow-audit/`。
 - 最后追加的中文数量 UI 断言已执行通过；恢复提示同时经过最新截图核对。
 
