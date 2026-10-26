@@ -1,111 +1,41 @@
 # Changelog
 
-## Unreleased
+## 1.0.25 - 2026-10-26
 
-Workspace: the Commit and Log workbenches were re-laid out against the
-reference window and the remaining per-pixel gaps closed.
+Git operations and Chinese interface fixes, with a more compact Commit, Log
+and branch workspace.
 
-- The 82 pt two-row header is one 43 pt row: project menu, Update/Push, branch
-  widget and merge/rebase status on the left, search, a Git overflow menu
-  (Commit, Fetch, Refresh, quick actions) and a settings menu that also holds
-  the language picker on the right. The activity rail is 40 pt, the left column
-  stays 628 pt at the matched size, and Commit/Project/Log sit on white rounded
-  cards over a light frame with a 40 pt notifications rail on the far right
-- Commit mode lists changed files only: index and worktree state for one path
-  are merged into a single row with an explicit staged / partially staged
-  meaning, Unversioned Files is always its own group and starts collapsed, and
-  Ignored Files stays behind Show Ignored. The commit editor is a 126-140 pt
-  footer instead of a 180-240 pt pane, so the tree gets the height
-- The Log table uses 26 pt rows, author and date columns on and column headers
-  off by default (both remain in Log Columns). The inspector is a 280 pt column
-  whose metadata sits below the changes browser, with commit actions in a menu;
-  a wide changes list keeps tree and diff side by side and a narrow one stacks
-  them. Filters are ordered Text/Regex/Case, Branch, User, Date, Paths, with
-  separate named User and Date popovers and 28 pt fields that still fit a
-  980 pt window
-- Branch colors are assigned per referenced tip and inherited through the
-  first parent instead of following the drawing lane, so two tips that reuse a
-  lane no longer share a color and a tag keeps its parent's. The graph gutter
-  shrinks to the lanes actually in use and curved edges reuse one path for
-  drawing and hit testing
-- The project tree is a plain list with a collapsible repository root row (name
-  and path) and shares one file-type symbol and color table with Changes and
-  the commit inspector, so a Swift file reads the same in all three
-- The main window's 540 pt minimum is now measured from the real title bar
-  instead of being added to it, so the scene can no longer bottom out at 572 pt
-
-Typography: interface text uses the Inter the reference ships with.
-
-- 12-13 pt labels, file names, tabs and metadata are Inter Regular/SemiBold;
-  native captions and monospaced code keep the system faces. Both OTFs and the
-  SIL OFL 1.1 license ship in the app bundle and are registered explicitly, and
-  missing Chinese glyphs still fall back to the system font
-- Log and inspector dates are two-digit-year `dd/MM/yy` with the 12-hour marker
-  following the interface language (`05/01/24 5:00 PM`, `05/01/24 下午5:00`)
-  rather than the reference's system-language mix
-
-Engine: a commit no longer counts its directories as changed files.
-
-- `diff_trees` dropped tree objects that gix reports while descending, which
-  inflated nested commits; blobs, symlinks, gitlinks and file/directory type
-  changes are kept, and a new regression compares `commit_diff` with
-  `git diff-tree --name-only -r` for nested add/modify/delete plus a gitlink
-
-UI tests: the suites drive menus and windows instead of typing keys.
-
-- Settings, paste, menu dismissal and window closing use the menu bar, the
-  clipboard and the window's close button, so a run no longer trips the
-  third-party input-method authorization prompt
-- The capture suite asserts the 540 pt minimum on the real SwiftUI window,
-  keeps the filter bar reachable at 980 pt, and reads the compact inspector's
-  actions from its menu. The smoke suite adds grouping/staging state
-  transitions and Skip hooks through Commit Options
-
-Docs: `docs/commit-ui-comparison.md` is the before picture and
-`docs/commit-ui-round1.md` through `round3.md` record each pass, including the
-screenshots in `docs/images/commit-ui-comparison/`.
-
-Changes: the changes list and the project tree can now delete paths from disk.
-
-- IntelliJ's `$Delete` in the Stage tree is a platform action, so the id-level
-  audit never saw it either. Arbor has no separate Stage tool window, so the
-  entry point lives on the change row menu and on the project tree: `Delete…`,
-  confirmed first, then removed from disk
-- The engine's `delete_worktree_paths` mirrors the VFS delete: it removes the
-  file or directory without running `git rm`, so a tracked deletion shows up
-  as `deleted` in Changes. Each path is resolved to its owning Git root first,
-  and absolute paths, `..`, `.git` and the repository root are refused
-- Deletion is permanent rather than a move to the Trash, matching the
-  reference; the confirmation says so and spells out that untracked files
-  cannot be restored
-
-Editor: "Show History for Selection…" answers the one action the surface audit
-found missing.
-
-- IntelliJ's `Vcs.ShowHistoryForBlock` ("Show History for Selection…") was the
-  only leaf action in the Git file menu Arbor lacked, and the one the existing
-  id-level audit could never see: the platform registers it, so it is neither
-  one of git4idea's ids nor a row in the parity matrix
-- Line numbers in the file viewer are now click targets. Click selects a line,
-  Shift-click extends the range, and the row context menu opens a
-  `History for Selection` panel listing the commits that changed those lines
-- The engine answers it with `git log -L`, so the panel shows the selection's
-  content and line number in each revision. Untracked files, binary content and
-  out-of-range selections surface Git's own refusal instead of an empty list
-
-Audit: the surface-level checklist is a script now, not a document.
-
-- `scripts/audit-user-surface.py` rebuilds the menus, context menus, tool-window
-  trees and gear popups from the reference plugin descriptors, then classifies
-  every leaf as covered / git4idea-declared / platform-only
-- A platform action with no verdict fails the run; `scripts/user-surface-baseline.txt`
-  records the human decision for each one, so a `Vcs.ShowHistoryForBlock` cannot
-  drop out of the audit a second time
-- `scripts/user-surface.json` is the committed surface snapshot, so CI checks the
-  ledger with `--snapshot` without needing the reference repository
-- `scripts/i18n-seed-zh-hans.py` writes the catalog in Xcode's own formatting
-  (`"key" : value`, expanded empty objects); running it used to rewrite all
-  21 000 lines of `Localizable.xcstrings`
+- Partial staging keeps the main action visible in a narrow pane and commits
+  only the selected changes. Merge Abort restores conflicted files while
+  preserving unrelated edits; Rebase Continue accepts the existing commit
+  message without requiring a command-line editor.
+- VCS menus follow the active project window, File menu entries no longer
+  duplicate, and Pull resolves the correct remote branch.
+- The Chinese conflict workbench keeps its main actions reachable at
+  980×640. Conflict counts, recovery hints, branch actions and Merge dialogs
+  follow the selected application language. Added 93 catalog keys and filled
+  missing Chinese translations, including Recent, Tags and Stashes.
+- The branch popup has one entry each for Commit, New Branch and Checkout.
+  Other footer actions share an Actions menu, leaving more space for branches;
+  long branch names remain searchable and selectable.
+- Commit and Log use a single-row toolbar, a shorter commit editor, compact
+  history rows and a responsive inspector. Changes combine staged and
+  unstaged state per path, keep unversioned files in a separate collapsed
+  group, and share file-type icons with the project tree and inspector.
+- The history graph assigns colors by referenced tip and first-parent history.
+  The project tree has a collapsible repository root, and Log filters remain
+  reachable in a 980 pt window. Interface text uses bundled Inter fonts with
+  system fallback for Chinese; dates follow the application language.
+- Changes and project-tree menus can delete paths after confirmation. Deletion
+  removes files from disk permanently, and the confirmation explains that
+  untracked files cannot be restored.
+- Show History for Selection opens the revisions that changed selected lines.
+  Commit file counts no longer include directory entries.
+- Temporary-repository UI checks cover daily commits, branch conflicts and
+  history recovery, with Git state verification. English and Chinese branch
+  popup checks and paired Rebased screenshots are recorded in
+  `docs/ui-user-flow-audit.md`; title, search placement, default size and tree
+  styling remain on the visual comparison list.
 
 ## 1.0.24 - 2026-10-23
 
