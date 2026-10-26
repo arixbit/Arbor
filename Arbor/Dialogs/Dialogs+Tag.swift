@@ -217,10 +217,7 @@ struct RebasedMultiRootDeleteTagDialog: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else {
-                Text(
-                    String(localized: "%@ repositories selected")
-                        .replacingOccurrences(of: "%@", with: String(selectedRootPaths.count))
-                )
+                Text("\(selectedRootPaths.count) repositories selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

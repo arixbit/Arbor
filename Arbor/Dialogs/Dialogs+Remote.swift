@@ -801,10 +801,7 @@ struct RebasedMultiRootRemoteDeleteBranchDialog: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Delete Remote Branch")
                 .font(.title3.weight(.semibold))
-            Text(
-                String(localized: "Delete %@ from Git roots")
-                    .replacingOccurrences(of: "%@", with: remoteBranch)
-            )
+            Text("Delete \(remoteBranch) from Git roots")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("This deletes the branch from the remote repository in every selected root.")
@@ -857,10 +854,7 @@ struct RebasedMultiRootRemoteDeleteBranchDialog: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else {
-                Text(
-                    String(localized: "%@ repositories selected")
-                        .replacingOccurrences(of: "%@", with: String(selectedRootPaths.count))
-                )
+                Text("\(selectedRootPaths.count) repositories selected")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

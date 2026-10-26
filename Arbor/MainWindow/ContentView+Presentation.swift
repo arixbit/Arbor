@@ -363,6 +363,7 @@ extension ContentView {
                     remoteWorkspace.multiRootRemoteConfigAggregateContext = nil
                 }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $remoteWorkspace.showConfigDialog) {
             remoteConfigSheet
@@ -377,6 +378,7 @@ extension ContentView {
                 onCancel: { branchWorkspace.showUpstreamDialog = false },
                 onSave: saveUpstreamFromDialog
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(item: $branchWorkspace.multiRootUpstreamContext) { context in
             SetUpstreamDialogView(

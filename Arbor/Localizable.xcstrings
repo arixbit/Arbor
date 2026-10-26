@@ -4058,7 +4058,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete Remote Branch"
+            "value" : "删除远程分支"
           }
         }
       }
@@ -26577,6 +26577,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "凭据代理不可用"
+          }
+        }
+      }
+    },
+    "%lld commits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个提交"
+          }
+        }
+      }
+    },
+    "%lld selected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %lld"
+          }
+        }
+      }
+    },
+    "%@ onto %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 变基到 %@"
+          }
+        }
+      }
+    },
+    "%@ from repository root" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（从仓库根开始）"
+          }
+        }
+      }
+    },
+    "%@ · %lld repositories · %lld commits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %lld 个仓库 · %lld 个提交"
           }
         }
       }

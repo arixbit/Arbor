@@ -31,6 +31,7 @@ extension ContentView {
                 )
             }
         }
+        .environment(\.locale, appLocale)
     }
 
     var rebaseRawTodoSheet: some View {
@@ -45,6 +46,7 @@ extension ContentView {
                 rebaseWorkspace.rawTodoText = ""
             }
         )
+        .environment(\.locale, appLocale)
     }
 
     func loadRebaseDialogSettings(for projectPath: String?) {

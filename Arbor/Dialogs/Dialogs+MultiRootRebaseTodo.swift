@@ -108,11 +108,26 @@ struct MultiRootRebaseTodoEditorView: View {
     }
 
     private var summaryText: String {
-        let rangeDescription = onto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? branch + " from repository root"
-            : branch + " onto " + shortId(onto)
-        return rangeDescription + " · " + String(drafts.count)
-            + " repositories · " + String(totalItems) + " commits"
+        let locale = AppLanguage.interfaceLocale
+        let rangeDescription: String
+        if onto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            rangeDescription = String(
+                format: localizedArborString("%@ from repository root", locale: locale),
+                branch
+            )
+        } else {
+            rangeDescription = String(
+                format: localizedArborString("%@ onto %@", locale: locale),
+                branch,
+                shortId(onto)
+            )
+        }
+        return String(
+            format: localizedArborString("%@ · %lld repositories · %lld commits", locale: locale),
+            rangeDescription,
+            drafts.count,
+            totalItems
+        )
     }
 
     var body: some View {

@@ -83,6 +83,7 @@ struct MultiRootMergePresentationModifier: ViewModifier {
                     onKeep: { onKeep(context) },
                     onDone: onDone
                 )
+                .environment(\.locale, locale)
             }
     }
 }

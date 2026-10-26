@@ -923,6 +923,7 @@ extension ContentView {
                 },
                 onCancel: { rebaseWorkspace.showActionDialog = false }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $rebaseWorkspace.showMultiRootEditor) {
             MultiRootRebaseTodoEditorView(
@@ -944,6 +945,7 @@ extension ContentView {
                 },
                 onOpenRawTodo: prepareMultiRootRawTodoEditor
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(item: $rebaseWorkspace.multiRootRawTodoContext) { context in
             RawRebaseTodoEditorView(
@@ -957,6 +959,7 @@ extension ContentView {
                     rebaseWorkspace.multiRootRawTodoText = ""
                 }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(item: $rebaseWorkspace.multiRootRollbackContext) { context in
             RebasedMultiRootRebaseRollbackView(
@@ -973,6 +976,7 @@ extension ContentView {
                     rebaseWorkspace.multiRootRollbackContext = nil
                 }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $stashUI.showCreateDialog) {
             RebasedStashDialog(
