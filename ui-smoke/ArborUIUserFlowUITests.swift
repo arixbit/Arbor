@@ -576,7 +576,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(tagMode.waitForExistence(timeout: 5))
         session.recordScreenshot(named: "push-options-zh-Hans")
         click(session.app.buttons["取消"].firstMatch)
+        let pushSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(pushSheet.waitForNonExistence(timeout: 10), "Push sheet did not close")
 
+        session.app.activate()
         XCTAssertTrue(session.openBranchesPopover())
         let actions = session.app.menuButtons["操作"].firstMatch
         XCTAssertTrue(actions.waitForExistence(timeout: 5))

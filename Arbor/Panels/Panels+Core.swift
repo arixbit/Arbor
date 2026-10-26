@@ -243,7 +243,7 @@ struct VCSQuickActionsView: View {
                     ForEach(VCSQuickActionItem.Section.allCases, id: \.self) { section in
                         let sectionItems = filteredItems.filter { $0.section == section }
                         if !sectionItems.isEmpty {
-                            Section(sectionTitle(section)) {
+                            Section(LocalizedStringKey(sectionTitle(section))) {
                                 ForEach(sectionItems) { item in
                                     Button {
                                         run(item)

@@ -25930,6 +25930,266 @@
           }
         }
       }
+    },
+    "(no subject)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(无主题)"
+          }
+        }
+      }
+    },
+    "Mark As Favorite" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标记为收藏"
+          }
+        }
+      }
+    },
+    "Unmark As Favorite" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消收藏"
+          }
+        }
+      }
+    },
+    "Pop" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pop"
+          }
+        }
+      }
+    },
+    "Workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "Add submodule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加子模块"
+          }
+        }
+      }
+    },
+    "Update submodule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新子模块"
+          }
+        }
+      }
+    },
+    "Update submodules" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新所有子模块"
+          }
+        }
+      }
+    },
+    "Sync submodules" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步子模块"
+          }
+        }
+      }
+    },
+    "Deinit submodule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "反初始化子模块"
+          }
+        }
+      }
+    },
+    "Remove submodule" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除子模块"
+          }
+        }
+      }
+    },
+    "Set submodule branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置子模块分支"
+          }
+        }
+      }
+    },
+    "Submodule added" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块已添加"
+          }
+        }
+      }
+    },
+    "Submodule updated" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块已更新"
+          }
+        }
+      }
+    },
+    "Submodules synchronized" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块已同步"
+          }
+        }
+      }
+    },
+    "Submodule removed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块已移除"
+          }
+        }
+      }
+    },
+    "Submodule branch set" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子模块分支已设置"
+          }
+        }
+      }
+    },
+    "Smart Cherry-pick" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能 Cherry-pick"
+          }
+        }
+      }
+    },
+    "Smart Revert" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能 Revert"
+          }
+        }
+      }
+    },
+    "COMMITS BY HASH" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "COMMITS BY HASH"
+          }
+        }
+      }
+    },
+    "COMMITS BY MESSAGE" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "COMMITS BY MESSAGE"
+          }
+        }
+      }
+    },
+    "Reading Git LFS status…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取 Git LFS 状态…"
+          }
+        }
+      }
+    },
+    "git-lfs %@ · %lld LFS files · %lld tracking rules" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "git-lfs %@ · %lld 个 LFS 文件 · %lld 条跟踪规则"
+          }
+        }
+      }
+    },
+    "git-lfs is not installed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未检测到 git-lfs"
+          }
+        }
+      }
+    },
+    "Reading hooks directory…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取 hooks 目录…"
+          }
+        }
+      }
+    },
+    "unknown" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

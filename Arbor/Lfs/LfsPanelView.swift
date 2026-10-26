@@ -73,11 +73,22 @@ struct LfsPanelView: View {
     }
 
     private var subtitle: String {
-        guard let capability else { return "Git LFS 状态读取中…" }
-        if capability.installed {
-            return "git-lfs \(capability.version ?? "unknown") · \(files.count) 个 LFS 文件 · \(patterns.count) 条跟踪规则"
+        let locale = AppLanguage.interfaceLocale
+        guard let capability else {
+            return localizedArborString("Reading Git LFS status…", locale: locale)
         }
-        return "未检测到 git-lfs"
+        if capability.installed {
+            return String(
+                format: localizedArborString(
+                    "git-lfs %@ · %lld LFS files · %lld tracking rules",
+                    locale: locale
+                ),
+                capability.version ?? "unknown",
+                files.count,
+                patterns.count
+            )
+        }
+        return localizedArborString("git-lfs is not installed", locale: locale)
     }
 
     private var missingLfsView: some View {

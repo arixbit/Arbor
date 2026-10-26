@@ -50,6 +50,41 @@ APPKIT_PATTERN = re.compile(
 APPKIT_TITLE_PATTERN = re.compile(
     r"\baddButton\s*\(\s*withTitle:\s*\"((?:\\.|[^\"\\])*)\""
 )
+# Computed labels (`var fooTitle: String { ... }`) reach Text/Label as values,
+# so SwiftUI cannot discover their keys. Require the same catalog coverage as
+# literal UI text; call sites must also localize the returned String.
+TITLE_PATTERN = re.compile(r"\b(?:var|func)\s+[A-Za-z_]\w*[Tt]itle\b[^\n{]*\{")
+# Git and UI terms the product keeps in English on purpose (I18N_TERMS.md).
+INTENTIONAL_ENGLISH = {
+    "Merge",
+    "Rebase",
+    "Push",
+    "Cherry-pick",
+    "Fixup",
+    "Squash",
+    "Soft",
+    "Mixed",
+    "Hard",
+    "Keep",
+    "Ours",
+    "Theirs",
+    "Shelf",
+    "Stash Diff",
+    "Shelf Diff",
+    "Git Console",
+    "Worktrees",
+    "Pop",
+    "First Parent",
+    "Normal (Off)",
+    "Standard (Bek)",
+    "Linear (LinearBek)",
+    "UTF-8",
+    "UTF-16",
+    "ISO-8859-1",
+    "Windows-1252",
+    "COMMITS BY HASH",
+    "COMMITS BY MESSAGE",
+}
 
 
 def decode_swift_string(value: str) -> str:
@@ -107,6 +142,32 @@ def hardcoded_chinese(path: Path) -> list[tuple[str, int]]:
             value = decode_swift_string(match.group(1))
             if value and "\\(" not in value and CJK_PATTERN.search(value):
                 hits.append((value, line_number(source, match.start())))
+    return hits
+
+
+def computed_title_literals(path: Path) -> list[tuple[str, int]]:
+    """Catalog keys used by computed `title` properties."""
+    source = path.read_text(encoding="utf-8")
+    hits: list[tuple[str, int]] = []
+    for match in TITLE_PATTERN.finditer(source):
+        index = match.end() - 1
+        depth = 0
+        end = index
+        while end < len(source):
+            if source[end] == "{":
+                depth += 1
+            elif source[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            end += 1
+        block = source[index:end + 1]
+        for literal in re.finditer(r'"((?:\\.|[^"\\])*)"', block):
+            value = literal.group(1)
+            if not value or "\\(" in value or not any(c.isalpha() for c in value):
+                continue
+            line = line_number(source, index + literal.start())
+            hits.append((decode_swift_string(value), line))
     return hits
 
 
@@ -201,13 +262,66 @@ def main() -> int:
             )
         return 1 if introduced else 0
 
+    computed_titles: dict[str, list[str]] = {}
+    for raw_path in args.paths:
+        path = (root / raw_path).resolve()
+        files = [path] if path.is_file() else sorted(path.rglob("*.swift"))
+        for swift_file in files:
+            if "Tests" in swift_file.parts:
+                continue
+            for value, line in computed_title_literals(swift_file):
+                computed_titles.setdefault(value, []).append(
+                    f"{swift_file.relative_to(root)}:{line}"
+                )
+
+    additions_path = root / "scripts/i18n-zh-hans-additions.json"
+    duplicate_additions: dict[str, int] = {}
+    if additions_path.exists():
+        addition_keys = [
+            match.group(1)
+            for match in re.finditer(
+                r'^\s*"((?:\\.|[^"\\])*)"\s*:',
+                additions_path.read_text(encoding="utf-8"),
+                re.MULTILINE,
+            )
+        ]
+        counts: dict[str, int] = {}
+        for key in addition_keys:
+            counts[key] = counts.get(key, 0) + 1
+        duplicate_additions = {key: count for key, count in counts.items() if count > 1}
+
+    title_missing = sorted(set(computed_titles) - catalog_keys)
+    title_untranslated = sorted(
+        key
+        for key in computed_titles
+        if key in catalog_keys
+        and key not in INTENTIONAL_ENGLISH
+        and (
+            catalog["strings"][key].get("localizations", {}).get("zh-Hans") is None
+            or catalog["strings"][key]["localizations"]["zh-Hans"]
+            .get("stringUnit", {})
+            .get("value")
+            == key
+        )
+    )
+
     print(f"Scanned literals: {len(occurrences)}")
+    print(f"Computed title literals: {len(computed_titles)}")
     print(f"Missing catalog keys: {len(missing)}")
     for key in missing:
         print(f"MISSING\t{key}\t{' / '.join(occurrences[key])}")
     print(f"Missing zh-Hans translations: {len(untranslated)}")
     for key in untranslated:
         print(f"UNTRANSLATED\t{key}\t{' / '.join(occurrences[key])}")
+    print(f"Missing computed-title keys: {len(title_missing)}")
+    for key in title_missing:
+        print(f"TITLE-MISSING\t{key}\t{' / '.join(computed_titles[key])}")
+    print(f"Untranslated computed titles: {len(title_untranslated)}")
+    for key in title_untranslated:
+        print(f"TITLE-UNTRANSLATED\t{key}\t{' / '.join(computed_titles[key])}")
+    print(f"Duplicate translation additions: {len(duplicate_additions)}")
+    for key, count in sorted(duplicate_additions.items()):
+        print(f"DUPLICATE\t{key}\t{count}")
 
     print(f"Hardcoded Chinese UI literals: {len(hardcoded_entries)} (baseline {len(baseline)})")
     for entry in introduced:
@@ -217,7 +331,14 @@ def main() -> int:
             f"Note: {len(retired)} baseline entries no longer exist; "
             "rerun with --update-hardcoded-baseline to ratchet the baseline down."
         )
-    return 1 if missing or untranslated or introduced else 0
+    return 1 if (
+        missing
+        or untranslated
+        or introduced
+        or title_missing
+        or title_untranslated
+        or duplicate_additions
+    ) else 0
 
 
 if __name__ == "__main__":

@@ -924,7 +924,7 @@ struct RebasedBranchesPopover: View {
             .disabled(!availability.isEnabled(.checkout))
 
             Menu {
-                Button(favoriteTitle(name: branch.name, isRemote: false)) {
+                Button(LocalizedStringKey(favoriteTitle(name: branch.name, isRemote: false))) {
                     toggleFavorite(name: branch.name, isRemote: false)
                 }
                 Divider()
@@ -1143,7 +1143,7 @@ struct RebasedBranchesPopover: View {
                 }
             }
             Menu {
-                Button(favoriteTitle(name: branch.name, isRemote: true)) {
+                Button(LocalizedStringKey(favoriteTitle(name: branch.name, isRemote: true))) {
                     toggleFavorite(name: branch.name, isRemote: true)
                 }
                 Divider()

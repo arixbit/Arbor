@@ -87,7 +87,9 @@ struct HooksPanelView: View {
     }
 
     private var subtitle: String {
-        guard let location else { return "读取 hooks 目录…" }
+        guard let location else {
+            return localizedArborString("Reading hooks directory…", locale: AppLanguage.interfaceLocale)
+        }
         if let custom = location.customPath, !custom.isEmpty {
             return "core.hooksPath = \(custom) · \(location.directory)"
         }

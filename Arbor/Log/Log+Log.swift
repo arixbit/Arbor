@@ -5,7 +5,9 @@ import UniformTypeIdentifiers
 
 func logNavigationChoiceTitle(_ commit: CommitInfo) -> String {
     let shortID = commit.shortId.isEmpty ? String(commit.id.prefix(7)) : commit.shortId
-    let summary = commit.summary.isEmpty ? "(no subject)" : commit.summary
+    let summary = commit.summary.isEmpty
+        ? localizedArborString("(no subject)", locale: AppLanguage.interfaceLocale)
+        : commit.summary
     let author = commit.authorName.isEmpty ? "—" : commit.authorName
     return "\(shortID)  \(summary) · \(author) · \(dateStr(commit.time))"
 }

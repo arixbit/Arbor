@@ -160,7 +160,7 @@ struct RebasedUnstashAsDialog: View {
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
-                Button(actionTitle) {
+                Button(LocalizedStringKey(actionTitle)) {
                     if !normalizedBranchName.isEmpty {
                         onStashBranch(normalizedBranchName)
                     } else if popStash {
