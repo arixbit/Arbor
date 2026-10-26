@@ -18,6 +18,7 @@
 | 已通过 | 文案审计新增 computed title、重复翻译键和英文占位检查；清理 24 个 computed title，审计 0 缺键、0 缺翻译、0 重复。 |
 | 已通过 | 多仓库新建/重命名/删除分支弹窗中文实测：标题、仓库选择、数量、校验文案与按钮均为中文；完整套件扩到 14/14。 |
 | 已通过 | 项目 Git 设置弹窗改为限高滚动布局；980×640 下标题、滚动区与保存/取消均可见且可点击。 |
+| 已通过 | 赋值型错误/状态文案纳入审计并本地化：Hosting、远程、补丁、子模块、文件历史等 21 条；完整套件 14/14。 |
 | 已通过 | 现有代码已提交并推送 `origin/main`；包含本轮全部修复的 `3126162` 已通过 GitHub Rust / Swift 完整 CI。 |
 | 操作受阻 | 当前无执行阻塞。此前审批拒绝已解除，提交、推送、构建、UI 执行和附件导出均已恢复。 |
 | 与 Rebased 行为不同 | 首次打开同一临时仓库，Rebased 1.1.13 要求确认项目可信，Arbor 直接进入工作区。本轮保留这一流程差异。 |
@@ -77,7 +78,8 @@ Push/Fetch/Pull 用户路径的远端均为临时本地仓库，HTTPS/SSH 身份
 14. **翻译补充文件重复键静默覆盖。** `scripts/i18n-zh-hans-additions.json` 中 `Push tags` 出现两次，后者把新译文覆盖回英文；已删除重复项。静态审计只看 catalog 覆盖，发现不了这种重复，后续应加入重复键检查。
 15. **项目 Git 设置弹窗尺寸溢出。** 弹窗固定宽 500 pt，内容高于窗口，底部按钮与右侧帮助文本在可视区外。现改为 860×620 弹窗，内部 `Form` 使用 grouped 样式并限定 820×460 视口滚动，页脚固定；980×640 下标题、滚动区与保存/取消均可见可点。
 16. **多仓库分支弹窗仍为英文。** 新建/重命名/删除分支的 sheet 没有传递 `appLocale`，`String(localized:)` 拼接标题和校验文案也绕过应用语言。现在所有分支弹窗 sheet 都应用 `appLocale`；重命名/删除标题改用插值，`validateMultiRootRenameName`、`branchRenameConflictMessage`、删除提示及 `unmerged`/`Repository` 标签都走应用语言。中文实测重命名弹窗显示“新名称必须不同。”，删除弹窗显示未合并分支说明。
-17. **静态审计盲区让「缺翻译 0」虚高。** `i18n-audit.py` 原先只扫描字面量，漏掉 computed `title`、重复翻译键和英文占位。现已加入 computed title 的 catalog 检查、`i18n-zh-hans-additions.json` 重复键检查（`Push tags` 曾被重复键覆盖回英文）和英文占位告警；并清理 24 个 computed title（收藏、子模块操作、LFS/hooks 状态、Smart Cherry-pick 等）。审计现为 1,637 个字面量、89 个 computed title，全部有 zh-Hans。
+17. **赋值型错误文案绕过 catalog。** `detailError = "…"`、`validationMessage = "…"` 这类字符串由 `Text(value)` 直接展示，既不在字面量扫描范围，也不会继承应用语言。已把 21 条 Hosting/远程/补丁/子模块/文件历史文案改为 `localizedArborString(..., locale: .interfaceLocale)`，并新增赋值型字面量审计：出现新的未登记赋值文案会直接失败。Hosting 面板需要远端账号，本轮只做代码与审计验证，未做页面截图。
+18. **静态审计盲区让「缺翻译 0」虚高。** `i18n-audit.py` 原先只扫描字面量，漏掉 computed `title`、重复翻译键和英文占位。现已加入 computed title 的 catalog 检查、`i18n-zh-hans-additions.json` 重复键检查（`Push tags` 曾被重复键覆盖回英文）和英文占位告警；并清理 24 个 computed title（收藏、子模块操作、LFS/hooks 状态、Smart Cherry-pick 等）。审计现为 1,637 个字面量、89 个 computed title，全部有 zh-Hans。
 
 Reset 测试等待 HEAD、index 和恢复快照全部就绪后再核对结果，避免将生成快照时的临时暂存误判为最终状态。分支搜索测试复用已有菜单粘贴方法，避免直接键入触发本机输入法授权提示；菜单定位只匹配有可见边界的 Merge 项，排除隐藏的同名 VCS 菜单。
 
@@ -85,7 +87,7 @@ Reset 测试等待 HEAD、index 和恢复快照全部就绪后再核对结果，
 
 前轮新增 93 个 catalog key，补齐 2 个既有数量条目的中文。本轮页面实测又发现 3 个已登记但中文值仍为英文的分组：`RECENT`、`TAGS`、`STASHES`，现改为“最近”“标签”“贮藏”，并同步翻译补充文件。审计扩大到 Picker、Section、GroupBox、ProgressView、alert、confirmationDialog、navigationTitle，以及原生界面使用的 `localizedArborString`。
 
-最终审计：扫描 1,637 处字面量、89 处 computed title；未登记 key 0，缺 zh-Hans 0，重复翻译键 0，硬编码中文 0。上述三个分组的新翻译经过最终中文 UI 专项核对。多仓库专项又发现两处英文占位：`in %@` 无中文、`No stashes` 的中文值仍是英文，现改为“位于 %@”“没有贮藏”；Merge 策略与选项标题原先以 `String` 传入，已改为 `LocalizedStringKey` 并补齐 zh-Hans。多仓库分支弹窗的三张最终截图附在下方。computed title 检查要求每个 `var …Title` 的字符串都在 catalog 中，并可用英文占位白名单排除术语表保留的 Git 词；但它仍不能判断赋值型字符串（如 `detailError = "…"`）是否经过本地化，也不能保证动态文案继承了应用语言，因此仍需页面验收。Hosting 面板的错误文案暂不在扫描范围。
+最终审计：扫描 1,658 处字面量、89 处 computed title、0 条裸赋值文案；未登记 key 0，缺 zh-Hans 0，重复翻译键 0，硬编码中文 0。上述三个分组的新翻译经过最终中文 UI 专项核对。多仓库专项又发现两处英文占位：`in %@` 无中文、`No stashes` 的中文值仍是英文，现改为“位于 %@”“没有贮藏”；Merge 策略与选项标题原先以 `String` 传入，已改为 `LocalizedStringKey` 并补齐 zh-Hans。多仓库分支弹窗的三张最终截图附在下方。computed title 检查要求每个 `var …Title` 的字符串都在 catalog 中，并可用英文占位白名单排除术语表保留的 Git 词；但它仍不能判断赋值型字符串（如 `detailError = "…"`）是否经过本地化，也不能保证动态文案继承了应用语言，因此仍需页面验收。Hosting 面板的错误文案暂不在扫描范围。
 
 原生三栏标题显式使用应用所选语言的资源 bundle；语言更新只更新标题，保留结果编辑内容。截图还发现动态数量、顶部操作标题和恢复提示采用不同语言来源，已针对这些位置补齐。最终应用中的 zh-Hans 资源已核对数量、结果标题、安全合并统计和恢复提示。最后新增的数量 UI 断言已通过；最新截图确认顶部操作标题、安全合并统计和底部恢复提示均显示中文。
 
@@ -163,7 +165,8 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 6. **测试依赖宿主输入法。** 宿主拼音输入法激活时，直接键入会被组合成候选而留下空字段，首轮完整套件 7 项失败。输入已改为 Edit 菜单粘贴并校验；拼音激活状态下完整套件复跑 13/13。
 7. **审计本身也会漏。** computed title 与重复翻译键都不在旧扫描范围；`Push tags` 曾被重复键覆盖回英文而审计仍报 0 缺翻译。现已把这两类检查加入审计并作为失败条件，同时为术语表保留的英文词维护白名单。
 8. **多仓库分支弹窗同样漏语言。** 新建/重命名/删除弹窗未拿到 `appLocale`，`String(localized:)` 校验文案也仍是英文；三个弹窗已按同一方式修复并由中文专项核对标题、数量、校验和按钮。
-9. **设置弹窗内容不可达。** 项目 Git 设置弹窗原为固定宽 500 pt 且高度随内容膨胀，页脚按钮落在窗口外。现为 860×620、内部滚动、页脚固定；980×640 下保存/取消可点击，并补了 UI 断言。
+9. **赋值型错误文案仍是英文。** Hosting/远程/补丁/子模块等 21 条 `xxxError = "…"` 由 `Text(value)` 直接显示，已改为按应用语言解析；审计新增裸赋值检查，防止回归。Hosting 面板依赖远端账号，未做页面验收。
+10. **设置弹窗内容不可达。** 项目 Git 设置弹窗原为固定宽 500 pt 且高度随内容膨胀，页脚按钮落在窗口外。现为 860×620、内部滚动、页脚固定；980×640 下保存/取消可点击，并补了 UI 断言。
 10. **弹窗语言未随应用切换。** Pull/Push/凭据/项目 Git 设置此前未拿到 `appLocale`；中文主窗口仍显示英文控件。现已在各 sheet 显式传递 locale，并由中文专项截图核对。项目 Git 设置弹窗的尺寸溢出作为已知问题保留，不作为本轮已修项。
 
 ## 验证记录与复跑入口
@@ -184,6 +187,7 @@ Pull 弹窗实测“选项”摘要显示“默认”，`修改…` 菜单列出
 - 审计扩展后的完整用户路径 13/13：`build/user-flow-audit/audit-cleanup2/20261026-144309.xcresult`；Swift 736 项 0 失败：`build/user-flow-audit/swift-unit-audit.xcresult`。
 - 多仓库分支弹窗中文专项 1/1：`build/user-flow-audit/mr-dialogs-4/20261026-150443.xcresult`；完整用户路径 14/14：`build/user-flow-audit/multidialog-final/20261026-150658.xcresult`；Swift 736 项：`build/user-flow-audit/swift-unit-multidialog.xcresult`。
 - 设置弹窗限高布局后：中文专项 1/1 `build/user-flow-audit/settings-layout-12/20261026-171702.xcresult`；完整用户路径 14/14 `build/user-flow-audit/settings-final/20261026-171835.xcresult`；Swift 736 项 `build/user-flow-audit/swift-unit-settings.xcresult`。
+- 赋值型文案审计后：完整用户路径 14/14 `build/user-flow-audit/assignment-final/20261026-175602.xcresult`；Swift 736 项 `build/user-flow-audit/swift-unit-assignment.xcresult`。
 - 导出截图、无障碍树和清单保留在 `build/user-flow-audit/`。
 - 最后追加的中文数量 UI 断言已执行通过；恢复提示同时经过最新截图核对。
 
