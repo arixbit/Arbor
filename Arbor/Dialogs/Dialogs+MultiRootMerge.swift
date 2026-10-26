@@ -138,15 +138,10 @@ struct RebasedMultiRootMergeDialog: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Merge Branch")
                 .font(.title3.weight(.semibold))
-            Text(
-                String(localized: "Merge %@ in Git roots")
-                    .replacingOccurrences(of: "%@", with: branchName)
-            )
+            Text("Merge \(branchName) in Git roots")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(
-                String(localized: "Repositories run in order. Conflicts continue to the next repository; a fatal failure stops the remaining repositories and keeps successful roots available for rollback.")
-            )
+            Text("Repositories run in order. Conflicts continue to the next repository; a fatal failure stops the remaining repositories and keeps successful roots available for rollback.")
                 .font(.caption)
                 .foregroundStyle(.orange)
             Divider()
@@ -196,17 +191,14 @@ struct RebasedMultiRootMergeDialog: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             } else {
-                Text(
-                    String(localized: "%@ repositories selected")
-                        .replacingOccurrences(of: "%@", with: String(selectedRootPaths.count))
-                )
+                Text("\(String(selectedRootPaths.count)) repositories selected")
                     .font(.caption)
                 .foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
                 Text("Strategy")
                     .foregroundStyle(.secondary)
-                Text(strategy.title)
+                Text(LocalizedStringKey(strategy.title))
                 Spacer()
                 Menu("Modify options…") {
                     Section("Merge strategy") {
@@ -220,7 +212,7 @@ struct RebasedMultiRootMergeDialog: View {
                                 normalizeOptions()
                             } label: {
                                 Label(
-                                    choice.title,
+                                    LocalizedStringKey(choice.title),
                                     systemImage: strategy == choice ? "checkmark" : ""
                                 )
                             }
@@ -232,7 +224,7 @@ struct RebasedMultiRootMergeDialog: View {
                     }
                     Section("Merge options") {
                         Toggle(
-                            MergeOptionChoice.commitMessage.title,
+                            LocalizedStringKey(MergeOptionChoice.commitMessage.title),
                             isOn: Binding(
                                 get: { useCustomCommitMessage },
                                 set: { setOption(.commitMessage, enabled: $0) }
@@ -244,7 +236,7 @@ struct RebasedMultiRootMergeDialog: View {
                             selectedOptions: selectedOptions
                         ))
                         Toggle(
-                            MergeOptionChoice.noCommit.title,
+                            LocalizedStringKey(MergeOptionChoice.noCommit.title),
                             isOn: Binding(
                                 get: { noCommit },
                                 set: { setOption(.noCommit, enabled: $0) }
@@ -256,14 +248,14 @@ struct RebasedMultiRootMergeDialog: View {
                             selectedOptions: selectedOptions
                         ))
                         Toggle(
-                            MergeOptionChoice.noVerify.title,
+                            LocalizedStringKey(MergeOptionChoice.noVerify.title),
                             isOn: Binding(
                                 get: { noVerify },
                                 set: { setOption(.noVerify, enabled: $0) }
                             )
                         )
                         Toggle(
-                            MergeOptionChoice.allowUnrelatedHistories.title,
+                            LocalizedStringKey(MergeOptionChoice.allowUnrelatedHistories.title),
                             isOn: Binding(
                                 get: { allowUnrelatedHistories },
                                 set: { setOption(.allowUnrelatedHistories, enabled: $0) }

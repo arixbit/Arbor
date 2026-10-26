@@ -180,7 +180,7 @@ struct RebasedMergeDialog: View {
             HStack(spacing: 8) {
                 Text("Strategy")
                     .foregroundStyle(.secondary)
-                Text(strategy.title)
+                Text(LocalizedStringKey(strategy.title))
                 Spacer()
                 Menu("Modify options…") {
                     Section("Merge strategy") {
@@ -194,7 +194,7 @@ struct RebasedMergeDialog: View {
                                 normalizeOptions()
                             } label: {
                                 Label(
-                                    choice.title,
+                                    LocalizedStringKey(choice.title),
                                     systemImage: strategy == choice ? "checkmark" : ""
                                 )
                             }
@@ -206,7 +206,7 @@ struct RebasedMergeDialog: View {
                     }
                     Section("Merge options") {
                         Toggle(
-                            MergeOptionChoice.commitMessage.title,
+                            LocalizedStringKey(MergeOptionChoice.commitMessage.title),
                             isOn: Binding(
                                 get: { useCustomCommitMessage },
                                 set: { setOption(.commitMessage, enabled: $0) }
@@ -218,7 +218,7 @@ struct RebasedMergeDialog: View {
                             selectedOptions: selectedOptions
                         ))
                         Toggle(
-                            MergeOptionChoice.noCommit.title,
+                            LocalizedStringKey(MergeOptionChoice.noCommit.title),
                             isOn: Binding(
                                 get: { noCommit },
                                 set: { setOption(.noCommit, enabled: $0) }
@@ -230,14 +230,14 @@ struct RebasedMergeDialog: View {
                             selectedOptions: selectedOptions
                         ))
                         Toggle(
-                            MergeOptionChoice.noVerify.title,
+                            LocalizedStringKey(MergeOptionChoice.noVerify.title),
                             isOn: Binding(
                                 get: { noVerify },
                                 set: { setOption(.noVerify, enabled: $0) }
                             )
                         )
                         Toggle(
-                            MergeOptionChoice.allowUnrelatedHistories.title,
+                            LocalizedStringKey(MergeOptionChoice.allowUnrelatedHistories.title),
                             isOn: Binding(
                                 get: { allowUnrelatedHistories },
                                 set: { setOption(.allowUnrelatedHistories, enabled: $0) }

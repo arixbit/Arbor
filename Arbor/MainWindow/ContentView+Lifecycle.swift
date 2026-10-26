@@ -47,6 +47,7 @@ extension ContentView {
                     noVerify: $mergeWorkspace.noVerify,
                     allowUnrelatedHistories: $mergeWorkspace.allowUnrelatedHistories,
                     rollbackContext: $mergeWorkspace.multiRootRollbackContext,
+                    locale: appLocale,
                     branchName: mergeWorkspace.multiRootBranchName,
                     snapshots: multiRootWorkspace.branchSnapshots,
                     mergedBranchesByRoot: mergeWorkspace.multiRootMergedBranchesByRoot,

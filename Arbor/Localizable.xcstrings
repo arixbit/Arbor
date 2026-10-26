@@ -6290,7 +6290,14 @@
       }
     },
     "in %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位于 %@"
+          }
+        }
+      }
     },
     "Include ignored files（隐含 untracked）" : {
       "extractionState" : "stale",
@@ -8291,7 +8298,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No stashes"
+            "value" : "没有贮藏"
           }
         }
       }
@@ -25143,6 +25150,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从恢复操作中选择继续、跳过或中止。"
+          }
+        }
+      }
+    },
+    "Automatic (fast-forward when possible)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动（可用时 fast-forward）"
+          }
+        }
+      }
+    },
+    "Fast-forward only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅 fast-forward"
+          }
+        }
+      }
+    },
+    "No fast-forward (create merge commit)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用 fast-forward（创建 merge commit）"
+          }
+        }
+      }
+    },
+    "Squash (single-parent commit)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "squash（单父提交）"
+          }
+        }
+      }
+    },
+    "Use custom commit message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用自定义提交信息"
           }
         }
       }

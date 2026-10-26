@@ -14,6 +14,7 @@ private struct MultiRootBranchRow: Identifiable {
 /// IntelliJ Branches Popup 的多 root 展示：分支名称只在所属 Git root 内
 /// 解释，避免不同仓库的同名分支被错误合并。
 struct MultiRootBranchesPopover: View {
+    @Environment(\.locale) private var locale
     var projectPath: String? = nil
     var protectedBranchPatterns: [String] = []
     let snapshots: [GitRootBranchSnapshot]
@@ -534,7 +535,7 @@ struct MultiRootBranchesPopover: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text("\(filteredSnapshots.count) repositories")
+                Text("\(String(filteredSnapshots.count)) repositories")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -583,65 +584,37 @@ struct MultiRootBranchesPopover: View {
                 .help("Branches Popup Settings")
             }
             HStack {
-                Button("Commit Changes…") {
-                    onCommitChanges()
-                    onCancel()
-                }
-                .controlSize(.small)
-                .disabled(!hasCommitChanges)
-                .help(
-                    branchPopupActionDisabledDescription(
-                        .commitChanges,
-                        hasHeadCommit: canCreateNewBranch,
-                        hasCommitChanges: hasCommitChanges
-                    ) ?? ""
-                )
-                Button("New Branch…", action: onNewBranch)
-                    .controlSize(.small)
-                    .disabled(!canCreateNewBranch)
-                    .help(
-                        branchPopupActionDisabledDescription(
-                            .newBranch,
-                            hasHeadCommit: canCreateNewBranch
-                        ) ?? ""
-                    )
-                Button("Find Merged…") {
-                    onFindMerged()
-                    onCancel()
-                }
-                .controlSize(.small)
-                .disabled(!isFindMergedBranchesActionEnabled(localBranchCounts: snapshots.map { $0.branches.count }))
-                Button("Remote Tags…") {
-                    onRemoteTags()
-                    onCancel()
-                }
-                .controlSize(.small)
-                Menu("Actions…") {
-                    selectedBranchActionMenu(for: selectedBranchReferences)
-                }
-                .controlSize(.small)
-                .disabled(!selectedBranchActionsEnabled)
-                Menu("Remote Actions…") {
-                    remoteGroupActionMenu(for: selectedRemoteGroups)
-                }
-                .controlSize(.small)
-                .disabled(selectedRemoteGroups.isEmpty)
-                Button("Configure Remotes…", action: onConfigureRemotes)
-                    .controlSize(.small)
-                Button {
-                    onCheckoutReference(filterByRepository && !repositoryFilter.isEmpty ? repositoryFilter : nil)
-                } label: {
-                    Label("Checkout Tag or Revision…", systemImage: "arrow.down.to.line")
-                }
-                .controlSize(.small)
-                Button(action: { onProjectGitSettings(); onCancel() }) {
-                    Label("Project Git Settings…", systemImage: "slider.horizontal.3")
-                }
-                .controlSize(.small)
-                Spacer()
                 Text("Enter branch, tag, or commit")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                Spacer()
+                Menu("Actions") {
+                    Button("Find Merged…") {
+                        onFindMerged()
+                        onCancel()
+                    }
+                    .disabled(!isFindMergedBranchesActionEnabled(localBranchCounts: snapshots.map { $0.branches.count }))
+                    Button("Remote Tags…") {
+                        onRemoteTags()
+                        onCancel()
+                    }
+                    if selectedBranchActionsEnabled {
+                        Menu("Actions…") {
+                            selectedBranchActionMenu(for: selectedBranchReferences)
+                        }
+                    }
+                    if !selectedRemoteGroups.isEmpty {
+                        Menu("Remote Actions…") {
+                            remoteGroupActionMenu(for: selectedRemoteGroups)
+                        }
+                    }
+                    Divider()
+                    Button("Configure Remotes…", action: onConfigureRemotes)
+                    Button(action: { onProjectGitSettings(); onCancel() }) {
+                        Label("Project Git Settings…", systemImage: "slider.horizontal.3")
+                    }
+                }
+                .controlSize(.small)
             }
             Divider()
             if filteredSnapshots.isEmpty && filteredActionTargets.isEmpty
@@ -705,7 +678,7 @@ struct MultiRootBranchesPopover: View {
                                             .font(.caption2)
                                             .foregroundStyle(.secondary)
                                             .frame(width: 16)
-                                        Text(target.title)
+                                        Text(localizedArborString(target.title, locale: locale))
                                             .lineLimit(1)
                                     }
                                     .padding(.horizontal, 6)
@@ -802,6 +775,7 @@ struct MultiRootBranchesPopover: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .accessibilityIdentifier("multi-root-branch-reference-list")
             }
         }
         .padding(12)
@@ -1115,7 +1089,8 @@ struct MultiRootBranchesPopover: View {
                 } else if let refName = branchDirectoryRefName(row),
                           let branch = snapshot.branches.first(where: { $0.name == refName }) {
                     branchRow(
-                        row.name,
+                        branch.name,
+                        displayName: row.name,
                         isCurrent: branch.isCurrent,
                         sync: snapshot.syncStatuses.first { $0.branch == branch.name },
                         rootPath: snapshot.rootPath,
@@ -1246,7 +1221,8 @@ struct MultiRootBranchesPopover: View {
                 } else if let refName = branchDirectoryRefName(row),
                           let branch = snapshot.remoteBranches.first(where: { $0.name == refName }) {
                     branchRow(
-                        row.name,
+                        branch.name,
+                        displayName: row.name,
                         isCurrent: false,
                         sync: snapshot.syncStatuses.first { $0.upstream == branch.name },
                         rootPath: snapshot.rootPath,
@@ -1778,6 +1754,7 @@ struct MultiRootBranchesPopover: View {
 
     private func branchRow(
         _ name: String,
+        displayName: String? = nil,
         isCurrent: Bool,
         sync: SyncStatus?,
         rootPath: String,
@@ -1816,7 +1793,7 @@ struct MultiRootBranchesPopover: View {
             Image(systemName: isRemote ? "cloud" : (isCurrent ? "checkmark.circle.fill" : "arrow.triangle.branch"))
                 .foregroundStyle(isCurrent ? .green : .secondary)
                 .frame(width: 16)
-            Text(name)
+            Text(displayName ?? name)
                 .lineLimit(1)
                 .truncationMode(.middle)
             if incomingOutgoingInfoEnabled,
@@ -1844,7 +1821,7 @@ struct MultiRootBranchesPopover: View {
             }
             if isCurrent {
                 Menu {
-                    Button(favoriteTitle(rootPath: rootPath, name: name, isRemote: isRemote)) {
+                    Button(localizedArborString(favoriteTitle(rootPath: rootPath, name: name, isRemote: isRemote), locale: locale)) {
                         toggleFavorite(rootPath: rootPath, name: name, isRemote: isRemote)
                     }
                     Divider()
@@ -1908,7 +1885,7 @@ struct MultiRootBranchesPopover: View {
                 .foregroundStyle(.secondary)
             } else {
                 Menu {
-                    Button(favoriteTitle(rootPath: rootPath, name: name, isRemote: isRemote)) {
+                    Button(localizedArborString(favoriteTitle(rootPath: rootPath, name: name, isRemote: isRemote), locale: locale)) {
                         toggleFavorite(rootPath: rootPath, name: name, isRemote: isRemote)
                     }
                     Divider()

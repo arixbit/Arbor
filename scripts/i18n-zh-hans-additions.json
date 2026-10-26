@@ -1,4 +1,11 @@
 {
+  "in %@": "位于 %@",
+  "No stashes": "没有贮藏",
+  "Automatic (fast-forward when possible)": "自动（可用时 fast-forward）",
+  "Fast-forward only": "仅 fast-forward",
+  "No fast-forward (create merge commit)": "不使用 fast-forward（创建 merge commit）",
+  "Squash (single-parent commit)": "squash（单父提交）",
+  "Use custom commit message": "使用自定义提交信息",
   "%@\n\n%@": "%@\n\n%@",
   "%@ (theirs)": "%@（theirs）",
   "%@ has %lld local commit(s) not contained in %@. Resetting it will discard those commits from the branch ref.": "%@ 有 %lld 个本地提交不在 %@ 中。重置会从分支引用中丢弃这些提交。",

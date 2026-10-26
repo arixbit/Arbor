@@ -45,6 +45,7 @@ struct MultiRootMergePresentationModifier: ViewModifier {
     @Binding var noVerify: Bool
     @Binding var allowUnrelatedHistories: Bool
     @Binding var rollbackContext: MultiRootMergeRollbackContext?
+    let locale: Locale
     let branchName: String
     let snapshots: [GitRootBranchSnapshot]
     let mergedBranchesByRoot: [String: Set<String>]
@@ -71,6 +72,7 @@ struct MultiRootMergePresentationModifier: ViewModifier {
                     onMerge: onMerge,
                     onCancel: onCancel
                 )
+                .environment(\.locale, locale)
             }
             .sheet(item: $rollbackContext) { context in
                 RebasedMultiRootMergeRollbackView(
