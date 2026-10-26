@@ -842,6 +842,7 @@ extension ContentView {
                 },
                 onCancel: { mergeWorkspace.showActionDialog = false }
             )
+            .environment(\.locale, appLocale)
         }
         .sheet(isPresented: $pullWorkspace.showDialog) {
             PullDialogView(

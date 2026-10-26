@@ -262,7 +262,7 @@ struct RebasedBranchesPopover: View {
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
                                     .frame(width: 16)
-                                    Text(target.title)
+                                    Text(LocalizedStringKey(target.title))
                                         .lineLimit(1)
                                 }
                                 .padding(.horizontal, 6)
@@ -297,7 +297,7 @@ struct RebasedBranchesPopover: View {
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                         .frame(width: 16)
-                                    Text(target.title)
+                                    Text(LocalizedStringKey(target.title))
                                         .lineLimit(1)
                                 }
                                 .padding(.horizontal, 6)
@@ -566,6 +566,7 @@ struct RebasedBranchesPopover: View {
                 .padding(.bottom, 8)
             }
             .frame(maxHeight: 380)
+            .accessibilityIdentifier("branch-reference-list")
 
             Divider()
                 .padding(.vertical, 8)

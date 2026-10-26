@@ -4,6 +4,7 @@ import AppKit
 
 struct ContentView: View {
     @Environment(\.openWindow) var openWindow
+    @Environment(\.locale) var appLocale
 
     /// 项目路径、仓库与主窗口导航状态。
     @StateObject var projectWorkspace: ProjectWorkspaceState

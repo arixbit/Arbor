@@ -812,5 +812,8 @@
   "%@ conflicted files": "%@ 个冲突文件",
   "%@ resolved": "%@ 个已解决",
   "%@ selected": "已选择 %@ 项",
-  "Continue, Skip, or Abort the operation from the recovery actions.": "从恢复操作中选择继续、跳过或中止。"
+  "Continue, Skip, or Abort the operation from the recovery actions.": "从恢复操作中选择继续、跳过或中止。",
+  "RECENT": "最近",
+  "TAGS": "标签",
+  "STASHES": "贮藏"
 }

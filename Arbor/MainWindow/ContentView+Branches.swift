@@ -356,6 +356,7 @@ extension ContentView {
                     },
                     onCancel: { branchWorkspace.showPopover = false }
                 )
+                .environment(\.locale, appLocale)
             } else {
                 RebasedBranchesPopover(
                 projectPath: projectWorkspace.path,
@@ -481,6 +482,7 @@ extension ContentView {
                     branchWorkspace.showPopover = false
                 }
                 )
+                .environment(\.locale, appLocale)
             }
         }
     }

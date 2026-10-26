@@ -9673,7 +9673,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "RECENT"
+            "value" : "最近"
           }
         }
       }
@@ -13103,7 +13103,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "STASHES"
+            "value" : "贮藏"
           }
         }
       }
@@ -13628,7 +13628,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TAGS"
+            "value" : "标签"
           }
         }
       }

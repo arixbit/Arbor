@@ -367,42 +367,75 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testBranchPopupReferencesAndActionsStayReachable() throws {
+        try checkBranchPopupReferencesAndActions(language: "en")
+    }
+
+    @MainActor
+    func testChineseBranchPopupReferencesAndActionsStayReachable() throws {
+        try checkBranchPopupReferencesAndActions(language: "zh-Hans")
+    }
+
+    @MainActor
+    private func checkBranchPopupReferencesAndActions(language: String) throws {
         continueAfterFailure = false
+        let chinese = language == "zh-Hans"
         let fixture = ArborUIFixture.repositoryRoot
             .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
         let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
-        session.extraLaunchArguments = ["-arbor.appLanguage", "en"]
+        session.extraLaunchArguments = ["-arbor.appLanguage", language]
         session.launch()
         defer { session.terminate() }
+        if chinese { resize(session.window, to: CGSize(width: 980, height: 640), label: "chinese-branches") }
         XCTAssertTrue(session.openBranchesPopover())
-        for title in ["Commit Changes…", "New Branch…", "Checkout Tag or Revision…"] {
+        capture(window: session.window, named: "arbor-branch-popup-compact-actions-\(language)")
+        if chinese {
+            let tree = XCTAttachment(string: session.app.debugDescription)
+            tree.name = "arbor-branch-popup-chinese-tree"
+            tree.lifetime = .keepAlways
+            add(tree)
+        }
+        let actionTitles = chinese
+            ? ["提交变更…", "新建分支…", "检出 Tag 或版本…"]
+            : ["Commit Changes…", "New Branch…", "Checkout Tag or Revision…"]
+        for title in actionTitles {
             XCTAssertEqual(session.app.buttons.matching(NSPredicate(format: "label == %@", title)).count, 1)
         }
-        let references = session.app.scrollViews.containing(.staticText, identifier: "LOCAL BRANCHES").firstMatch
-        let local = session.app.staticTexts["LOCAL BRANCHES"].firstMatch
+        let localTitle = chinese ? "本地分支" : "LOCAL BRANCHES"
+        let references = session.app.descendants(matching: .any)["branch-reference-list"].firstMatch
+        let local = references.staticTexts[localTitle].firstMatch
         XCTAssertTrue(local.waitForExistence(timeout: 5))
         XCTAssertTrue(references.frame.contains(local.frame), "The footer hides the branch list")
-        capture(window: session.window, named: "arbor-branch-popup-compact-actions")
+        if chinese { XCTAssertTrue(references.staticTexts["最近"].exists) }
 
-        let search = session.app.textFields["Search branches"].firstMatch
-        search.click()
-        session.app.typeText("localization-audit")
-        let longBranch = session.app.staticTexts.matching(
-            NSPredicate(format: "value CONTAINS %@", "localization-audit-with-a-deliberately-long-branch-name")
+        let search = session.app.textFields[chinese ? "搜索分支" : "Search branches"].firstMatch
+        paste("localization-audit", into: search, app: session.app)
+        capture(window: session.window, named: "arbor-branch-popup-long-search-\(language)")
+        let longBranch = references.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "localization-audit-with-a-deliberately-long-branch-name")
         ).firstMatch
         XCTAssertTrue(longBranch.waitForExistence(timeout: 5))
+        XCTAssertTrue(longBranch.isHittable)
         XCTAssertTrue(references.frame.contains(longBranch.frame), "The long branch escapes the list")
-        capture(window: session.window, named: "arbor-branch-popup-long-search")
+        if chinese {
+            for title in ["标签", "贮藏"] {
+                let heading = references.staticTexts[title]
+                XCTAssertTrue(heading.exists)
+                XCTAssertTrue(references.frame.contains(heading.frame))
+            }
+        }
 
-        let actions = session.app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Actions")).firstMatch
+        let actions = session.app.menuButtons[chinese ? "操作" : "Actions"].firstMatch
+        XCTAssertTrue(session.window.frame.contains(actions.frame))
         actions.click()
-        let merge = session.app.menuItems["Merge…"].firstMatch
-        XCTAssertTrue(merge.waitForExistence(timeout: 5))
+        let merge = try XCTUnwrap(
+            session.app.menuItems.matching(identifier: "Merge…").allElementsBoundByIndex
+                .first { !$0.frame.isEmpty },
+            "Merge is not visible in the Actions menu"
+        )
         XCTAssertTrue(merge.isEnabled)
         merge.click()
         XCTAssertTrue(session.app.sheets.firstMatch.waitForExistence(timeout: 5))
-        session.app.sheets.firstMatch.buttons["Cancel"].firstMatch.click()
+        session.app.sheets.firstMatch.buttons[chinese ? "取消" : "Cancel"].firstMatch.click()
     }
 
     @MainActor
