@@ -18,6 +18,7 @@ final class ArborAppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.regular)
         ArborNativeNotificationCenter.shared.install()
+        AppUpdateChecker.shared.start()
         // `open --args` can be terminated by AppKit's automatic-termination
         // pass before a delayed SwiftUI WindowGroup materialises. Create the
         // explicit project window during launch, then let the normal scene

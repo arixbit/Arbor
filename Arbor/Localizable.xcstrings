@@ -22041,12 +22041,12 @@
         }
       }
     },
-    "Check GitHub Releases online at most once a day; you can also check manually. Only the latest version number is read; no data is uploaded." : {
+    "Check for updates daily. Updates are downloaded and verified in Arbor, then installed when you choose to restart." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每天最多联网检查一次 GitHub Releases；也可以随时手动检查。检查只读取最新版本号，不上传任何数据。"
+            "value" : "每天检查更新。在 Arbor 内下载并验证更新，待你选择重启后安装。"
           }
         }
       }

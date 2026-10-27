@@ -9,6 +9,8 @@ if ! command -v xcodegen >/dev/null 2>&1; then
   exit 2
 fi
 
+"$repo_root/scripts/prepare-sparkle.sh"
+
 # Xcodegen materializes values from the spec into a referenced Info.plist. Keep
 # the checked-in template with build-setting placeholders so release version
 # overrides continue to work and generation stays side-effect free.

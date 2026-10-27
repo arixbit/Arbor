@@ -462,9 +462,6 @@ extension ContentView {
         .onReceive(NotificationCenter.default.publisher(for: .arborOpenProjectPanel)) { _ in
             showOpenPanel()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .arborCheckForUpdates)) { _ in
-            performManualUpdateCheck()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .arborInitProjectPanel)) { _ in
             showInitializePanel()
         }

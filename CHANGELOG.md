@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.27 - 2026-10-27
+
+Updates install inside Arbor, and file selections open their diff or contents in
+the main editor area.
+
+- Selecting a file in Changes opens its diff and selecting a file in the
+  Project tree opens its contents in the main editor area; Log keeps its
+  selected commit when you return to it.
+- The application menu and settings open Sparkle's update window, which
+  downloads and verifies the update before installing and relaunching Arbor.
+- One application-wide updater checks daily and preserves the previous
+  automatic-check preference. Automatic installation is off by default.
+- Releases include an EdDSA-signed ZIP and `appcast.xml`. Publishing fails
+  when the signing key does not match the public key embedded in the app.
+- Users on 1.0.26 or earlier must manually install this version once to
+  receive subsequent updates in the application.
+
 ## 1.0.26 - 2026-10-26
 
 Chinese dialog coverage across the multi-root branch workflow, with a

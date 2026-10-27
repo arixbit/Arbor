@@ -3,6 +3,7 @@ import SwiftUI
 struct ProjectCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var windowContext = ArborWindowCommandContext.shared
+    @ObservedObject private var updateChecker = AppUpdateChecker.shared
 
     private var actionContext: ArborVCSActionContext? { windowContext.active?.action }
     private var operationContext: ArborVCSOperationContext? { windowContext.active?.operation }
@@ -11,8 +12,9 @@ struct ProjectCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("Check for Updates…") {
-                NotificationCenter.default.post(name: .arborCheckForUpdates, object: nil)
+                updateChecker.checkForUpdates()
             }
+            .disabled(!updateChecker.canCheckForUpdates)
             Button("About Arbor") {
                 openWindow(id: "about")
             }

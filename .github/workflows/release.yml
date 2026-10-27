@@ -12,7 +12,8 @@ jobs:
   package:
     # macOS 14 public runners are Apple Silicon and match the published arm64
     # artifact name. Signed production releases use the documented maintainer
-    # flow in RELEASE.md instead of storing Apple credentials in CI.
+    # flow in RELEASE.md instead of storing Apple credentials in CI. Sparkle's
+    # independent EdDSA key authenticates both signed and unsigned updates.
     # Validation runs in ci-test.yml on every main push; tag builds set
     # ARBOR_SKIP_TESTS=1 and only package the already-tested commit.
     runs-on: macos-14
@@ -22,12 +23,20 @@ jobs:
       ARBOR_ARCHS: arm64
       ARBOR_SKIP_TESTS: "1"
       MACOSX_DEPLOYMENT_TARGET: "14.0"
+      SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Require the update signing key
+        run: |
+          if [[ -z "$SPARKLE_EDDSA_PRIVATE_KEY" ]]; then
+            echo "Configure the SPARKLE_EDDSA_PRIVATE_KEY repository secret before releasing. See RELEASE.md." >&2
+            exit 1
+          fi
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
@@ -68,4 +77,5 @@ jobs:
             --title "Arbor $ARBOR_RELEASE_VERSION (unsigned arm64)" \
             --notes-file "$notes_file" \
             "$release_dir"/Arbor-* \
+            "$release_dir/appcast.xml" \
             "$release_dir/SHA256SUMS"

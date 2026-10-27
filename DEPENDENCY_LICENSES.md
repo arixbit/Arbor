@@ -7,6 +7,12 @@ by Cargo package metadata and must be reviewed whenever dependencies change.
 
 Direct runtime dependencies:
 
+The macOS app embeds [Sparkle 2.10.1](https://github.com/sparkle-project/Sparkle),
+licensed under the Sparkle license (BSD-style) with the bundled third-party
+notices. The complete upstream license is shipped in
+`Arbor/Resources/Sparkle-LICENSE.txt`. Its release archive is pinned and
+SHA-256 checked by `scripts/prepare-sparkle.sh`.
+
 | Crate | License | Source |
 |---|---|---|
 | `gix` | MIT OR Apache-2.0 | https://github.com/GitoxideLabs/gitoxide |

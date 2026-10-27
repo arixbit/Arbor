@@ -34,6 +34,7 @@ rm -f -- \
   "$release_dir"/Arbor-"$version"-*.dmg \
   "$release_dir"/Arbor-"$version"-*.zip \
   "$release_dir/SHA256SUMS" \
+  "$release_dir/appcast.xml" \
   "$release_dir/CHANGELOG.md"
 cargo fmt --manifest-path "$repo_root/arbor-engine/Cargo.toml" --check
 # Tag builds reuse the validation already performed on main by ci-test.yml;
@@ -70,6 +71,13 @@ if [[ "$archive_version" != "$version" ]]; then
   exit 1
 fi
 
+if [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
+  # Seal the app while preserving Sparkle's upstream-signed framework/helpers.
+  # The update generator rejects partially signed Apple Silicon bundles.
+  codesign --force --sign - "$app_path"
+  codesign --verify --deep --strict "$app_path"
+fi
+
 "$repo_root/scripts/make-dmg.sh" "$app_path" "$dmg_path"
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
 # Release notes must show only the current version's section; shipping the
@@ -94,9 +102,11 @@ if [[ "${ARBOR_UNSIGNED:-1}" != "1" ]]; then
   spctl -a -vv --type open "$app_path"
 fi
 
+"$repo_root/scripts/sign-update.sh" "$zip_path"
+
 (
   cd -- "$release_dir"
-  shasum -a 256 "$(basename "$dmg_path")" "$(basename "$zip_path")"
+  shasum -a 256 "$(basename "$dmg_path")" "$(basename "$zip_path")" appcast.xml
 ) > "$release_dir/SHA256SUMS"
 
 echo "Local release artifacts: $release_dir"

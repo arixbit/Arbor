@@ -9,8 +9,6 @@ struct DiagnosticsSettingsView: View {
     @State private var status = ""
     @State private var showReportConfirmation = false
     @State private var showGpgAgentSettings = false
-    @State private var updateCheckStatus: String?
-    @State private var updateCheckReleaseURL: URL?
     @StateObject private var updateChecker = AppUpdateChecker.shared
     @AppStorage("arbor.git.useCredentialHelper") private var useCredentialHelper = false
     @AppStorage("arbor.git.autoFetch.v1") private var gitAutoFetch = false
@@ -202,33 +200,17 @@ struct DiagnosticsSettingsView: View {
                 Toggle(
                     "Automatically Check for Updates",
                     isOn: Binding(
-                        get: { AppUpdateChecker.autoCheckEnabled },
-                        set: { AppUpdateChecker.setAutoCheckEnabled($0) }
+                        get: { updateChecker.automaticallyChecksForUpdates },
+                        set: { updateChecker.setAutomaticallyChecksForUpdates($0) }
                     )
                 )
-                Text("Check GitHub Releases online at most once a day; you can also check manually. Only the latest version number is read; no data is uploaded.")
+                Text("Check for updates daily. Updates are downloaded and verified in Arbor, then installed when you choose to restart.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                HStack {
-                    Button("Check for Updates Now") {
-                        runManualUpdateCheck()
-                    }
-                    .disabled(updateChecker.isChecking)
-                    if updateChecker.isChecking {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
+                Button("Check for Updates Now") {
+                    updateChecker.checkForUpdates()
                 }
-                if let updateCheckStatus {
-                    Text(updateCheckStatus)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if let updateCheckReleaseURL {
-                    Button("Open Downloads Page") {
-                        NSWorkspace.shared.open(updateCheckReleaseURL)
-                    }
-                }
+                .disabled(!updateChecker.canCheckForUpdates)
             }
             Section("Diagnostics") {
                 Text("Arbor records operation names, version, repository basename, and error codes only.")
@@ -250,23 +232,6 @@ struct DiagnosticsSettingsView: View {
         }
         .sheet(isPresented: $showGpgAgentSettings) {
             GpgAgentSettingsView()
-        }
-    }
-
-    private func runManualUpdateCheck() {
-        updateCheckReleaseURL = nil
-        updateChecker.checkNow { outcome in
-            switch outcome {
-            case .updateAvailable(let info, let current):
-                updateCheckStatus = "发现新版本 \(info.version)（当前 \(current)）"
-                updateCheckReleaseURL = info.releaseURL
-            case .upToDate(let current):
-                updateCheckStatus = "已是最新版本（\(current)）"
-            case .failed(let reason):
-                updateCheckStatus = "检查失败：\(reason)"
-            case .skipped:
-                break
-            }
         }
     }
 

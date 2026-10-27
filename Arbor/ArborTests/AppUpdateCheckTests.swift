@@ -2,94 +2,54 @@ import XCTest
 @testable import Arbor
 
 final class AppUpdateCheckTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var suiteName: String!
 
-    // MARK: - Version comparison
+    override func setUp() {
+        super.setUp()
+        suiteName = "AppUpdateCheckTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
 
-    func testPatchBumpComparesAsNewer() {
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    func testNewInstallUsesSparkleDefault() {
+        XCTAssertNil(appUpdateLegacyAutomaticCheckPreference(in: defaults))
+    }
+
+    func testExistingOptOutIsPreserved() {
+        defaults.set(false, forKey: "arbor.autoCheckForUpdates")
+        XCTAssertEqual(appUpdateLegacyAutomaticCheckPreference(in: defaults), false)
+    }
+
+    func testExistingOptInIsPreserved() {
+        defaults.set(true, forKey: "arbor.autoCheckForUpdates")
+        XCTAssertEqual(appUpdateLegacyAutomaticCheckPreference(in: defaults), true)
+    }
+
+    func testSparklePreferenceTakesPrecedenceAfterMigration() {
+        defaults.set(false, forKey: "arbor.autoCheckForUpdates")
+        defaults.set(true, forKey: "SUEnableAutomaticChecks")
+        XCTAssertNil(appUpdateLegacyAutomaticCheckPreference(in: defaults))
+    }
+
+    @MainActor
+    func testPackagedAppContainsUpdaterAndFeedConfiguration() throws {
+        let bundle = Bundle(for: ArborAppDelegate.self)
         XCTAssertEqual(
-            appUpdateCompareVersions("1.0.21", "1.0.20"),
-            .orderedDescending
+            bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+            "https://github.com/arixbit/Arbor/releases/latest/download/appcast.xml"
         )
-        XCTAssertEqual(
-            appUpdateCompareVersions("1.0.20", "1.0.21"),
-            .orderedAscending
-        )
-    }
-
-    func testMinorBeatsLongerPatchNumber() {
-        // 1.1.0 is newer than 1.0.21 even though 21 > 0 as text.
-        XCTAssertEqual(
-            appUpdateCompareVersions("1.1.0", "1.0.21"),
-            .orderedDescending
-        )
-    }
-
-    func testEqualVersionsAndVarianceTolerance() {
-        XCTAssertEqual(appUpdateCompareVersions("1.0.20", "1.0.20"), .orderedSame)
-        XCTAssertEqual(appUpdateCompareVersions("v1.0.20", "1.0.20"), .orderedSame)
-        // Unparseable input never claims to be a different release.
-        XCTAssertEqual(appUpdateCompareVersions("", "1.0.20"), .orderedSame)
-        XCTAssertEqual(appUpdateCompareVersions("nonsense", "1.0.20"), .orderedSame)
-    }
-
-    func testMissingSegmentsTreatAsZero() {
-        XCTAssertEqual(appUpdateCompareVersions("1.1", "1.1.0"), .orderedSame)
-        XCTAssertEqual(appUpdateCompareVersions("1.2", "1.1.9"), .orderedDescending)
-    }
-
-    // MARK: - Payload parsing
-
-    func testParseLatestReleaseExtractsTagAndLink() throws {
-        let payload = """
-        {
-          "tag_name": "v1.0.21",
-          "html_url": "https://github.com/arixbit/Arbor/releases/tag/v1.0.21",
-          "name": "Arbor 1.0.21 (unsigned arm64)"
-        }
-        """
-        let info = try XCTUnwrap(
-            appUpdateParseLatestRelease(Data(payload.utf8))
-        )
-        XCTAssertEqual(info.version, "1.0.21")
-        XCTAssertEqual(
-            info.releaseURL,
-            URL(string: "https://github.com/arixbit/Arbor/releases/tag/v1.0.21")
-        )
-        // A parsed 1.0.21 must compare newer than the running 1.0.20.
-        XCTAssertEqual(
-            appUpdateCompareVersions(info.version, "1.0.20"),
-            .orderedDescending
-        )
-    }
-
-    func testParseLatestReleaseFallsBackToReleasesPageWithoutTag() {
-        let payload = #"{"message": "Not Found"}"#
-        XCTAssertNil(appUpdateParseLatestRelease(Data(payload.utf8)))
-    }
-
-    // MARK: - Automatic check scheduling
-
-    func testAutoCheckRunsOncePerInterval() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        XCTAssertTrue(appUpdateShouldAutoCheck(lastCheck: nil, now: now))
-        XCTAssertFalse(
-            appUpdateShouldAutoCheck(
-                lastCheck: now.addingTimeInterval(-3600),
-                now: now
-            )
-        )
-        XCTAssertTrue(
-            appUpdateShouldAutoCheck(
-                lastCheck: now.addingTimeInterval(-24 * 60 * 60 - 1),
-                now: now
-            )
-        )
-        // Exactly at the interval boundary the check is due again.
-        XCTAssertTrue(
-            appUpdateShouldAutoCheck(
-                lastCheck: now.addingTimeInterval(-24 * 60 * 60),
-                now: now
-            )
-        )
+        let key = try XCTUnwrap(bundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)
+        XCTAssertEqual(Data(base64Encoded: key)?.count, 32)
+        let frameworks = try XCTUnwrap(bundle.privateFrameworksURL)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: frameworks.appendingPathComponent("Sparkle.framework").path
+        ))
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SUAutomaticallyUpdate") as? Bool, false)
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SUSendProfileInfo") as? Bool, false)
     }
 }
