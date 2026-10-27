@@ -95,10 +95,27 @@ func repositoryShouldIgnoreGitMetadataEvent(
 /// device/inode pair survives an ordinary rename, while independently created
 /// files do not share it. This lets the watcher recover the old endpoint that
 /// FSEvents omits, without guessing from names or timestamps.
+///
+/// Uses `stat()` rather than `FileManager.attributesOfItem(atPath:)`: the
+/// Foundation call also materialises every extended attribute, so a walk of a
+/// large worktree becomes hundreds of thousands of `getxattr` syscalls.
+func repositoryFileSnapshot(atPath path: String) -> RepositoryFileSnapshot? {
+    var info = stat()
+    guard stat(path, &info) == 0 else { return nil }
+    return RepositoryFileSnapshot(
+        identity: "\(UInt64(info.st_dev)):\(UInt64(info.st_ino))",
+        isDirectory: (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR)
+    )
+}
+
+/// Enumerates a worktree once. Callers that must stay cheap per event keep a
+/// snapshot cache instead of calling this on every batch; `deadline` bounds
+/// the occasional cold start on very large repositories.
 func repositoryFileSnapshots(
     rootPath: String,
     excludedRootPaths: [String] = [],
-    maxEntries: Int? = nil
+    maxEntries: Int? = nil,
+    deadline: Date? = nil
 ) -> [String: RepositoryFileSnapshot] {
     let root = URL(fileURLWithPath: rootPath).standardizedFileURL
     let excluded = excludedRootPaths.map {
@@ -111,7 +128,12 @@ func repositoryFileSnapshots(
     ) else { return [:] }
 
     var snapshots: [String: RepositoryFileSnapshot] = [:]
+    var visited = 0
     for case let url as URL in enumerator {
+        visited &+= 1
+        if visited & 0xff == 0, let deadline, Date() >= deadline {
+            break
+        }
         let path = url.standardizedFileURL.path
         let resourceValues = try? url.resourceValues(forKeys: [.isDirectoryKey])
         let isDirectory = resourceValues?.isDirectory == true
@@ -131,15 +153,10 @@ func repositoryFileSnapshots(
             continue
         }
 
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
-              let device = (attributes[.systemNumber] as? NSNumber)?.uint64Value,
-              let inode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value else {
+        guard let snapshot = repositoryFileSnapshot(atPath: path) else {
             continue
         }
-        snapshots[path] = RepositoryFileSnapshot(
-            identity: "\(device):\(inode)",
-            isDirectory: isDirectory
-        )
+        snapshots[path] = snapshot
         if let maxEntries, snapshots.count >= maxEntries {
             break
         }

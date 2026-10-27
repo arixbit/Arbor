@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.28 - 2026-10-27
+
+Saving a file no longer walks the entire working tree.
+
+- The file watcher pairs renames against a cached device/inode index instead of
+  rebuilding a snapshot of every file in the repository. On a working tree with
+  hundreds of thousands of files this dropped the cost of one save from about
+  2 seconds of CPU to under half a second.
+- File identities are read with `stat()` only, so the watcher no longer loads
+  every extended attribute while scanning.
+
 ## 1.0.27 - 2026-10-27
 
 Updates install inside Arbor, and file selections open their diff or contents in

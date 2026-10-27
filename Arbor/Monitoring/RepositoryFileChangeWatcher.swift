@@ -89,7 +89,10 @@ final class RepositoryFileChangeWatcher {
     private var deliveryScheduled = false
     private var stopped = false
     private var fileSnapshots: [String: RepositoryFileSnapshot] = [:]
-
+    /// Reverse index so an unpaired rename can find its old endpoint from the
+    /// cache instead of walking the worktree.
+    private var snapshotPathsByIdentity: [String: Set<String>] = [:]
+    private var snapshotsSeeded = false
     init(
         workdir: String,
         gitDir: String,
@@ -115,6 +118,7 @@ final class RepositoryFileChangeWatcher {
         callbackContexts = [worktreeContext]
 
         createStream(path: workdir, context: worktreeContext)
+        seedFileSnapshots()
         for metadataRootPath in metadataRootPaths where metadataRootPath != workdir {
             let metadataContext = RepositoryFileChangeCallbackContext(
                 watcher: self,
@@ -137,6 +141,92 @@ final class RepositoryFileChangeWatcher {
             self.streams.removeAll()
             self.callbackContexts.removeAll()
         }
+    }
+
+    /// Seeds the identity cache once per watched root. The walk is bounded by
+    /// both an entry budget and a deadline: a rename that involves a file the
+    /// cache never saw stays unpaired, which the refresh path already treats
+    /// conservatively, so a larger budget buys latency, not correctness.
+    private func seedFileSnapshots() {
+        guard !snapshotsSeeded else { return }
+        snapshotsSeeded = true
+        queue.async { [weak self] in
+            guard let self, !self.stopped else { return }
+            let snapshots = repositoryFileSnapshots(
+                rootPath: self.workdir,
+                excludedRootPaths: self.excludedWorktreePaths,
+                maxEntries: 20_000,
+                deadline: Date().addingTimeInterval(0.25)
+            )
+            guard !self.stopped else { return }
+            self.fileSnapshots = snapshots
+            self.snapshotPathsByIdentity = Dictionary(
+                grouping: snapshots,
+                by: { $0.value.identity }
+            ).mapValues { Set($0.map(\.key)) }
+        }
+    }
+
+    /// Recovers the old endpoint of FSEvents' unpaired renames from the cached
+    /// identities. Rebuilding a whole-worktree snapshot here made every save
+    /// that goes through a temp-file rename walk the entire repository, which
+    /// pinned a CPU core on large working trees.
+    private func resolveRenamePairs(
+        in dirtyPaths: [RepositoryDirtyPath]
+    ) -> [RepositoryDirtyPath] {
+        var affected = Set(dirtyPaths.map(\.path))
+        for path in dirtyPaths {
+            if let oldPath = path.oldPath {
+                affected.insert(oldPath)
+            }
+        }
+        for path in dirtyPaths where path.kind == .renamed && path.oldPath == nil {
+            guard let snapshot = repositoryFileSnapshot(atPath: path.path),
+                  let candidates = snapshotPathsByIdentity[snapshot.identity] else {
+                continue
+            }
+            affected.formUnion(candidates)
+        }
+
+        var previous: [String: RepositoryFileSnapshot] = [:]
+        var current: [String: RepositoryFileSnapshot] = [:]
+        for path in affected {
+            if let snapshot = fileSnapshots[path] {
+                previous[path] = snapshot
+            }
+            updateFileSnapshot(atPath: path)
+            if let snapshot = fileSnapshots[path] {
+                current[path] = snapshot
+            }
+        }
+
+        return repositoryPairRenameEvents(
+            dirtyPaths: dirtyPaths,
+            previous: previous,
+            current: current
+        )
+    }
+
+    private func updateFileSnapshot(atPath path: String) {
+        let cached = fileSnapshots[path]
+        guard let snapshot = repositoryFileSnapshot(atPath: path) else {
+            guard let cached else { return }
+            fileSnapshots.removeValue(forKey: path)
+            snapshotPathsByIdentity[cached.identity]?.remove(path)
+            if snapshotPathsByIdentity[cached.identity]?.isEmpty == true {
+                snapshotPathsByIdentity.removeValue(forKey: cached.identity)
+            }
+            return
+        }
+        guard cached?.identity != snapshot.identity else { return }
+        if let cached {
+            snapshotPathsByIdentity[cached.identity]?.remove(path)
+            if snapshotPathsByIdentity[cached.identity]?.isEmpty == true {
+                snapshotPathsByIdentity.removeValue(forKey: cached.identity)
+            }
+        }
+        fileSnapshots[path] = snapshot
+        snapshotPathsByIdentity[snapshot.identity, default: []].insert(path)
     }
 
     /// Used by the index revision fallback when a filesystem event is not
@@ -219,17 +309,7 @@ final class RepositoryFileChangeWatcher {
                     $0.kind == .renamed && $0.oldPath == nil
                 }
             if needsRenamePairing {
-                let currentSnapshots = repositoryFileSnapshots(
-                    rootPath: self.workdir,
-                    excludedRootPaths: self.excludedWorktreePaths,
-                    maxEntries: 20_000
-                )
-                dirtyPaths = repositoryPairRenameEvents(
-                    dirtyPaths: rawDirtyPaths,
-                    previous: self.fileSnapshots,
-                    current: currentSnapshots
-                )
-                self.fileSnapshots = currentSnapshots
+                dirtyPaths = self.resolveRenamePairs(in: rawDirtyPaths)
             } else {
                 dirtyPaths = rawDirtyPaths
             }
