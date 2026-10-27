@@ -39,7 +39,7 @@ extension ContentView {
     /// 已暂存组：staged 维度有变更
     var stagedEntries: [FileEntry] { repositoryStatus.entries.filter { $0.staged != .unchanged } }
     var selectedEntry: FileEntry? {
-        guard let selection = fileWorkspace.selection else { return nil }
+        guard let selection = fileWorkspace.selection ?? fileWorkspace.selectionModePath else { return nil }
         return repositoryStatus.entries.first { $0.path == selection }
     }
     var selectedEntryIsConflicted: Bool {
@@ -141,46 +141,32 @@ extension ContentView {
     }
 
     func selectChangedFile(_ path: String) {
+        if repositoryStatus.entries.contains(where: {
+            $0.path == path && ($0.staged == .conflicted || $0.unstaged == .conflicted)
+        }) {
+            openConflictFromStage(path)
+            return
+        }
+        fileWorkspace.treeDiffRequest = nil
         fileWorkspace.previewPath = path
         fileWorkspace.previewComparisonMode = nil
         fileWorkspace.previewThreeVersions = false
+        fileWorkspace.previewVisible = false
         fileWorkspace.selectionModePath = nil
-        fileWorkspace.selection = nil
+        fileWorkspace.selection = path
         fileWorkspace.fileSelection = nil
-        // GitStagePanel separates selection from the Show Diff Preview action.
-        // Changing a row updates an already-open preview, but does not
-        // silently reopen a preview the user explicitly hid.
     }
 
     func previewChangedFile(_ path: String) {
-        // GitStagePanel reserves double-click/Enter for Open Source. Arbor has
-        // no IDE editor. When Log owns the editor workspace, preserve that
-        // workspace and keep the source action inside the Commit/Stash side
-        // instead of replacing the selected history with a file viewer.
-        if projectWorkspace.toolWindowMode == .log {
-            fileWorkspace.previewPath = path
-            fileWorkspace.previewComparisonMode = nil
-            fileWorkspace.previewThreeVersions = false
-            fileWorkspace.version = .local
-            fileWorkspace.selectionModePath = nil
-            fileWorkspace.selection = nil
+        showCommitFileVersion(path, version: .local)
+    }
+
+    func selectProjectFile(_ path: String?) {
+        guard let path else {
             fileWorkspace.fileSelection = nil
-            fileWorkspace.previewVisible = true
-            feedbackCenter.warning(
-                "Open Source is not an IDE editor",
-                detail: "The Commit/Stash preview remains open so Git Log is not replaced.",
-                nextStep: "Use the single-click diff or open the file from Project."
-            )
             return
         }
-        fileWorkspace.previewPath = nil
-        fileWorkspace.previewComparisonMode = nil
-        fileWorkspace.previewThreeVersions = false
-        fileWorkspace.selection = nil
-        fileWorkspace.selectionModePath = nil
-        fileWorkspace.fileSelection = path
-        fileWorkspace.version = .local
-        fileWorkspace.previewVisible = false
+        showCommitFileVersion(path, version: .local)
     }
 
     func previewFirstChangedFile() {

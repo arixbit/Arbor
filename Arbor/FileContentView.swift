@@ -726,9 +726,9 @@ private struct CodeLinesView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(
-                            lineChanges[index + 1].map {
+                            (lineChanges[index + 1].map {
                                 "Line \(index + 1), \($0.accessibilityLabel)"
-                            } ?? "Line \(index + 1)"
+                            } ?? "Line \(index + 1)") + ": " + line
                         )
                     }
                 }

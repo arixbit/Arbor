@@ -522,16 +522,7 @@ extension ContentView {
                         entries: repositoryStatus.entries,
                         selection: Binding(
                             get: { fileWorkspace.fileSelection },
-                            set: { value in
-                                fileWorkspace.treeDiffRequest = nil
-                                fileWorkspace.fileSelection = value
-                                fileWorkspace.version = .local
-                                if value != nil {
-                                    fileWorkspace.selection = nil
-                                    fileWorkspace.selectionModePath = nil
-                                    logSelectionState.selection = nil
-                                }
-                            }
+                            set: selectProjectFile
                         ),
                         onOpen: showOpenPanel,
                         onReveal: { if let repo { showInFinder(repo) } },
@@ -622,17 +613,8 @@ extension ContentView {
                             projectPath: projectWorkspace.path,
                             entries: repositoryStatus.entries,
                             selection: Binding(
-                            get: { fileWorkspace.fileSelection },
-                            set: { value in
-                                fileWorkspace.treeDiffRequest = nil
-                                fileWorkspace.fileSelection = value
-                                fileWorkspace.version = .local
-                                if value != nil {
-                                        fileWorkspace.selection = nil
-                                        fileWorkspace.selectionModePath = nil
-                                        logSelectionState.selection = nil
-                                    }
-                                }
+                                get: { fileWorkspace.fileSelection },
+                                set: selectProjectFile
                             ),
                             onOpen: showOpenPanel,
                             onReveal: { if let repo { showInFinder(repo) } },
@@ -669,9 +651,8 @@ extension ContentView {
         }
     }
 
-    /// The Log editor stays in the window for both the Commit and the Log tool
-    /// window, matching the reference layout where committing never hides the
-    /// history. Only the Operations surface replaces it.
+    /// Commit and Log both use history as the default editor. Explicit file
+    /// selections open a diff or source view in that same editor area.
     var showsLogWorkspace: Bool {
         projectWorkspace.toolWindowMode != .operations
     }
@@ -686,6 +667,70 @@ extension ContentView {
 
     @ViewBuilder
     var mainContext: some View {
+        VStack(spacing: 0) {
+            if repo != nil, let path = workspaceEditorPath {
+                HStack(spacing: 12) {
+                    Button(action: closeWorkspaceFile) {
+                        Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
+                            .frame(height: 26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("workspace-return-to-log")
+
+                    HStack(spacing: 6) {
+                        Image(systemName: repositoryFileSymbol(for: path))
+                        Text((path as NSString).lastPathComponent)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button(action: closeWorkspaceFile) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10))
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Close")
+                        .accessibilityLabel("Close")
+                        .accessibilityIdentifier("workspace-close-file")
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Design.Colors.selection, in: RoundedRectangle(cornerRadius: 5))
+                    .help(path)
+                    Spacer(minLength: 0)
+                }
+                .font(Design.Typography.interface(12))
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(Design.Colors.chrome)
+                Divider()
+            }
+            mainEditorContent
+        }
+    }
+
+    private var workspaceEditorPath: String? {
+        fileWorkspace.fileSelection
+            ?? fileWorkspace.treeDiffRequest?.entry.path
+            ?? (selectedEntryIsConflicted ? nil : fileWorkspace.selection)
+            ?? fileWorkspace.selectionModePath
+    }
+
+    func closeWorkspaceFile() {
+        fileWorkspace.selection = nil
+        fileWorkspace.fileSelection = nil
+        fileWorkspace.selectionModePath = nil
+        fileWorkspace.treeDiffRequest = nil
+        fileWorkspace.previewPath = nil
+        fileWorkspace.previewVisible = false
+        fileWorkspace.previewComparisonMode = nil
+        fileWorkspace.previewThreeVersions = false
+    }
+
+    @ViewBuilder
+    private var mainEditorContent: some View {
         if let loadError = repositoryStatus.loadError, projectWorkspace.repository == nil {
             ProjectLoadErrorView(
                 message: loadError,
@@ -706,13 +751,9 @@ extension ContentView {
                 onClone: { cloneWorkspace.showDialog = true },
                 onSelect: requestOpenProject
             )
-        } else if showsLogWorkspace {
-            // Git Log is an editor workspace. A stale file selection (most
-            // commonly a conflicted path left by the Commit tool window) must
-            // never replace the graph/details workspace with Merge Revisions.
-            // Rebased keeps the staging workbench on the left and the Log
-            // editor on the right until the user explicitly opens the
-            // resolver from that workbench.
+        } else if showsLogWorkspace && workspaceEditorPath == nil {
+            // An automatically selected conflict belongs to the resolver;
+            // only an explicit diff or source selection replaces history.
             logWorkspace
         } else if selectedEntryIsConflicted {
             VStack(spacing: 12) {
@@ -745,6 +786,8 @@ extension ContentView {
                 selectionModePath: fileWorkspace.selectionModePath,
                 refreshToken: fileWorkspace.refreshToken
             )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("workspace-diff-editor")
         } else if let fileSelection = fileWorkspace.fileSelection {
             let versionOptions = fileContentVersionOptions
             let effectiveVersion = resolvedFileContentVersion(
@@ -767,6 +810,8 @@ extension ContentView {
                 blameRequestID: fileWorkspace.blameRequestID,
                 refreshToken: fileWorkspace.refreshToken
             )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("workspace-file-editor")
             .onAppear {
                 if effectiveVersion != fileWorkspace.version {
                     fileWorkspace.version = effectiveVersion

@@ -221,28 +221,89 @@ final class ArborUISmokeNavigationUITests: XCTestCase {
 /// click must open that file in the main area.
 final class ArborUISmokeProjectTreeUITests: XCTestCase {
     @MainActor
+    private func launch(_ session: ArborUISession) {
+        session.launch()
+        // Unsigned Debug builds can show Sparkle's missing-key startup error.
+        // Dismiss that unrelated dialog before exercising the file editor.
+        let updaterError = session.app.dialogs.containing(
+            .staticText, identifier: "Unable to Check For Updates"
+        ).firstMatch
+        if updaterError.exists {
+            updaterError.buttons["OK"].click()
+            XCTAssertTrue(session.waitForStableState(timeout: 30))
+        }
+    }
+
+    @MainActor
     func testClickingAFileRowShowsItsContent() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
 
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
-        session.launch()
+        launch(session)
         defer { session.terminate() }
 
         XCTAssertTrue(session.openProjectTree(), "the project tree did not open")
 
         let row = session.window.buttons["README.md"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10), "the project tree does not list README.md")
-        let before = session.screenState()
-        row.click()
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
 
-        let deadline = Date().addingTimeInterval(10)
-        var changed = session.screenState() != before
-        while Date() < deadline, !changed {
-            Thread.sleep(forTimeInterval: 0.25)
-            changed = session.screenState() != before
+        let editor = session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "a project file must open its content in the main editor")
+        XCTAssertTrue(editor.staticTexts["Local Version · README.md"].exists)
+        let firstLine = editor.otherElements["Line 1: # Arbor UI Fixture"].firstMatch
+        XCTAssertTrue(firstLine.waitForExistence(timeout: 10), "the editor must display the actual file contents")
+        session.recordScreenshot(named: "project-file-content")
+    }
+
+    @MainActor
+    func testClickingChangesOpensDiffAndProjectFileOpensContent() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.toolWindowMode", "commit",
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+        ]
+        launch(session)
+        defer { session.terminate() }
+
+        let commit = try XCTUnwrap(session.window.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Select commit ")
+        ).allElementsBoundByIndex.last)
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let selectedCommitLabel = commit.label
+        XCTAssertTrue(commit.isSelected)
+
+        let diff = session.window.descendants(matching: .any)["workspace-diff-editor"].firstMatch
+        for (name, expected) in [("App.swift", "let modified = true"), ("Engine.swift", "var revision = 2")] {
+            let row = session.window.staticTexts[name].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            XCTAssertTrue(diff.waitForExistence(timeout: 10), "selecting \(name) must replace Log with its diff")
+            XCTAssertTrue(diff.staticTexts.matching(
+                NSPredicate(format: "value CONTAINS %@", expected)
+            ).firstMatch.waitForExistence(timeout: 10), "the diff must show the selected file's changes")
+            session.recordScreenshot(named: "changes-diff-\(name)")
         }
-        XCTAssertTrue(changed, "clicking README.md in the project tree changed nothing")
+
+        let projectFile = session.window.buttons["README.md"].firstMatch
+        XCTAssertTrue(projectFile.waitForExistence(timeout: 10))
+        projectFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let content = session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
+        XCTAssertTrue(content.waitForExistence(timeout: 10))
+        XCTAssertTrue(content.staticTexts["Local Version · README.md"].exists)
+        XCTAssertFalse(diff.exists, "selecting a project file must leave the diff editor")
+        session.recordScreenshot(named: "changes-to-project-content")
+
+        session.window.buttons["workspace-return-to-log"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(session.window.textFields["log-text-filter"].waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.buttons[selectedCommitLabel].isSelected, "returning to Log must retain the selected commit")
+        XCTAssertFalse(content.exists, "returning to Log must close the file editor")
+        session.recordScreenshot(named: "file-back-to-log")
     }
 }
 

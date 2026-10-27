@@ -97,9 +97,7 @@ extension ContentView {
                         // Git Log is an editor-like workspace, not a narrow
                         // tool-window table. Clear file context so the main
                         // workspace can own the history graph and inspector.
-                        fileWorkspace.selection = nil
-                        fileWorkspace.fileSelection = nil
-                        fileWorkspace.selectionModePath = nil
+                        closeWorkspaceFile()
                         logList.viewMode = .graph
                         loadLog()
                     }
