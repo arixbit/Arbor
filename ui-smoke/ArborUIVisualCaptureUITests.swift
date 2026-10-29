@@ -149,7 +149,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         XCTAssertTrue(session.openProjectTree())
         resize(session.window, to: Self.targetSize, label: "log-filters")
 
-        let branchMenu = session.window.menuButtons["log-branch-filter"]
+        let branchMenu = session.window.descendants(matching: .any)["log-branch-filter"].firstMatch
         branchMenu.click()
         let branchItem = session.app.menuItems.matching(NSPredicate(format: "title == %@", longBranch)).firstMatch
         XCTAssertTrue(branchItem.waitForExistence(timeout: 5))
@@ -205,7 +205,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         defer { session.terminate() }
         resize(session.window, to: Self.targetSize, label: "log-paths")
 
-        let paths = session.window.menuButtons["log-path-filter"]
+        let paths = session.window.descendants(matching: .any)["log-path-filter"].firstMatch
         paths.click()
         session.app.menuItems["Edit Paths…"].click()
         let sheet = session.window.sheets.firstMatch

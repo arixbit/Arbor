@@ -39,15 +39,21 @@ var compactLogWorkspace: some View {
     ZStack {
         logGraphPanel
             .overlay(alignment: .topTrailing) {
-                Button {
-                    logSelectionState.inspectorPresented = true
-                } label: {
-                    Label("View Commit Details", systemImage: "sidebar.right")
+                // Hide the button by removing it: `accessibilityHidden` does
+                // not reach an overlay's subtree on every macOS version, which
+                // leaves a control that VoiceOver and the UI suite can find
+                // but nobody can click while the inspector is open.
+                if !logSelectionState.inspectorPresented {
+                    Button {
+                        logSelectionState.inspectorPresented = true
+                    } label: {
+                        Label("View Commit Details", systemImage: "sidebar.right")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("log-open-inspector")
+                    .padding(.trailing, 12)
+                    .frame(height: 46)
                 }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("log-open-inspector")
-                .padding(.trailing, 12)
-                .frame(height: 46)
             }
             .opacity(logSelectionState.inspectorPresented ? 0 : 1)
             .allowsHitTesting(!logSelectionState.inspectorPresented)

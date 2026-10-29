@@ -301,7 +301,10 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
         session.window.buttons["workspace-return-to-log"]
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(session.window.textFields["log-text-filter"].waitForExistence(timeout: 10))
-        XCTAssertTrue(session.window.buttons[selectedCommitLabel].isSelected, "returning to Log must retain the selected commit")
+        let reselected = session.window.buttons.matching(
+            NSPredicate(format: "label == %@", selectedCommitLabel)
+        ).firstMatch
+        XCTAssertTrue(reselected.isSelected, "returning to Log must retain the selected commit")
         XCTAssertFalse(content.exists, "returning to Log must close the file editor")
         session.recordScreenshot(named: "file-back-to-log")
     }
