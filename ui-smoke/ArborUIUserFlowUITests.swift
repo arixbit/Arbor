@@ -577,7 +577,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         session.recordScreenshot(named: "push-options-zh-Hans")
         click(session.app.buttons["取消"].firstMatch)
         let pushSheet = session.app.sheets.firstMatch
-        XCTAssertTrue(pushSheet.waitForNonExistence(timeout: 10), "Push sheet did not close")
+        XCTAssertTrue(pushSheet.arborWaitForNonExistence(timeout: 10), "Push sheet did not close")
 
         session.app.activate()
         let window = session.window
@@ -611,7 +611,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(session.window.frame.contains(cancel.frame))
         session.recordScreenshot(named: "project-git-settings-zh-Hans")
         click(cancel)
-        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(sheet.arborWaitForNonExistence(timeout: 5))
         print("USER_FLOW_PASS chinese-operation-dialogs")
     }
 
@@ -649,7 +649,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(sheet.checkBoxes["全部仓库"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-new-branch-zh-Hans")
         click(sheet.buttons["取消"].firstMatch)
-        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(sheet.arborWaitForNonExistence(timeout: 5))
 
         session.app.activate()
         XCTAssertTrue(session.openBranchesPopover())
@@ -673,7 +673,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(renameSheet.buttons["重命名"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-rename-branch-zh-Hans")
         click(renameSheet.buttons["取消"].firstMatch)
-        XCTAssertTrue(renameSheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(renameSheet.arborWaitForNonExistence(timeout: 5))
 
         session.app.activate()
         XCTAssertTrue(session.openBranchesPopover())
@@ -695,7 +695,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(deleteSheet.buttons["删除"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-delete-branch-zh-Hans")
         click(deleteSheet.buttons["取消"].firstMatch)
-        XCTAssertTrue(deleteSheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(deleteSheet.arborWaitForNonExistence(timeout: 5))
 
         session.app.activate()
         XCTAssertTrue(session.openBranchesPopover())
@@ -715,7 +715,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(tagSheet.buttons["删除"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-delete-tag-zh-Hans")
         click(tagSheet.buttons["取消"].firstMatch)
-        XCTAssertTrue(tagSheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(tagSheet.arborWaitForNonExistence(timeout: 5))
 
         session.app.activate()
         XCTAssertTrue(session.openBranchesPopover())
@@ -739,7 +739,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(remoteSheet.buttons["删除"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-delete-remote-zh-Hans")
         click(remoteSheet.buttons["取消"].firstMatch)
-        XCTAssertTrue(remoteSheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(remoteSheet.arborWaitForNonExistence(timeout: 5))
 
         session.app.activate()
         menu("Rebase…")
@@ -765,7 +765,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(rebaseEditor.buttons["取消"].firstMatch.exists)
         session.recordScreenshot(named: "multi-root-rebase-editor-zh-Hans")
         click(rebaseEditor.buttons["取消"].firstMatch)
-        XCTAssertTrue(rebaseEditor.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(rebaseEditor.arborWaitForNonExistence(timeout: 10))
         print("USER_FLOW_PASS chinese-multi-root-branch-dialogs")
     }
 
