@@ -51,6 +51,9 @@ struct RebasedActivityRail: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Project")
+            // SwiftUI only derives an AX identifier from the symbol name on
+            // newer systems, so state it explicitly for the UI smoke suite.
+            .accessibilityIdentifier("folder")
 
             Menu {
                 Button("Commit") { onSelect(.commit) }
@@ -90,6 +93,10 @@ struct RebasedActivityRail: View {
         .buttonStyle(.plain)
         .foregroundStyle(selectedMode == mode ? .primary : .secondary)
         .help(help)
+        // Matches the identifier SwiftUI derives from the symbol name on newer
+        // systems; on older ones nothing is derived and the smoke suite cannot
+        // find the rail at all.
+        .accessibilityIdentifier(image)
         .accessibilityLabel(LocalizedStringKey(help))
         .accessibilityAddTraits(selectedMode == mode ? .isSelected : [])
     }
