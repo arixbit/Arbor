@@ -45,6 +45,18 @@ jobs:
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
 
+      # The suite is written against a current Xcode; the image default is
+      # older and exposes different accessibility elements (system-image
+      # identifiers, menu button types). Use the newest installed Xcode.
+      - name: Use the newest installed Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest=$(ls -d /Applications/Xcode*.app | grep -E '/Xcode_[0-9]' | sort -V | tail -1)
+          if [ -z "$newest" ]; then newest=/Applications/Xcode.app; fi
+          echo "Selecting $newest"
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+
       - name: Reject untranslated or hardcoded UI literals
         run: python3 scripts/i18n-audit.py
 

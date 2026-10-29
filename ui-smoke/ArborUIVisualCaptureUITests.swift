@@ -10,6 +10,20 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     static let targetSize = CGSize(width: 1642, height: 1015)
     static let rebasedBundleIdentifier = "io.github.detachhead.rebased"
 
+    /// The reference application only exists on a developer machine, and
+    /// `XCUIApplication(bundleIdentifier:)` throws for an unknown bundle, so
+    /// the parity captures skip instead of failing the run in CI.
+    static func referenceApplication() throws -> XCUIApplication {
+        guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: rebasedBundleIdentifier) != nil else {
+            throw XCTSkip("Rebased is not installed")
+        }
+        let app = XCUIApplication(bundleIdentifier: rebasedBundleIdentifier)
+        guard app.state != .notRunning else {
+            throw XCTSkip("Rebased is not running; open the fixture project in it first")
+        }
+        return app
+    }
+
     // MARK: - Arbor
 
     @MainActor
@@ -444,7 +458,10 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let branchCaptureSize = Self.targetSize
         let fixture = ArborUIFixture.repositoryRoot
             .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.appendingPathComponent(".git").path))
+        guard FileManager.default.fileExists(atPath: fixture.appendingPathComponent(".git").path) else {
+            throw XCTSkip("branch-comparison-fixture has not been built")
+        }
+        let rebased = try Self.referenceApplication()
         let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
         defer { session.terminate() }
         session.extraLaunchArguments = ["-arbor.appLanguage", "en"]
@@ -456,7 +473,6 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         capture(window: session.window, named: "arbor-branch-popup")
         session.terminate()
 
-        let rebased = XCUIApplication(bundleIdentifier: Self.rebasedBundleIdentifier)
         rebased.activate()
         let trust = rebased.buttons["Trust Project"].firstMatch
         if trust.waitForExistence(timeout: 2) {
@@ -498,10 +514,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testCaptureRebasedCommitAndLog() throws {
-        let rebased = XCUIApplication(bundleIdentifier: Self.rebasedBundleIdentifier)
-        guard rebased.state != .notRunning else {
-            throw XCTSkip("Rebased is not running; open the fixture project in it first")
-        }
+        let rebased = try Self.referenceApplication()
         rebased.activate()
         Thread.sleep(forTimeInterval: 1)
 
