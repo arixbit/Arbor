@@ -307,6 +307,14 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
 
         let projectFile = session.window.buttons["README.md"].firstMatch
         XCTAssertTrue(projectFile.waitForExistence(timeout: 10))
+        // In a short window the last tree rows sit below the visible area. The
+        // accessibility tree still reports their frame, so a click there lands
+        // on the status bar and selects nothing.
+        let anchorRow = session.window.buttons[".gitignore"].firstMatch
+        for delta in [-80.0, -160.0, 80.0] where !projectFile.isHittable {
+            anchorRow.scroll(byDeltaX: 0, deltaY: delta)
+        }
+        XCTAssertTrue(projectFile.isHittable, "the project tree never scrolled README.md into view")
         projectFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         let content = session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
         XCTAssertTrue(content.waitForExistence(timeout: 10))

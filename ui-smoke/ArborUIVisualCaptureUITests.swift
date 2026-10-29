@@ -413,6 +413,12 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let chinese = language == "zh-Hans"
         let fixture = ArborUIFixture.repositoryRoot
             .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
+        // Built by hand for the visual baseline; without it the app opens no
+        // project and every popover assertion below would fail for lack of a
+        // branch chip rather than for a defect.
+        guard FileManager.default.fileExists(atPath: fixture.appendingPathComponent(".git").path) else {
+            throw XCTSkip("branch-comparison-fixture has not been built")
+        }
         let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
         session.extraLaunchArguments = ["-arbor.appLanguage", language]
         session.launch()
