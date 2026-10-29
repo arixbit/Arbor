@@ -95,7 +95,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
             XCTAssertTrue(element.isEnabled, "disabled \(element)", file: file, line: line)
         }
         let frame = element.frame
-        guard frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else {
+        guard frame.minX.isFinite, frame.minY.isFinite,
+              frame.width.isFinite, frame.height.isFinite,
+              frame.width > 0, frame.height > 0 else {
             XCTFail("\(element) has no clickable frame", file: file, line: line)
             return
         }
