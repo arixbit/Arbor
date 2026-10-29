@@ -52,13 +52,14 @@ enum SweepOutcome: Equatable {
     case disabled
     case vanished
     case blockedByModal
+    case unreachable
     case crashed(String)
 
     var isFailure: Bool {
         switch self {
         case .dead, .crashed:
             return true
-        case .changed, .disabled, .vanished, .blockedByModal:
+        case .changed, .disabled, .vanished, .blockedByModal, .unreachable:
             return false
         }
     }
@@ -81,6 +82,7 @@ struct SweepFinding {
         case .disabled: outcomeText = "disabled(skipped)"
         case .vanished: outcomeText = "vanished(before click)"
         case .blockedByModal: outcomeText = "blocked(a dialog stayed open)"
+        case .unreachable: outcomeText = "unreachable(no pointer target)"
         case let .crashed(reason): outcomeText = "CRASHED(\(reason))"
         }
         let geometry = frame.isEmpty ? "" : " @\(frame)"
@@ -406,6 +408,20 @@ final class ArborUISession {
                 continue
             }
             consecutiveVanished = 0
+
+            // Elements from a closed menu or a covered surface are still in
+            // the tree but have no pointer target; clicking them throws instead
+            // of reporting. Record them separately: they are not a defect of
+            // the control, but they are not coverage either.
+            guard element.isHittable else {
+                findings.append(
+                    SweepFinding(
+                        screen: screen, role: candidate.role.arboName, label: candidate.label,
+                        identifier: candidate.identifier, outcome: .unreachable
+                    )
+                )
+                continue
+            }
 
             let before = screenState()
             element.click()
