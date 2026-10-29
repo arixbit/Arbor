@@ -122,9 +122,10 @@ signed build is required. If you configured the Team in Xcode, the launcher pres
 setting when regenerating the project; you can also pass it explicitly with
 `ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
 
-For a local artifact, use `ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.21`. The
-default output is explicitly unsigned and arm64; signing and notarization
-require the external Apple Developer credentials described in
+For a local test DMG and ZIP, use `./scripts/release.sh 1.0.28 --local`. This
+runs both test suites and writes unsigned arm64 packages and checksums to
+`build/releases/1.0.28-local/`, without requiring signing credentials. Public
+releases omit `--local` and require the Sparkle update key described in
 [RELEASE.md](RELEASE.md).
 
 ## Diagnostics and privacy

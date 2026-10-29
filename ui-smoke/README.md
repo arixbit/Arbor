@@ -18,6 +18,9 @@ exists to catch.
 ./scripts/ui-smoke.sh --only ArborUISmokeUITests/testLogScreenControlsReact
 ./scripts/ui-smoke.sh --report build/ui-smoke-results
 
+# Test an extracted Release package instead of the Debug build:
+ARBOR_UI_APP_PATH=/path/to/Arbor.app ./scripts/ui-smoke.sh --no-build
+
 # Reproduce a single control the sweep reported as dead:
 ./scripts/ui-smoke.sh --focus "Go Up" --surface log
 ```

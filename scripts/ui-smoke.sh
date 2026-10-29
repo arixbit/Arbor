@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-APP_DIR="$ROOT_DIR/.build/DerivedData/Build/Products/Debug/Arbor.app"
+APP_DIR="${ARBOR_UI_APP_PATH:-$ROOT_DIR/.build/DerivedData/Build/Products/Debug/Arbor.app}"
 SMOKE_PROJECT="$ROOT_DIR/.build/UISmoke/ArborUISmoke.xcodeproj"
 SMOKE_DERIVED="$ROOT_DIR/.build/UISmoke/DerivedData"
 BUILD_APP=true
@@ -64,10 +64,10 @@ if ! command -v xcodegen >/dev/null 2>&1; then
 fi
 
 if [[ "$BUILD_APP" == true ]]; then
-  if [[ ! -f "$ROOT_DIR/arbor-engine/target/release/libarbor_engine.a" ]]; then
-    cargo build --release --manifest-path "$ROOT_DIR/arbor-engine/Cargo.toml"
-    "$ROOT_DIR/scripts/generate-swift-bindings.sh" >/dev/null
-  fi
+  # Cargo handles incremental builds; an existing library may be stale, and
+  # the Swift bindings must match the library before Xcode compiles the app.
+  cargo build --release --manifest-path "$ROOT_DIR/arbor-engine/Cargo.toml"
+  "$ROOT_DIR/scripts/generate-swift-bindings.sh" >/dev/null
   "$ROOT_DIR/scripts/generate-xcode-project.sh"
   xcodebuild \
     -project "$ROOT_DIR/Arbor/Arbor.xcodeproj" \

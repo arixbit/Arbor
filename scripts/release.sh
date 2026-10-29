@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 || ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "usage: $0 VERSION (for example 1.0.0 or 1.0.0-beta.1)" >&2
+if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ || ( $# -eq 2 && "$2" != "--local" ) ]]; then
+  echo "usage: $0 VERSION [--local] (for example 1.0.0 or 1.0.0-beta.1)" >&2
   exit 2
 fi
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 version=$1
 release_dir="$repo_root/build/releases/$version"
+local_build=false
+if [[ "${2:-}" == "--local" ]]; then
+  if [[ "${ARBOR_UNSIGNED:-1}" != "1" ]]; then
+    echo "--local requires ARBOR_UNSIGNED=1 (the default)" >&2
+    exit 2
+  fi
+  local_build=true
+  release_dir="$repo_root/build/releases/$version-local"
+fi
 archive_dir="$release_dir/archive"
 archive_path="$archive_dir/Arbor.xcarchive"
 arch_label=${ARBOR_ARCHS:-arm64}
 arch_label=${arch_label// /-}
-if [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
+if [[ "$local_build" == true ]]; then
+  artifact_stem="Arbor-$version-local-$arch_label"
+elif [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
   artifact_stem="Arbor-$version-unsigned-$arch_label"
 else
   artifact_stem="Arbor-$version-$arch_label"
@@ -102,14 +113,20 @@ if [[ "${ARBOR_UNSIGNED:-1}" != "1" ]]; then
   spctl -a -vv --type open "$app_path"
 fi
 
-"$repo_root/scripts/sign-update.sh" "$zip_path"
+checksum_files=("$(basename "$dmg_path")" "$(basename "$zip_path")")
+if [[ "$local_build" != true ]]; then
+  "$repo_root/scripts/sign-update.sh" "$zip_path"
+  checksum_files+=(appcast.xml)
+fi
 
 (
   cd -- "$release_dir"
-  shasum -a 256 "$(basename "$dmg_path")" "$(basename "$zip_path")" appcast.xml
+  shasum -a 256 "${checksum_files[@]}"
 ) > "$release_dir/SHA256SUMS"
 
 echo "Local release artifacts: $release_dir"
-if [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
+if [[ "$local_build" == true ]]; then
+  echo "STATUS: local-test (no update feed; do not publish to the release channel)"
+elif [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
   echo "STATUS: unsigned-public (not Apple-trusted; Gatekeeper approval may be required)"
 fi

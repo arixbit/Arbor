@@ -40,6 +40,22 @@ is pushed. Apple signing certificates and notarization credentials are only
 needed for an optional Apple-trusted release. Sparkle's separate EdDSA signing
 key is required for every release, including unsigned builds.
 
+## Local test packages
+
+For a fresh checkout without the release signing key, run:
+
+```sh
+./scripts/release.sh 1.0.28 --local
+```
+
+This runs the Rust and Swift suites and creates an ad-hoc-signed DMG and ZIP
+plus `SHA256SUMS` under `build/releases/1.0.28-local/`. The filenames include
+`local` and no `appcast.xml` is generated. The app retains the supplied version;
+the checked-in version is unchanged. These packages are for manual testing,
+not the public update channel. Existing public release artifacts are kept in
+their separate version directory. Public builds still require the matching
+Sparkle private key.
+
 ## Sparkle updates
 
 The application embeds Sparkle 2.10.1. Project generation downloads the pinned
