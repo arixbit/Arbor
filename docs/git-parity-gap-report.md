@@ -931,7 +931,7 @@ root commit、缺少父提交或引擎失败会被明确拦截并反馈；空提
 
 2026-08-21 Apply Patch viewer lifecycle 校正：当前 Direct Apply Patch 冲突工作台已补齐 IntelliJ `ApplyPatchViewer` 的核心动作边界——结果/Patch 编辑器的多 change 选区批量 Apply/Ignore、统一 undo group、`Show Diff with Local` 等价的 Local → Result 预览，以及完成文件前对未决 patch change 的 Continue/Finish Anyway 确认；Reset 会清理并重新载入当前文件的持久化 hunk 决策。故“原生 editor/action lifecycle”不再作为这些具体动作的缺口，但精确的 IntelliJ Editor/DataContext、VFS/PSI FilenameIndex、多 content-root index、native notification/banner 与 UI automation 仍是 partial。
 
-后续实现应优先按 P1 顺序推进，并在每项完成后同步 `docs/git-parity-matrix.csv`、`PRODUCT_CHECKLIST.md` 和对应 Rust/Swift 测试；不要把“参考实现存在但产品明确不纳入”的平台能力混入完成率分母。
+后续实现应优先按 P1 顺序推进，并在每项完成后同步 `docs/git-parity-matrix.csv`、`docs/development/product-checklist.md` 和对应 Rust/Swift 测试；不要把“参考实现存在但产品明确不纳入”的平台能力混入完成率分母。
 
 2026-08-21 FilenameIndex 生命周期校正：Apply Patch/Unshelve 的候选索引现在按 Git root 与 content/excluded scope 持久化到应用设置，保存 Git index 路径 revision 和物理目录 revision；packed repository change 进入刷新链时会失效对应 root，多个显式 content root 会合并且嵌套 root 去重。该实现覆盖了当前产品所需的轻量 project filename provider，但不冒充完整 IntelliJ VFS/PSI；剩余差异是可配置的 IDE content-root/module 模型、原生索引通知和 UI automation。
 

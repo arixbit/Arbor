@@ -386,7 +386,7 @@
 - [x] TextKit 合并编辑器支持中文 IME 输入、CJK 换行（`byCharWrapping`）
 - [ ] 中文 UI 中 git 术语惯例：rebase/squash/stash/cherry-pick 等保留英文（参考 JetBrains 做法）
 - [ ] Xcode Export/Import Localizations（.xliff）工作流验证
-- [x] 建立中英**术语表**（见 [I18N_TERMS.md](./I18N_TERMS.md)）
+- [x] 建立中英**术语表**（见 [术语表](../i18n-terms.md)）
 
 ## 5. TextKit 选型结论（调研于 2026-08-13，重要，别忘）
 

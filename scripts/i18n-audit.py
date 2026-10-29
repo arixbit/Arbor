@@ -63,7 +63,7 @@ ASSIGNMENT_PATTERN = re.compile(
     r'\s*=\s*"((?:\\.|[^"\\])*)"',
     re.MULTILINE,
 )
-# Git and UI terms the product keeps in English on purpose (I18N_TERMS.md).
+# Git and UI terms the product keeps in English on purpose (docs/i18n-terms.md).
 INTENTIONAL_ENGLISH = {
     "Merge",
     "Rebase",

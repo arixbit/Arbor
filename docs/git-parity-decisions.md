@@ -1,7 +1,7 @@
 # 范围决策记录 -- Arbor 对等 IntelliJ Git
 
 > 交付物:Phase 0(git-parity matrix)配套决策清单。每个决策点给出可选项、当前建议与依据。
-> "执行计划 1.2" 指 `INTELLIJ_GIT_PARITY_EXECUTION_PLAN.md` §1.2《明确不在范围内》,其原文排除项为:
+> "执行计划 1.2" 指 `docs/development/git-parity-execution-plan.md` §1.2《明确不在范围内》,其原文排除项为:
 > 1. IDE 代码补全、重构、构建、运行配置;2. Git 之外的 VCS;3. IntelliJ 插件平台和插件扩展机制;
 > 4. 依赖完整代码模型的 Find Usages、重构感知历史;5. IntelliJ Local History(除非后续产品决策纳入)。
 

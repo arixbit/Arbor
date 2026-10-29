@@ -233,7 +233,7 @@ UI 至少需要以下统一入口：
 - [x] 从 `plugins/git4idea/backend/src` 按领域建立功能目录（矩阵按 category 归类：commands、config、remote、index、rebase、merge、conflicts、stash、history、branch、push_fetch、workingTrees、submodule、settings）。
 - [x] 将每个 IntelliJ 能力映射为 `engine API`、`SwiftUI 入口`、`成功路径`、`失败路径`、`测试` 五列（docs/git-parity-matrix.csv）。
 - [x] 对每一项标记：已完成、部分完成、缺失、暂不支持、需要产品决策（clone 递归真实测试、Git Settings 入口与 force-with-lease 默认设置已补；剩余状态以 `docs/git-parity-matrix.csv` 为准）。
-- [x] 删除或修正 `PRODUCT_CHECKLIST.md` 中没有用户可达入口或没有测试证据的 `[x]`（per-file history、reorder、fixup、shelve、分支删除/重命名、submodule 操作改为部分完成）。
+- [x] 删除或修正 `docs/development/product-checklist.md` 中没有用户可达入口或没有测试证据的 `[x]`（per-file history、reorder、fixup、shelve、分支删除/重命名、submodule 操作改为部分完成）。
 
 ### 交付物
 
@@ -720,7 +720,7 @@ UI 至少需要以下统一入口：
 - [x] 建立 attributes/CRLF fixture 仓库（tests/attributes.rs，9 个测试）。
 - [~] 为多 root 建立最小 fixture（tests/roots.rs）；root commit / merge commit fixture 由 HISTORY-001 补齐。
 - [x] 将 `RebasedWorkspaceViews.swift` 中的三个空操作按钮改为明确的 disabled 状态或接入任务（Shelve 接真实对话框；Preview/Add Changelist 显式 disabled + 原因提示）。
-- [x] 将 `PRODUCT_CHECKLIST.md` 中 per-file history、reorder、fixup、shelve 等项目改为“部分完成”（并修正分支删除/重命名、submodule 等无入口项）。
+- [x] 将 `docs/development/product-checklist.md` 中 per-file history、reorder、fixup、shelve 等项目改为“部分完成”（并修正分支删除/重命名、submodule 等无入口项）。
 
 第一阶段的完成标准不是新增更多按钮，而是让认证、Git 结果正确性和中断恢复变得可靠。只有完成这一层，后续 UI parity 工作才不会建立在错误或不可恢复的 Git 状态之上。
 

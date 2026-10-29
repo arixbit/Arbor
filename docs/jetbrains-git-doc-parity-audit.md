@@ -580,7 +580,7 @@ GoLand before-commit checks 包括 Reformat、Rearrange、Optimize Imports、Cle
 - `docs/git-parity-matrix.csv`：动作/测试证据台账，粒度比官网页面更细。
 - `docs/git-parity-gap-report.md`：历史阶段性差距，不应替代本次官网逐页结论。
 - `docs/git-parity-decisions.md`：产品取舍，本审计引用但不重写。
-- `INTELLIJ_GIT_PARITY_EXECUTION_PLAN.md`：后续实施计划；本文件通过评审后再回写任务。
+- `docs/development/git-parity-execution-plan.md`：后续实施计划；本文件通过评审后再回写任务。
 
 ## 8. 覆盖校验
 

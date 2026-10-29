@@ -9,6 +9,11 @@ behavioral changes.
 - Swift application and tests live under `Arbor/`.
 - Rust engine and tests live under `arbor-engine/`.
 - `Arbor/project.yml` is the Xcode project source of truth.
+- Build, release, and audit scripts live under `scripts/`; the local app launcher
+  is `script/build_and_run.sh`.
+- Product checklists and implementation plans live under `docs/development/`;
+  the shared translation glossary is `docs/i18n-terms.md`.
+- Original icon assets live under `design/`, including `design/vector-kit/`.
 - `arbor-engine/generated/`, `Arbor/Arbor.xcodeproj/`, `target/`, `.build/`,
   and release output are generated locally and are intentionally ignored.
 
