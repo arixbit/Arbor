@@ -409,6 +409,23 @@ final class ArborUISession {
             }
             consecutiveVanished = 0
 
+            // Read the frame once: it is both the hit-test check and the click
+            // target. Clicking through the element itself keeps a reference to
+            // its accessibility identity, and a surface that rebuilds between
+            // the checks and the click makes that reference unresolvable,
+            // which aborts the sweep instead of reporting a result.
+            guard element.exists else {
+                consecutiveVanished += 1
+                findings.append(
+                    SweepFinding(
+                        screen: screen, role: candidate.role.arboName, label: candidate.label,
+                        identifier: candidate.identifier, outcome: .vanished
+                    )
+                )
+                continue
+            }
+            let frame = element.frame
+
             // Elements from a closed menu or a covered surface are still in
             // the tree but have no pointer target; clicking them throws instead
             // of reporting. Record them separately: they are not a defect of
@@ -417,21 +434,25 @@ final class ArborUISession {
                 findings.append(
                     SweepFinding(
                         screen: screen, role: candidate.role.arboName, label: candidate.label,
-                        identifier: candidate.identifier, outcome: .unreachable
+                        identifier: candidate.identifier,
+                        frame: "\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))",
+                        outcome: .unreachable
                     )
                 )
                 continue
             }
 
             let before = screenState()
-            element.click()
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+                .click()
             guard let after = waitForChange(from: before, timeout: changeTimeout) else {
                 recordScreenshot(named: "dead-\(screen)-\(clicked)")
                 findings.append(
                     SweepFinding(
                         screen: screen, role: candidate.role.arboName, label: candidate.label,
                         identifier: candidate.identifier,
-                        frame: "\(Int(element.frame.minX)),\(Int(element.frame.minY)) \(Int(element.frame.width))x\(Int(element.frame.height))",
+                        frame: "\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))",
                         outcome: .dead
                     )
                 )
