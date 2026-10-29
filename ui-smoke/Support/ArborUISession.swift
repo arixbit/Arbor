@@ -707,7 +707,7 @@ extension ArborUISession {
             if branchesPopoverIsOpen { return waitForStableState(timeout: 15) }
             // A fetch or pull reloads the header; a click that lands while the
             // Log still says "Loading history…" is swallowed.
-            _ = waitForStableState(timeout: 10)
+            _ = waitForStableState(timeout: 5)
             // The status bar repeats the branch name, so the first match is not
             // necessarily the chip that opens the popover. Try them top-down.
             let candidates = window.buttons
@@ -725,12 +725,11 @@ extension ArborUISession {
     }
 
     private func waitForBranchesPopover(timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if branchesPopoverIsOpen { return true }
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        return branchesPopoverIsOpen
+        // `waitForExistence` pumps the run loop; polling `exists` from a sleep
+        // loop starves XCTest's own queries and misses a popover that opens
+        // while the loop is parked.
+        if app.popovers.firstMatch.waitForExistence(timeout: timeout) { return true }
+        return app.descendants(matching: .any)["branch-reference-list"].firstMatch.waitForExistence(timeout: 1)
     }
 
     /// Open the Settings scene through the application menu.
