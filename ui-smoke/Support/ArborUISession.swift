@@ -693,17 +693,18 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// The branches popover on screen. Its own element tree, so a stale one
-    /// cannot be mistaken for the popover opened by the next click.
-    private var branchesPopover: XCUIElement {
-        app.popovers.containing(.any, identifier: "branch-reference-list").firstMatch
+    /// Whether the branches popover is currently on screen. The popover is its
+    /// own element; the reference list inside it is the stable marker.
+    private var branchesPopoverIsOpen: Bool {
+        app.popovers.firstMatch.exists
+            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
     }
 
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
         for _ in 0..<3 {
-            if branchesPopover.exists { return waitForStableState(timeout: 15) }
+            if branchesPopoverIsOpen { return waitForStableState(timeout: 15) }
             // A fetch or pull reloads the header; a click that lands while the
             // Log still says "Loading history…" is swallowed.
             _ = waitForStableState(timeout: 10)
@@ -715,12 +716,21 @@ extension ArborUISession {
                 .sorted { $0.frame.minY < $1.frame.minY }
             for chip in candidates where chip.exists && chip.isHittable {
                 chip.click()
-                if branchesPopover.waitForExistence(timeout: 4) {
+                if waitForBranchesPopover(timeout: 4) {
                     return waitForStableState(timeout: 15)
                 }
             }
         }
         return false
+    }
+
+    private func waitForBranchesPopover(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if branchesPopoverIsOpen { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return branchesPopoverIsOpen
     }
 
     /// Open the Settings scene through the application menu.
