@@ -696,10 +696,20 @@ extension ArborUISession {
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
-        let chip = window.buttons.matching(NSPredicate(format: "label == %@", branch)).firstMatch
-        guard chip.exists else { return false }
-        chip.click()
-        return waitForStableState(timeout: 15)
+        // The status bar repeats the branch name, so the first match is not
+        // necessarily the chip that opens the popover. Try them top-down and
+        // require the popover to actually appear.
+        let candidates = window.buttons
+            .matching(NSPredicate(format: "label == %@", branch))
+            .allElementsBoundByIndex
+            .sorted { $0.frame.minY < $1.frame.minY }
+        for chip in candidates where chip.exists && chip.isHittable {
+            chip.click()
+            let opened = app.popovers.firstMatch.waitForExistence(timeout: 3)
+                || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+            if opened { return waitForStableState(timeout: 15) }
+        }
+        return false
     }
 
     /// Open the Settings scene through the application menu.
