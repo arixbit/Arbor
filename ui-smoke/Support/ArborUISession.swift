@@ -426,10 +426,35 @@ final class ArborUISession {
             }
             let frame = element.frame
 
+            // Rows scrolled out of a list report an infinite frame; clicking
+            // that point aborts the run inside XCUITest instead of reporting.
+            guard frame.minX.isFinite, frame.minY.isFinite,
+                  frame.width.isFinite, frame.height.isFinite,
+                  frame.width > 0, frame.height > 0 else {
+                findings.append(
+                    SweepFinding(
+                        screen: screen, role: candidate.role.arboName, label: candidate.label,
+                        identifier: candidate.identifier, outcome: .unreachable
+                    )
+                )
+                continue
+            }
+
             // Elements from a closed menu or a covered surface are still in
             // the tree but have no pointer target; clicking them throws instead
             // of reporting. Record them separately: they are not a defect of
             // the control, but they are not coverage either.
+            guard app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else {
+                findings.append(
+                    SweepFinding(
+                        screen: screen, role: candidate.role.arboName, label: candidate.label,
+                        identifier: candidate.identifier,
+                        frame: "\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))",
+                        outcome: .unreachable
+                    )
+                )
+                continue
+            }
             guard element.isHittable else {
                 findings.append(
                     SweepFinding(

@@ -11,6 +11,11 @@ name: UI smoke
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Run one test, for example ArborUISmokeUITests/testLogScreenControlsReact"
+        required: false
+        default: ""
 
 concurrency:
   group: ui-smoke-${{ github.ref }}
@@ -64,7 +69,12 @@ jobs:
         run: python3 scripts/audit-user-surface.py --snapshot scripts/user-surface.json
 
       - name: Build and run the click-and-assert suite
-        run: ./scripts/ui-smoke.sh --report build/ui-smoke-results
+        env:
+          ONLY_TEST: ${{ inputs.only }}
+        run: |
+          args=(--report build/ui-smoke-results)
+          if [[ -n "$ONLY_TEST" ]]; then args+=(--only "$ONLY_TEST"); fi
+          ./scripts/ui-smoke.sh "${args[@]}"
 
       - name: Upload screenshots and reports
         if: always()
