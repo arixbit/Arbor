@@ -261,7 +261,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         line: UInt = #line
     ) {
         let row = session.app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
-        if !row.waitForExistence(timeout: 5) {
+        if !row.waitForExistence(timeout: 5), !session.isBranchesPopoverOpen {
             _ = session.openBranchesPopover()
         }
         click(row, file: file, line: line)

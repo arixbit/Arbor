@@ -693,9 +693,17 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
+    /// Whether the branches popover is on screen.
+    var isBranchesPopoverOpen: Bool {
+        app.popovers.firstMatch.exists
+            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+    }
+
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
+        // The chip toggles the popover, so clicking it again closes it.
+        if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
         // The status bar repeats the branch name, so the first match is not
         // necessarily the chip that opens the popover. Try them top-down and
         // require the popover to actually appear.
