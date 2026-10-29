@@ -36,6 +36,12 @@ final class AppUpdateCheckTests: XCTestCase {
         XCTAssertNil(appUpdateLegacyAutomaticCheckPreference(in: defaults))
     }
 
+    func testUITestLaunchKeepsTheUpdaterIdle() {
+        XCTAssertTrue(isUITestLaunch(environment: ["ARBOR_UI_TEST": "1"]))
+        XCTAssertFalse(isUITestLaunch(environment: ["ARBOR_UI_TEST": "0"]))
+        XCTAssertFalse(isUITestLaunch(environment: [:]))
+    }
+
     @MainActor
     func testPackagedAppContainsUpdaterAndFeedConfiguration() throws {
         let bundle = Bundle(for: ArborAppDelegate.self)

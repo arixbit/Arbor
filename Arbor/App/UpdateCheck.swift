@@ -8,6 +8,14 @@ func appUpdateLegacyAutomaticCheckPreference(in defaults: UserDefaults) -> Bool?
     return defaults.object(forKey: "arbor.autoCheckForUpdates") as? Bool
 }
 
+/// A UI test launches the app as its own process, where XCTest's own
+/// environment is absent. `ARBOR_UI_TEST` marks that launch: the updater must
+/// stay idle, or an update alert opens over the window under test and every
+/// click in the suite lands on the alert instead.
+func isUITestLaunch(environment: [String: String]) -> Bool {
+    environment["ARBOR_UI_TEST"] == "1"
+}
+
 /// One updater for the entire application, including launches without a project.
 @MainActor
 final class AppUpdateChecker: ObservableObject {
@@ -34,6 +42,7 @@ final class AppUpdateChecker: ObservableObject {
     func start() {
         let environment = ProcessInfo.processInfo.environment
         guard !started,
+              !isUITestLaunch(environment: environment),
               environment["XCTestBundlePath"] == nil,
               environment["XCTestSessionIdentifier"] == nil,
               !ArborPinentryProcess.isInvocation else { return }

@@ -276,10 +276,22 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
         // The Log loads its rows asynchronously; reading the query once is a
         // race, not an assertion.
         XCTAssertTrue(commitRows.firstMatch.waitForExistence(timeout: 15), "the Log did not list any commit")
-        let commit = try XCTUnwrap(commitRows.allElementsBoundByIndex.last)
+        let rows = commitRows.allElementsBoundByIndex
+        // The oldest row can sit below the visible part of a short window, and
+        // a row without a pointer target cannot be clicked.
+        guard let commit = rows.last(where: { $0.isHittable }) ?? rows.last else {
+            return XCTFail("the Log did not list any commit")
+        }
         commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let selectedRow = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == true"),
+            object: commit
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [selectedRow], timeout: 5), .completed,
+            "clicking a commit row must select it"
+        )
         let selectedCommitLabel = commit.label
-        XCTAssertTrue(commit.isSelected)
 
         let diff = session.window.descendants(matching: .any)["workspace-diff-editor"].firstMatch
         for (name, expected) in [("App.swift", "let modified = true"), ("Engine.swift", "var revision = 2")] {
