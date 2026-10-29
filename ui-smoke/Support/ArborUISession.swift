@@ -693,43 +693,23 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// Whether the branches popover is currently on screen. The popover is its
-    /// own element; the reference list inside it is the stable marker.
-    private var branchesPopoverIsOpen: Bool {
-        app.popovers.firstMatch.exists
-            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
-    }
-
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
-        for _ in 0..<3 {
-            if branchesPopoverIsOpen { return waitForStableState(timeout: 15) }
-            // A fetch or pull reloads the header; a click that lands while the
-            // Log still says "Loading history…" is swallowed.
-            _ = waitForStableState(timeout: 5)
-            // The status bar repeats the branch name, so the first match is not
-            // necessarily the chip that opens the popover. Try them top-down.
-            let candidates = window.buttons
-                .matching(NSPredicate(format: "label == %@", branch))
-                .allElementsBoundByIndex
-                .sorted { $0.frame.minY < $1.frame.minY }
-            for chip in candidates where chip.exists && chip.isHittable {
-                chip.click()
-                if waitForBranchesPopover(timeout: 4) {
-                    return waitForStableState(timeout: 15)
-                }
-            }
+        // The status bar repeats the branch name, so the first match is not
+        // necessarily the chip that opens the popover. Try them top-down and
+        // require the popover to actually appear.
+        let candidates = window.buttons
+            .matching(NSPredicate(format: "label == %@", branch))
+            .allElementsBoundByIndex
+            .sorted { $0.frame.minY < $1.frame.minY }
+        for chip in candidates where chip.exists && chip.isHittable {
+            chip.click()
+            let opened = app.popovers.firstMatch.waitForExistence(timeout: 3)
+                || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+            if opened { return waitForStableState(timeout: 15) }
         }
         return false
-    }
-
-    private func waitForBranchesPopover(timeout: TimeInterval) -> Bool {
-        // `waitForExistence` pumps the run loop; polling `exists` from a sleep
-        // loop starves XCTest's own queries and misses a popover that opens
-        // while the loop is parked.
-        if app.popovers.firstMatch.waitForExistence(timeout: timeout) { return true }
-        return app.descendants(matching: .any)["branch-reference-list"].firstMatch.waitForExistence(timeout: 1)
     }
 
     /// Open the Settings scene through the application menu.

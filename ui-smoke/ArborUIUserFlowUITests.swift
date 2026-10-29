@@ -239,7 +239,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try eventually("pull") { try self.git("rev-parse", "HEAD") == remoteHead }
         XCTAssertEqual(try String(contentsOf: repo.appendingPathComponent("remote.txt"), encoding: .utf8), "remote update\n")
         XCTAssertTrue(session.openBranchesPopover())
-        click(session.app.buttons["topic"].firstMatch)
+        clickInBranchesPopover("topic")
         try eventually("checkout") { try self.git("branch", "--show-current") == "topic" }
         XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("remote.txt").path))
         session.recordScreenshot(named: "branches-checkout")
@@ -248,6 +248,20 @@ final class ArborUIUserFlowUITests: XCTestCase {
     /// Corner-drag resizing does not reliably reach an exact size on a headless
     /// runner. These tests assert how the layout behaves at the minimum window,
     /// so skip rather than report the window manager as a layout defect.
+    /// The branches popover can be dismissed by the header reloading under it
+    /// (a fetch or pull finishing). Reopen once before failing on a missing row.
+    private func clickInBranchesPopover(
+        _ label: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let row = session.app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        if !row.waitForExistence(timeout: 5) {
+            _ = session.openBranchesPopover()
+        }
+        click(row, file: file, line: line)
+    }
+
     private func resizeToMinimumWindow(
         _ window: XCUIElement,
         width: CGFloat = 980,
@@ -657,7 +671,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         }
         launch(language: "zh-Hans")
         XCTAssertTrue(session.openBranchesPopover())
-        click(session.app.buttons["新建分支…"].firstMatch)
+        clickInBranchesPopover("新建分支…")
         let sheet = session.app.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
         XCTAssertTrue(sheet.staticTexts["新建分支"].firstMatch.exists)
