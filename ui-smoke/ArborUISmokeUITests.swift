@@ -270,9 +270,13 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
         launch(session)
         defer { session.terminate() }
 
-        let commit = try XCTUnwrap(session.window.buttons.matching(
+        let commitRows = session.window.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Select commit ")
-        ).allElementsBoundByIndex.last)
+        )
+        // The Log loads its rows asynchronously; reading the query once is a
+        // race, not an assertion.
+        XCTAssertTrue(commitRows.firstMatch.waitForExistence(timeout: 15), "the Log did not list any commit")
+        let commit = try XCTUnwrap(commitRows.allElementsBoundByIndex.last)
         commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         let selectedCommitLabel = commit.label
         XCTAssertTrue(commit.isSelected)
