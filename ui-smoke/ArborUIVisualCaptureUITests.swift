@@ -8,6 +8,20 @@ import AppKit
 /// surface being compared.
 final class ArborUIVisualCaptureUITests: XCTestCase {
     static let targetSize = CGSize(width: 1642, height: 1015)
+
+    /// macOS clamps a window to the display, so a request larger than the
+    /// screen silently stops at the edge and turns every exact-size assertion
+    /// into a failure. Compare against the size the display can host.
+    static var hostedTargetSize: CGSize {
+        let screen = NSScreen.main?.visibleFrame.size ?? targetSize
+        return CGSize(width: min(targetSize.width, screen.width), height: min(targetSize.height, screen.height))
+    }
+
+    /// Widths the runner display can host, largest first.
+    static func hostedWidths(_ widths: [CGFloat]) -> [CGFloat] {
+        let limit = NSScreen.main?.visibleFrame.width ?? .greatestFiniteMagnitude
+        return widths.filter { $0 <= limit }
+    }
     static let rebasedBundleIdentifier = "io.github.detachhead.rebased"
 
     /// The reference application only exists on a developer machine, and
@@ -47,7 +61,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
             session.extraLaunchArguments = layoutArguments + ["-arbor.toolWindowMode", "commit"]
             session.launch()
-            resize(session.window, to: Self.targetSize, label: "arbor-commit")
+            resize(session.window, to: Self.hostedTargetSize, label: "arbor-commit")
             capture(window: session.window, named: "arbor-commit")
             // Ask below the supported height to verify the actual scene's
             // minimum, including its native titlebar, rather than a test host.
@@ -66,7 +80,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             session.extraLaunchArguments = layoutArguments
             session.launch()
             XCTAssertTrue(session.openProjectTree(), "the activity rail did not open the project tree")
-            resize(session.window, to: Self.targetSize, label: "arbor-log")
+            resize(session.window, to: Self.hostedTargetSize, label: "arbor-log")
             capture(window: session.window, named: "arbor-log")
             session.terminate()
         }
@@ -147,7 +161,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
         XCTAssertTrue(session.openProjectTree())
-        resize(session.window, to: Self.targetSize, label: "log-filters")
+        resize(session.window, to: Self.hostedTargetSize, label: "log-filters")
 
         let branchMenu = session.window.descendants(matching: .any)["log-branch-filter"].firstMatch
         branchMenu.click()
@@ -157,7 +171,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
         let bar = session.window.descendants(matching: .any)["log-filter-bar"].firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
-        for width: CGFloat in [1642, 1540, 1440, 1200, 980] {
+        for width: CGFloat in Self.hostedWidths([1642, 1540, 1440, 1200, 980]) {
             resize(session.window, to: CGSize(width: width, height: 1015), label: "log-filters")
             XCTAssertLessThanOrEqual(abs(session.window.frame.width - width), 2)
             XCTAssertGreaterThanOrEqual(bar.frame.width, 399, "the Log column collapsed at \(width)pt")
@@ -171,7 +185,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             if width == 1642 {
                 for control in [
                     session.window.textFields["log-text-filter"],
-                    session.window.menuButtons["log-path-filter"],
+                    session.window.descendants(matching: .any)["log-path-filter"].firstMatch,
                     branchMenu,
                     session.window.buttons["log-user-filter"],
                     session.window.buttons["log-date-filter"],
@@ -203,7 +217,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.launch()
         defer { session.terminate() }
-        resize(session.window, to: Self.targetSize, label: "log-paths")
+        resize(session.window, to: Self.hostedTargetSize, label: "log-paths")
 
         let paths = session.window.descendants(matching: .any)["log-path-filter"].firstMatch
         paths.click()
@@ -234,7 +248,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
         XCTAssertTrue(session.openProjectTree())
-        resize(session.window, to: Self.targetSize, label: "log-columns")
+        resize(session.window, to: Self.hostedTargetSize, label: "log-columns")
 
         let bar = session.window.descendants(matching: .any)["log-filter-bar"].firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
@@ -259,7 +273,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let savedBarFrame = bar.frame
         let savedBarOffset = savedBarFrame.minX - session.window.frame.minX
 
-        for size in [CGSize(width: 1200, height: 1015), CGSize(width: 980, height: 540)] {
+        for size in Self.hostedWidths([1200, 980]).map({ CGSize(width: $0, height: $0 > 1100 ? 1015 : 540) }) {
             resize(session.window, to: size, label: "log-columns")
             XCTAssertLessThanOrEqual(abs(session.window.frame.width - size.width), 2)
             XCTAssertGreaterThanOrEqual(bar.frame.width, 519)
@@ -298,7 +312,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         // Widen directly from details, then verify the selected commit and
         // both divider positions survived the change of presentation.
         openInspector.click()
-        resize(session.window, to: Self.targetSize, label: "log-columns-restored")
+        resize(session.window, to: Self.hostedTargetSize, label: "log-columns-restored")
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
         XCTAssertFalse(openInspector.exists)
         XCTAssertFalse(closeInspector.exists)
@@ -455,7 +469,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     @MainActor
     func testCaptureBranchPopupParity() throws {
         continueAfterFailure = false
-        let branchCaptureSize = Self.targetSize
+        let branchCaptureSize = Self.hostedTargetSize
         let fixture = ArborUIFixture.repositoryRoot
             .appendingPathComponent(".build/UISmoke/branch-comparison-fixture")
         guard FileManager.default.fileExists(atPath: fixture.appendingPathComponent(".git").path) else {
@@ -525,7 +539,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             throw XCTSkip("Rebased has no window for the visual-fixture project")
         }
 
-        resize(window, to: Self.targetSize, label: "rebased")
+        resize(window, to: Self.hostedTargetSize, label: "rebased")
         // The Commit tool window is open in this session; capture it first,
         // then collapse it through its activity-rail button to get the Log
         // surface. Rail buttons are clicked rather than driven by ⌘K so the
@@ -551,7 +565,10 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     // MARK: - Helpers
 
     @MainActor
-    private func resize(_ window: XCUIElement, to size: CGSize, label: String) {
+    private func resize(_ window: XCUIElement, to requested: CGSize, label: String) {
+        // Never ask for more than the display can host: macOS clamps silently.
+        let screen = NSScreen.main?.visibleFrame.size ?? requested
+        let size = CGSize(width: min(requested.width, screen.width), height: min(requested.height, screen.height))
         let frame = window.frame
         let delta = CGVector(dx: size.width - frame.width, dy: size.height - frame.height)
         if abs(delta.dx) < 2 && abs(delta.dy) < 2 {

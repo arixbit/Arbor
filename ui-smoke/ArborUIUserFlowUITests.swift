@@ -94,6 +94,11 @@ final class ArborUIUserFlowUITests: XCTestCase {
         if element.elementType != .textView {
             XCTAssertTrue(element.isEnabled, "disabled \(element)", file: file, line: line)
         }
+        let frame = element.frame
+        guard frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else {
+            XCTFail("\(element) has no clickable frame", file: file, line: line)
+            return
+        }
         if element.elementType == .menuItem {
             element.click()
         } else {
