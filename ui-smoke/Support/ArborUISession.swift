@@ -693,21 +693,32 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
+    /// The branches popover on screen. Its own element tree, so a stale one
+    /// cannot be mistaken for the popover opened by the next click.
+    private var branchesPopover: XCUIElement {
+        app.popovers.containing(.any, identifier: "branch-reference-list").firstMatch
+    }
+
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
-        // The status bar repeats the branch name, so the first match is not
-        // necessarily the chip that opens the popover. Try them top-down and
-        // require the popover to actually appear.
-        let candidates = window.buttons
-            .matching(NSPredicate(format: "label == %@", branch))
-            .allElementsBoundByIndex
-            .sorted { $0.frame.minY < $1.frame.minY }
-        for chip in candidates where chip.exists && chip.isHittable {
-            chip.click()
-            let opened = app.popovers.firstMatch.waitForExistence(timeout: 3)
-                || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
-            if opened { return waitForStableState(timeout: 15) }
+        for _ in 0..<3 {
+            if branchesPopover.exists { return waitForStableState(timeout: 15) }
+            // A fetch or pull reloads the header; a click that lands while the
+            // Log still says "Loading history…" is swallowed.
+            _ = waitForStableState(timeout: 10)
+            // The status bar repeats the branch name, so the first match is not
+            // necessarily the chip that opens the popover. Try them top-down.
+            let candidates = window.buttons
+                .matching(NSPredicate(format: "label == %@", branch))
+                .allElementsBoundByIndex
+                .sorted { $0.frame.minY < $1.frame.minY }
+            for chip in candidates where chip.exists && chip.isHittable {
+                chip.click()
+                if branchesPopover.waitForExistence(timeout: 4) {
+                    return waitForStableState(timeout: 15)
+                }
+            }
         }
         return false
     }
