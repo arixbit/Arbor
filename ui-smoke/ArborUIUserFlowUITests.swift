@@ -237,7 +237,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         menu("Pull…")
         click(session.app.buttons["Pull"].firstMatch)
         try eventually("pull") { try self.git("rev-parse", "HEAD") == remoteHead }
-        XCTAssertEqual(try String(contentsOf: repo.appendingPathComponent("remote.txt"), encoding: .utf8), "remote update\n")
+        // The branch ref moves before the checkout finishes, so the file lands
+        // a moment after HEAD does.
+        try eventually("pull-worktree") {
+            (try? String(contentsOf: repo.appendingPathComponent("remote.txt"), encoding: .utf8))
+                == "remote update\n"
+        }
         XCTAssertTrue(session.openBranchesPopover())
         clickInBranchesPopover("topic")
         try eventually("checkout") { try self.git("branch", "--show-current") == "topic" }

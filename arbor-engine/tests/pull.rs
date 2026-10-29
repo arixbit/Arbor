@@ -889,3 +889,91 @@ fn pull_materializes_directory_to_file_type_change() {
     assert!(local.path.join("module").is_file());
     assert_eq!(local.read("module"), "new file");
 }
+
+/// The app's Pull button goes through the full settings variant. A clean tree
+/// must fast-forward and leave the pulled file in the working tree.
+#[test]
+fn pull_with_settings_fast_forwards_the_working_tree() {
+    let remote = remote_repo();
+    let upstream = TestRepo::new();
+    common::commit(&upstream.path, "base.txt", "base", "base");
+    seed_remote(&upstream, &remote);
+
+    let local = TestRepo::new();
+    add_origin(&local, &remote);
+    local.git(&["fetch", "-q", "origin"]);
+    local.git(&["reset", "-q", "--hard", "origin/main"]);
+    configure_upstream(&local, "main", "main");
+
+    common::commit(&upstream.path, "remote.txt", "remote", "remote");
+    upstream.git(&["push", "-q", "origin", "main"]);
+
+    let broker = CredentialBroker::new();
+    let cancel = GitCancelHandle::new();
+    let outcome = local
+        .open()
+        .pull_with_settings_and_auth_and_cancel(
+            None,
+            PullOptions {
+                rebase: false,
+                mode: MergeMode::FastForward,
+                no_commit: false,
+                no_verify: false,
+            },
+            FetchTagsMode::Default,
+            broker,
+            cancel,
+        )
+        .unwrap();
+
+    assert!(outcome.conflicts.is_empty(), "{:?}", outcome.conflicts);
+    assert_eq!(
+        local.git(&["rev-parse", "HEAD"]),
+        upstream.git(&["rev-parse", "HEAD"])
+    );
+    assert_eq!(local.read("remote.txt"), "remote");
+    assert_eq!(local.git(&["status", "--porcelain"]), "");
+}
+
+/// Pulling with uncommitted local changes preserves them, and the pulled file
+/// must still land in the working tree.
+#[test]
+fn pull_with_settings_keeps_local_changes_and_the_pulled_file() {
+    let remote = remote_repo();
+    let upstream = TestRepo::new();
+    common::commit(&upstream.path, "base.txt", "base", "base");
+    seed_remote(&upstream, &remote);
+
+    let local = TestRepo::new();
+    add_origin(&local, &remote);
+    local.git(&["fetch", "-q", "origin"]);
+    local.git(&["reset", "-q", "--hard", "origin/main"]);
+    configure_upstream(&local, "main", "main");
+    local.write("base.txt", "base\nlocal edit\n");
+
+    common::commit(&upstream.path, "remote.txt", "remote", "remote");
+    upstream.git(&["push", "-q", "origin", "main"]);
+
+    let broker = CredentialBroker::new();
+    let cancel = GitCancelHandle::new();
+    let outcome = local
+        .open()
+        .pull_with_settings_and_policy(
+            None,
+            PullOptions {
+                rebase: false,
+                mode: MergeMode::FastForward,
+                no_commit: false,
+                no_verify: false,
+            },
+            FetchTagsMode::Default,
+            broker,
+            cancel,
+            LocalChangesSavePolicy::Stash,
+        )
+        .unwrap();
+
+    assert!(outcome.conflicts.is_empty(), "{:?}", outcome.conflicts);
+    assert_eq!(local.read("remote.txt"), "remote");
+    assert_eq!(local.read("base.txt"), "base\nlocal edit\n");
+}
