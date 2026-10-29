@@ -2,6 +2,9 @@ name: ArborUISmoke
 options:
   bundleIdPrefix: com.arbor.smoke
   createIntermediateGroups: true
+  # Match Arbor/project.yml: newer XcodeGen defaults to a project format that
+  # the Xcode 15 runner in .github/workflows/ui-smoke.yml cannot open.
+  projectFormat: xcode15_3
   deploymentTarget:
     macOS: "14.0"
 targets:

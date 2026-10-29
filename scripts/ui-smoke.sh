@@ -108,6 +108,15 @@ fi
 mkdir -p "$(dirname -- "$SMOKE_PROJECT")"
 xcodegen generate --spec "$ROOT_DIR/ui-smoke/project.yml" --project "$(dirname -- "$SMOKE_PROJECT")" --quiet
 
+# XcodeGen writes the newest project format it knows unless the spec pins one.
+# The suite must stay runnable on the older Xcode in CI, so fail here instead of
+# letting xcodebuild report an unreadable project.
+smoke_project_file="$SMOKE_PROJECT/project.pbxproj"
+if ! grep -q '^[[:space:]]*objectVersion = 63;[[:space:]]*$' "$smoke_project_file"; then
+  echo "unsupported Xcode project format in $smoke_project_file (expected objectVersion 63)" >&2
+  exit 1
+fi
+
 if [[ -n "$ONLY_TEST" ]]; then
   TEST_ARGS+=("-only-testing:ArborUISmokeUITests/$ONLY_TEST")
 fi
