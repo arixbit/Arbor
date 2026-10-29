@@ -705,8 +705,12 @@ extension ArborUISession {
             .sorted { $0.frame.minY < $1.frame.minY }
         for chip in candidates where chip.exists && chip.isHittable {
             chip.click()
+            // The branch list fills asynchronously, so accept any of its early
+            // markers instead of requiring the finished content.
             let opened = app.popovers.firstMatch.waitForExistence(timeout: 3)
                 || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+                || app.searchFields.firstMatch.exists
+                || app.textFields.firstMatch.exists
             if opened { return waitForStableState(timeout: 15) }
         }
         return false
