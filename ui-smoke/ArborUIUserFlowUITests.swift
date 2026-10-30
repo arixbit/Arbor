@@ -262,11 +262,25 @@ final class ArborUIUserFlowUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let row = session.app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        // A branch row labels itself with its name and sync counts, for
+        // example "topic, ↑0 ↓1".
+        let row = session.app.buttons.matching(
+            NSPredicate(format: "label == %@ OR label BEGINSWITH %@", label, label + ",")
+        ).firstMatch
         if !row.waitForExistence(timeout: 5), !session.isBranchesPopoverOpen {
             _ = session.openBranchesPopover()
         }
         click(row, file: file, line: line)
+    }
+
+    /// How many project windows the app reports, for flows that open a second.
+    private func windowCount(_ expected: Int, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if session.app.windows.count >= expected { return true }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return session.app.windows.count >= expected
     }
 
     private func resizeToMinimumWindow(
@@ -396,6 +410,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: repo.appendingPathComponent("picked.txt"), encoding: .utf8), "picked content\n")
         // Inspect the selected historical commit before reversing it.
         click(session.window.staticTexts["Journey pick me"].firstMatch)
+        // A narrow window shows the compact log, which keeps the commit
+        // inspector closed until asked for it.
+        let details = session.window.descendants(matching: .any)["log-open-inspector"].firstMatch
+        if details.exists { click(details) }
         let changedFile = session.window.staticTexts["picked.txt"].firstMatch
         XCTAssertTrue(changedFile.waitForExistence(timeout: 10))
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleClick()
@@ -463,8 +481,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         session.app.menuBars.menuBarItems["File"].click()
         session.app.menuItems["Open Recent Project"].firstMatch.click()
         click(session.app.menuItems["other"].firstMatch)
-        let secondWindow = session.app.windows.containing(.menuButton, identifier: "other").firstMatch
-        XCTAssertTrue(secondWindow.waitForExistence(timeout: 15))
+        XCTAssertTrue(
+            windowCount(2, timeout: 15),
+            "opening a recent project must create a second window"
+        )
+        let secondWindow = session.app.windows.allElementsBoundByIndex.last ?? session.window
+        secondWindow.click()
         menu("Stash…", localChanges: true)
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
         try eventually("active-window-stash") { try self.git("status", "--porcelain", at: other).isEmpty }
@@ -502,7 +524,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try resizeToMinimumWindow(window)
         XCTAssertTrue(session.openBranchesPopover())
         func capturePopup(_ name: String) {
-            let attachment = XCTAttachment(screenshot: session.app.popovers.firstMatch.screenshot())
+            let attachment = XCTAttachment(screenshot: session.window.screenshot())
             attachment.name = name
             attachment.lifetime = .keepAlways
             add(attachment)
