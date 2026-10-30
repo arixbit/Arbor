@@ -693,10 +693,12 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// Whether the branches popover is on screen.
+    /// Whether the branches popover is on screen. `app.popovers` alone is not
+    /// usable: macOS keeps reporting a popover element that is not presented,
+    /// which made the helper skip its click and fail later on a row that was
+    /// never shown. The reference list only exists while the popover is up.
     var isBranchesPopoverOpen: Bool {
-        app.popovers.firstMatch.exists
-            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+        app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
     }
 
     /// The current-branch chip in the header opens the branches popover.
@@ -713,13 +715,9 @@ extension ArborUISession {
             .sorted { $0.frame.minY < $1.frame.minY }
         for chip in candidates where chip.exists && chip.isHittable {
             chip.click()
-            // The branch list fills asynchronously, so accept any of its early
-            // markers instead of requiring the finished content.
-            let opened = app.popovers.firstMatch.waitForExistence(timeout: 3)
-                || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
-                || app.searchFields.firstMatch.exists
-                || app.textFields.firstMatch.exists
-            if opened { return waitForStableState(timeout: 15) }
+            // The list fills after the branch snapshot loads.
+            let list = app.descendants(matching: .any)["branch-reference-list"].firstMatch
+            if list.waitForExistence(timeout: 8) { return waitForStableState(timeout: 15) }
         }
         return false
     }
