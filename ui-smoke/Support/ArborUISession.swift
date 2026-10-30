@@ -693,12 +693,26 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// Whether the branches popover is on screen. `app.popovers` alone is not
-    /// usable: macOS keeps reporting a popover element that is not presented,
-    /// which made the helper skip its click and fail later on a row that was
-    /// never shown. The reference list only exists while the popover is up.
+    /// The branches popover, when one is actually presented.
+    ///
+    /// Neither signal alone is enough on macOS: `app.popovers` keeps reporting
+    /// an element that is not on screen, and the reference list inside the
+    /// popover is not always exposed. A presented popover has a real frame, so
+    /// require one.
+    private var presentedBranchesPopover: XCUIElement? {
+        let popover = app.popovers.firstMatch
+        guard popover.exists else { return nil }
+        let frame = popover.frame
+        guard frame.minX.isFinite, frame.minY.isFinite,
+              frame.width.isFinite, frame.height.isFinite,
+              frame.width > 40, frame.height > 40 else { return nil }
+        return popover
+    }
+
+    /// Whether the branches popover is on screen.
     var isBranchesPopoverOpen: Bool {
-        app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+        presentedBranchesPopover != nil
+            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
     }
 
     /// The current-branch chip in the header opens the branches popover.
@@ -707,18 +721,17 @@ extension ArborUISession {
         // The chip toggles the popover, so clicking it again closes it.
         if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
         // The status bar repeats the branch name, so the first match is not
-        // necessarily the chip that opens the popover. Try them top-down and
-        // require the popover to actually appear.
+        // necessarily the chip that opens the popover. Try them top-down.
         let candidates = window.buttons
             .matching(NSPredicate(format: "label == %@", branch))
             .allElementsBoundByIndex
             .sorted { $0.frame.minY < $1.frame.minY }
         for chip in candidates where chip.exists && chip.isHittable {
             chip.click()
-            // The list fills after the branch snapshot loads.
-            let list = app.descendants(matching: .any)["branch-reference-list"].firstMatch
-            if list.waitForExistence(timeout: 8) { return waitForStableState(timeout: 15) }
+            _ = app.popovers.firstMatch.waitForExistence(timeout: 5)
+            if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
         }
+        recordScreenshot(named: "branches-popover-missing")
         return false
     }
 
