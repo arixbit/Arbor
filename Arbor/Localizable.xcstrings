@@ -24261,6 +24261,16 @@
         }
       }
     },
+    "Branch Actions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支操作"
+          }
+        }
+      }
+    },
     "Branch operations" : {
       "localizations" : {
         "zh-Hans" : {

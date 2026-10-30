@@ -590,10 +590,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(session.window.frame.contains(branch.frame))
         XCTAssertTrue(references.staticTexts["没有贮藏"].firstMatch.exists)
         capturePopup("multi-root-branch-search-zh-Hans-980")
-        // A branch row's gear menu is not exposed to accessibility, so the
-        // per-row merge dialog cannot be reached the way a user would. The
-        // assertions above already cover the popup itself.
-        throw XCTSkip("multi-root branch row menus are not exposed to accessibility")
+        // A row only renders its gear while hovered, so automation cannot
+        // reach it; the popup assertions above cover this flow instead.
+        throw XCTSkip("branch row gears render on hover only")
+        let merge = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中合并…")
+            .allElementsBoundByIndex.first { !$0.frame.isEmpty })
+        click(merge)
         let sheet = session.app.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
         XCTAssertTrue(sheet.staticTexts["合并分支"].firstMatch.exists)
@@ -745,7 +747,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // branch row itself.
         let row = references.buttons.matching(NSPredicate(format: "label == %@", "shared")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        throw XCTSkip("multi-root branch row menus are not exposed to accessibility")
+        throw XCTSkip("branch row gears render on hover only")
         let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
             .allElementsBoundByIndex.first { !$0.frame.isEmpty })
         click(rename)

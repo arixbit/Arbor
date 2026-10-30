@@ -1884,6 +1884,8 @@ struct MultiRootBranchesPopover: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("branch-row-menu")
+                .accessibilityLabel(Text("Branch Actions"))
             } else {
                 Menu {
                     Button(localizedArborString(favoriteTitle(rootPath: rootPath, name: name, isRemote: isRemote), locale: locale)) {
@@ -2083,6 +2085,8 @@ struct MultiRootBranchesPopover: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("branch-row-menu")
+                .accessibilityLabel(Text("Branch Actions"))
             }
         }
         .padding(.horizontal, 6)
