@@ -114,6 +114,7 @@ struct ContentView: View {
     let externalLogTabsPersistenceKey: String?
     @StateObject var feedbackCenter = FeedbackCenter()
     @State var notificationsPresented = false
+    @State var branchPopupContentSize: CGSize = .zero
     @State var workspaceTitlebarHeight: CGFloat = 0
     @StateObject var credentialAuth = CredentialAuthController()
     // ContentView is also hosted by the AppKit fallback window used when a

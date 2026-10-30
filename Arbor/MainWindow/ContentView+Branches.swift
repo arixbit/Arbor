@@ -94,22 +94,55 @@ extension ContentView {
         )
     }
 
-    /// The branches popup, drawn inside the window below its chip.
+    /// The branches popup, drawn inside the window next to its chip.
+    ///
+    /// A window clips its content, so a popup taller than the space below the
+    /// chip would lose its footer (Actions, repository scope). Place it below
+    /// when it fits and above otherwise, keeping it inside the window.
     @ViewBuilder
     func branchPopupLayer(anchor: CGRect) -> some View {
-        if branchWorkspace.showPopover {
-            ZStack(alignment: .topLeading) {
-                // Click anywhere else to close, like a popover does.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { branchWorkspace.showPopover = false }
-                branchesPopoverContent
-                    .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
-                    .offset(x: anchor.minX, y: anchor.maxY + 4)
-                    .accessibilityIdentifier("branches-popover")
+        GeometryReader { proxy in
+            if branchWorkspace.showPopover {
+                ZStack(alignment: .topLeading) {
+                    // Click anywhere else to close, like a popover does.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { branchWorkspace.showPopover = false }
+                    branchesPopoverContent
+                        .background(
+                            GeometryReader { content in
+                                Color.clear.preference(
+                                    key: BranchPopupSizeKey.self,
+                                    value: content.size
+                                )
+                            }
+                        )
+                        .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+                        .offset(x: min(anchor.minX, max(0, proxy.size.width - branchPopupContentSize.width - 8)),
+                                y: branchPopupOffset(anchor: anchor, container: proxy.size))
+                        .accessibilityIdentifier("branches-popover")
+                }
+                .onPreferenceChange(BranchPopupSizeKey.self) { branchPopupContentSize = $0 }
+                .onExitCommand { branchWorkspace.showPopover = false }
+                // A popover closes when the app goes to the background; keep
+                // that behavior now that the popup lives in the window.
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: NSApplication.didResignActiveNotification
+                    )
+                ) { _ in branchWorkspace.showPopover = false }
             }
-            .onExitCommand { branchWorkspace.showPopover = false }
         }
+    }
+
+    private func branchPopupOffset(anchor: CGRect, container: CGSize) -> CGFloat {
+        let height = branchPopupContentSize.height
+        let below = anchor.maxY + 4
+        if height <= 0 { return below }
+        if below + height <= container.height - 8 { return below }
+        let above = anchor.minY - height - 4
+        if above >= 8 { return above }
+        return max(8, container.height - height - 8)
     }
 
     @ViewBuilder
@@ -568,6 +601,17 @@ extension ContentView {
 
 /// Screen position of the branches chip, so the popup can be drawn below it in
 /// the same window.
+/// Measured size of the branches popup content, used to keep it inside the
+/// window when there is not enough room below the chip.
+struct BranchPopupSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
 struct BranchPopupAnchorKey: PreferenceKey {
     /// Shared with the window content so the chip frame and the popup layer
     /// are measured from the same origin.
