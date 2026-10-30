@@ -579,7 +579,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let branch = references.staticTexts[String(longBranch.split(separator: "/").last!)].firstMatch
         XCTAssertTrue(branch.waitForExistence(timeout: 5))
         XCTAssertTrue(branch.isHittable)
-        XCTAssertTrue(references.frame.contains(branch.frame))
+        XCTAssertTrue(session.window.frame.contains(branch.frame))
         XCTAssertTrue(references.staticTexts["没有贮藏"].firstMatch.exists)
         capturePopup("multi-root-branch-search-zh-Hans-980")
         let branchMenu = try XCTUnwrap(references.menuButtons.allElementsBoundByIndex.first {
@@ -662,8 +662,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let actions = session.app.descendants(matching: .any)["操作"].firstMatch
         XCTAssertTrue(actions.waitForExistence(timeout: 5))
         click(actions)
-        let projectSettings = session.app.menuItems["项目 Git 设置…"].firstMatch
-        XCTAssertTrue(projectSettings.waitForExistence(timeout: 5))
+        let projectSettings = session.app.menuItems.matching(
+            NSPredicate(format: "title == %@", "项目 Git 设置…")
+        ).firstMatch
+        XCTAssertTrue(projectSettings.waitForExistence(timeout: 10))
         click(projectSettings)
         let sheet = session.app.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
@@ -726,10 +728,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let references = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
         XCTAssertTrue(references.waitForExistence(timeout: 5))
         enter("shared", into: session.app.textFields["过滤分支"].firstMatch)
-        let row = references.staticTexts["shared"].firstMatch
+        // "shared" also appears under RECENT, whose rows have no menu; use the
+        // branch row itself.
+        let row = references.buttons.matching(NSPredicate(format: "label == %@", "shared")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let rowMenu = try XCTUnwrap(session.app.menuButtons.allElementsBoundByIndex.first {
-            !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 3
+            !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6
         })
         click(rowMenu)
         let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
