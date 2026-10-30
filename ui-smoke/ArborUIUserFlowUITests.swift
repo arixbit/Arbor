@@ -423,6 +423,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // when the window is wide.
         let done = session.app.sheets.firstMatch.buttons["Done"].firstMatch
         if done.exists { click(done) }
+        // The inspector repeats the commit subject, and its context menu is a
+        // different one; return to the Log before opening the row menu.
+        let closeInspector = session.window.descendants(matching: .any)["log-close-inspector"].firstMatch
+        if closeInspector.exists { click(closeInspector) }
         session.window.staticTexts["Journey pick me"].firstMatch
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
         click(session.app.menuItems["Revert Commit"].firstMatch)
@@ -653,7 +657,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let window = session.window
         try resizeToMinimumWindow(window)
         XCTAssertTrue(session.openBranchesPopover())
-        let actions = session.app.menuButtons["操作"].firstMatch
+        let actions = session.app.descendants(matching: .any)["操作"].firstMatch
         XCTAssertTrue(actions.waitForExistence(timeout: 5))
         click(actions)
         let projectSettings = session.app.menuItems["项目 Git 设置…"].firstMatch

@@ -422,7 +422,6 @@ extension ContentView {
             },
             onCancel: { branchWorkspace.showPopover = false }
         )
-        .accessibilityIdentifier("branches-popover")
         .environment(\.locale, appLocale)
     } else {
         RebasedBranchesPopover(
@@ -549,7 +548,6 @@ extension ContentView {
             branchWorkspace.showPopover = false
         }
         )
-        .accessibilityIdentifier("branches-popover")
         .environment(\.locale, appLocale)
     }
     }
