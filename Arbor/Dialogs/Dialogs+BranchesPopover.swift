@@ -222,6 +222,7 @@ struct RebasedBranchesPopover: View {
 
             TextField("Search branches", text: $query)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("branches-popover-search")
                 .padding(.bottom, 8)
                 .onSubmit { activateSelectedBranch() }
                 .onKeyPress(.downArrow, action: handleDownKeyPress)

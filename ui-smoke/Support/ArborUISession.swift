@@ -705,6 +705,7 @@ extension ArborUISession {
     /// Whether the branches popover is on screen.
     var isBranchesPopoverOpen: Bool {
         branchesPopoverContent.exists
+            || app.descendants(matching: .any)["branches-popover-search"].firstMatch.exists
     }
 
     /// The current-branch chip in the header opens the branches popover.
@@ -720,7 +721,8 @@ extension ArborUISession {
             .sorted { $0.frame.minY < $1.frame.minY }
         for chip in candidates where chip.exists && chip.isHittable {
             chip.click()
-            if branchesPopoverContent.waitForExistence(timeout: 5) {
+            let search = app.descendants(matching: .any)["branches-popover-search"].firstMatch
+            if branchesPopoverContent.waitForExistence(timeout: 3) || search.exists {
                 return waitForStableState(timeout: 15)
             }
         }

@@ -933,6 +933,7 @@ struct MultiRootBranchesPopover: View {
 
     private var filterField: some View {
         TextField("Filter branches", text: $query)
+            .accessibilityIdentifier("branches-popover-search")
             .textFieldStyle(.roundedBorder)
             .onSubmit { activateSelectedBranch() }
             .onKeyPress(.downArrow, action: handleDownKeyPress)
