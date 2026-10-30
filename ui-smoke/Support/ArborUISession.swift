@@ -693,26 +693,18 @@ extension ArborUISession {
         return waitForStableState(timeout: 15)
     }
 
-    /// The branches popover, when one is actually presented.
+    /// The branches popover, when one is presented.
     ///
-    /// Neither signal alone is enough on macOS: `app.popovers` keeps reporting
-    /// an element that is not on screen, and the reference list inside the
-    /// popover is not always exposed. A presented popover has a real frame, so
-    /// require one.
-    private var presentedBranchesPopover: XCUIElement? {
-        let popover = app.popovers.firstMatch
-        guard popover.exists else { return nil }
-        let frame = popover.frame
-        guard frame.minX.isFinite, frame.minY.isFinite,
-              frame.width.isFinite, frame.height.isFinite,
-              frame.width > 40, frame.height > 40 else { return nil }
-        return popover
+    /// XCUITest classifies a SwiftUI popover as a window on macOS, and
+    /// `app.popovers` keeps a zero-size element for a popover that is not on
+    /// screen, so the content carries its own identifier.
+    private var branchesPopoverContent: XCUIElement {
+        app.descendants(matching: .any)["branches-popover"].firstMatch
     }
 
     /// Whether the branches popover is on screen.
     var isBranchesPopoverOpen: Bool {
-        presentedBranchesPopover != nil
-            || app.descendants(matching: .any)["branch-reference-list"].firstMatch.exists
+        branchesPopoverContent.exists
     }
 
     /// The current-branch chip in the header opens the branches popover.
@@ -728,8 +720,9 @@ extension ArborUISession {
             .sorted { $0.frame.minY < $1.frame.minY }
         for chip in candidates where chip.exists && chip.isHittable {
             chip.click()
-            _ = app.popovers.firstMatch.waitForExistence(timeout: 5)
-            if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
+            if branchesPopoverContent.waitForExistence(timeout: 5) {
+                return waitForStableState(timeout: 15)
+            }
         }
         recordScreenshot(named: "branches-popover-missing")
         return false
