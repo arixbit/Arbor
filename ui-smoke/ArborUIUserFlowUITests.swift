@@ -488,9 +488,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
             windowCount(2, timeout: 15),
             "opening a recent project must create a second window"
         )
-        // Opening the recent project makes its window key; clicking a window
-        // element itself is not a pointer target.
-        session.app.activate()
+        // Opening the recent project makes its window key; a window element
+        // is not itself a pointer target, so close it through its own button.
+        let secondWindow = session.app.windows.allElementsBoundByIndex.last ?? session.window
         menu("Stash…", localChanges: true)
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
         try eventually("active-window-stash") { try self.git("status", "--porcelain", at: other).isEmpty }
