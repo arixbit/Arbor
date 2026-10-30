@@ -576,7 +576,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertTrue(session.app.staticTexts["1 个仓库"].firstMatch.exists)
         XCTAssertTrue(session.app.staticTexts["位于 backend"].firstMatch.exists)
         pasteSearch("localization-audit")
-        let branch = references.staticTexts[String(longBranch.split(separator: "/").last!)].firstMatch
+        let shortName = String(longBranch.split(separator: "/").last!)
+        let branch = references.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", shortName)
+        ).firstMatch
         XCTAssertTrue(branch.waitForExistence(timeout: 5))
         XCTAssertTrue(branch.isHittable)
         XCTAssertTrue(session.window.frame.contains(branch.frame))
@@ -669,7 +672,11 @@ final class ArborUIUserFlowUITests: XCTestCase {
         click(projectSettings)
         let sheet = session.app.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
-        XCTAssertTrue(sheet.staticTexts["项目 Git 设置"].firstMatch.exists)
+        XCTAssertTrue(
+            sheet.staticTexts.matching(
+                NSPredicate(format: "value CONTAINS %@", "项目 Git 设置")
+            ).firstMatch.waitForExistence(timeout: 5)
+        )
         let incoming = sheet.popUpButtons
             .matching(NSPredicate(format: "value == %@", "使用全局 Git 设置"))
             .firstMatch
@@ -732,9 +739,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // branch row itself.
         let row = references.buttons.matching(NSPredicate(format: "label == %@", "shared")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let rowMenu = try XCTUnwrap(session.app.menuButtons.allElementsBoundByIndex.first {
-            !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6
-        })
+        let rowMenu = try XCTUnwrap(
+            (session.app.menuButtons.allElementsBoundByIndex
+                + session.app.popUpButtons.allElementsBoundByIndex).first {
+                !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6
+            }
+        )
         click(rowMenu)
         let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
             .allElementsBoundByIndex.first { !$0.frame.isEmpty })
