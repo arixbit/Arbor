@@ -419,7 +419,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleClick()
         XCTAssertTrue(session.app.staticTexts["picked content"].firstMatch.waitForExistence(timeout: 10))
         session.recordScreenshot(named: "history-diff")
-        click(session.app.sheets.firstMatch.buttons["Done"].firstMatch)
+        // The diff is a sheet in the compact layout and part of the inspector
+        // when the window is wide.
+        let done = session.app.sheets.firstMatch.buttons["Done"].firstMatch
+        if done.exists { click(done) }
         session.window.staticTexts["Journey pick me"].firstMatch
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
         click(session.app.menuItems["Revert Commit"].firstMatch)
@@ -485,8 +488,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
             windowCount(2, timeout: 15),
             "opening a recent project must create a second window"
         )
-        let secondWindow = session.app.windows.allElementsBoundByIndex.last ?? session.window
-        secondWindow.click()
+        // Opening the recent project makes its window key; clicking a window
+        // element itself is not a pointer target.
+        session.app.activate()
         menu("Stash…", localChanges: true)
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
         try eventually("active-window-stash") { try self.git("status", "--porcelain", at: other).isEmpty }
@@ -623,7 +627,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let pull = session.app.buttons["Pull"].firstMatch
         XCTAssertTrue(pull.waitForExistence(timeout: 10))
         XCTAssertTrue(session.app.staticTexts["默认"].firstMatch.waitForExistence(timeout: 5))
-        let modify = session.app.menuButtons["修改…"].firstMatch
+        let modify = session.app.descendants(matching: .any)["修改…"].firstMatch
         XCTAssertTrue(modify.waitForExistence(timeout: 5))
         click(modify)
         XCTAssertTrue(session.app.menuItems["仅 fast-forward"].firstMatch.waitForExistence(timeout: 5))

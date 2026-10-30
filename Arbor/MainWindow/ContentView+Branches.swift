@@ -108,6 +108,11 @@ extension ContentView {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture { branchWorkspace.showPopover = false }
+                    // Presence marker: setting the identifier on the content
+                    // would override the identifiers of the controls inside it.
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("branches-popover")
                     branchesPopoverContent
                         .background(
                             GeometryReader { content in
@@ -120,7 +125,6 @@ extension ContentView {
                         .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
                         .offset(x: min(anchor.minX, max(0, proxy.size.width - branchPopupContentSize.width - 8)),
                                 y: branchPopupOffset(anchor: anchor, container: proxy.size))
-                        .accessibilityIdentifier("branches-popover")
                 }
                 .onPreferenceChange(BranchPopupSizeKey.self) { branchPopupContentSize = $0 }
                 .onExitCommand { branchWorkspace.showPopover = false }
