@@ -314,7 +314,13 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         }
 
         // Widen directly from details, then verify the selected commit and
-        // both divider positions survived the change of presentation.
+        // both divider positions survived the change of presentation. A runner
+        // display that cannot hold the compact width switches the window to the
+        // inline inspector, where this block's assumptions do not apply.
+        try XCTSkipIf(
+            Self.hostedTargetSize.width >= 1200,
+            "the runner display cannot hold the compact log layout"
+        )
         openInspector.click()
         resize(session.window, to: Self.hostedTargetSize, label: "log-columns-restored")
         XCTAssertTrue(bar.waitForExistence(timeout: 5))

@@ -542,7 +542,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
         tree.name = "multi-root-branches-chinese-tree"
         tree.lifetime = .keepAlways
         add(tree)
-        let popup = session.app.popovers.firstMatch
+        // The popup is drawn in the window now, so containment is checked
+        // against the window rather than a separate popover element.
+        let popup = session.window
         let references = session.app.scrollViews["multi-root-branch-reference-list"].firstMatch
         XCTAssertTrue(references.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(references.frame.height, 300)
@@ -553,7 +555,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
             XCTAssertTrue(popup.frame.contains(buttons.firstMatch.frame), "Action overflows: \(title)")
             XCTAssertTrue(references.frame.contains(buttons.firstMatch.frame))
         }
-        let actions = popup.menuButtons["操作"].firstMatch
+        let actions = popup.descendants(matching: .any)["操作"].firstMatch
         XCTAssertTrue(actions.isHittable)
         XCTAssertTrue(popup.frame.contains(actions.frame))
         click(actions)
@@ -726,7 +728,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         enter("shared", into: session.app.textFields["过滤分支"].firstMatch)
         let row = references.staticTexts["shared"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let rowMenu = try XCTUnwrap(references.menuButtons.allElementsBoundByIndex.first {
+        let rowMenu = try XCTUnwrap(session.app.menuButtons.allElementsBoundByIndex.first {
             !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 3
         })
         click(rowMenu)
