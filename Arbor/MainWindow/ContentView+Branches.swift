@@ -84,409 +84,437 @@ extension ContentView {
         .buttonStyle(.borderless)
         .disabled(repo == nil)
         .help("Branches: checkout / pull / push / fetch / merge / rebase / stash")
-        .popover(isPresented: $branchWorkspace.showPopover, arrowEdge: .bottom) {
-            if multiRootWorkspace.roots.count > 1 && !multiRootWorkspace.branchSnapshots.isEmpty {
-                MultiRootBranchesPopover(
-                    projectPath: projectWorkspace.path,
-                    protectedBranchPatterns: effectiveProtectedBranchPatterns,
-                    snapshots: multiRootWorkspace.branchSnapshots,
-                    incomingBranches: gitSettings.autoFetchIncomingBranches,
-                    operationContexts: multiRootWorkspace.roots.compactMap { root in
-                        guard let kind = root.operation else { return nil }
-                        return BranchPopupOperationContext(
-                            rootPath: root.path,
-                            displayName: root.displayName,
-                            relativePath: root.relativePath,
-                            kind: kind,
-                            hasConflicts: operationRecovery.multiRootConflictGroups.contains {
-                                $0.rootPath == root.path && !$0.paths.isEmpty
-                            }
-                        )
-                    },
-                    onOperationAction: { rootPath, action in
-                        handleVCSActionRequest(
-                            ArborVCSActionRequest(
-                                kind: .operationRecovery,
-                                projectPath: projectWorkspace.path,
-                                rootPath: rootPath,
-                                shelfName: "",
-                                operationRecoveryAction: action.recoveryAction
-                            )
-                        )
-                    },
-                    onCommitChanges: {
-                        branchWorkspace.showPopover = false
-                        openMultiRootCommitDialog()
-                    },
-                    hasCommitChanges: hasAnyMultiRootCommitChanges,
-                    onNewBranch: {
-                        presentMultiRootNewBranchDialog()
-                        branchWorkspace.showPopover = false
-                    },
-                    onFindMerged: {
-                        beginFindMergedBranches()
-                        branchWorkspace.showPopover = false
-                    },
-                    onRemoteTags: {
-                        branchWorkspace.showPopover = false
-                        tagWorkspace.showMultiRootRemoteTagsDialog = true
-                    },
-                    onCheckout: { rootPath, reference, isRemote in
-                        checkoutBranchInRoot(
-                            rootPath: rootPath,
-                            reference: reference,
-                            isRemote: isRemote
-                        )
-                        branchWorkspace.showPopover = false
-                    },
-                    onCheckoutAsNewBranch: { rootPath, reference, isRemote in
-                        presentMultiRootNewBranchFromReference(
-                            rootPath: rootPath,
-                            reference: reference,
-                            isRemote: isRemote
-                        )
-                    },
-                    onCheckoutAndUpdate: { rootPath, reference, _, rebase in
-                        executeMultiRootCheckoutAndUpdate(
-                            reference: reference,
-                            rootPath: rootPath,
-                            detach: false,
-                            rebase: rebase
-                        )
-                        branchWorkspace.showPopover = false
-                    },
-                    onCheckoutWithRebase: { rootPath, reference, isRemote in
-                        if isRemote {
-                            presentNewBranchFromReference(
-                                reference,
-                                isRemote: true,
-                                afterCreateRebase: true,
-                                rootPath: rootPath
-                            )
-                        } else {
-                            executeMultiRootCheckoutWithRebase(
-                                rootPath: rootPath,
-                                branch: reference
-                            )
-                        }
-                        branchWorkspace.showPopover = false
-                    },
-                    onCheckoutRecent: { rootPath, name in
-                        checkoutRecentBranchInRoot(rootPath: rootPath, name: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onCheckoutTag: { rootPath, name in
-                        checkoutTagInRoot(rootPath: rootPath, name: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteTag: { rootPath, name in
-                        deleteTagInRoot(rootPath: rootPath, name: name)
-                    },
-                    onDeleteTagAcrossRoots: { name in
-                        presentMultiRootDeleteTagDialog(name: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onRenameTag: { rootPath, name in
-                        renameTagInRoot(rootPath: rootPath, name: name)
-                    },
-                    onPushTag: { rootPath, name in
-                        pushTagInRoot(rootPath: rootPath, name: name)
-                    },
-                    onPushTagToRemote: { rootPath, name, remote in
-                        pushTagInRoot(rootPath: rootPath, name: name, remote: remote)
-                    },
-                    onShowDiffWithWorkingTree: { rootPath, name in
-                        showBranchDiffWithWorkingTree(rootPath: rootPath, branch: name)
-                    },
-                    onPushAllTags: { rootPath, remote in
-                        pushAllTagsInRoot(rootPath: rootPath, remote: remote)
-                    },
-                    onApplyStash: { rootPath, stashID, restoreIndex in
-                        applyStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
-                    },
-                    onPopStash: { rootPath, stashID, restoreIndex in
-                        popStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
-                    },
-                    onDropStash: { rootPath, stashID in
-                        dropStashInRoot(rootPath: rootPath, stashID: stashID)
-                    },
-                    onStashBranch: { rootPath, stashID in
-                        stashBranchInRoot(rootPath: rootPath, stashID: stashID)
-                    },
-                    onStashDiff: { rootPath, stashID in
-                        showStashDiffInRoot(rootPath: rootPath, stashID: stashID)
-                    },
-                    onStashClear: { rootPath in
-                        clearStashesInRoot(rootPath: rootPath)
-                    },
-                    onUpdateBranch: { rootPath, branch in
-                        updateBranchInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onForcePushedUpdate: { rootPath, branch in
-                        updateForcePushedBranchInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onForcePushedUpdateAcrossRoots: { branch in
-                        updateForcePushedBranchAcrossRoots(branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onPullBranch: { rootPath, branch, rebase in
-                        pullBranchInRoot(rootPath: rootPath, branch: branch, rebase: rebase)
-                        branchWorkspace.showPopover = false
-                    },
-                    onPullRemoteBranch: { rootPath, branch, rebase in
-                        pullRemoteBranchInRoot(
-                            rootPath: rootPath,
-                            remoteBranch: branch,
-                            rebase: rebase
-                        )
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteRemote: { rootPath, branch in
-                        deleteRemoteBranchInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteRemoteAcrossRoots: { branch in
-                        presentMultiRootRemoteDeleteDialog(branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onMerge: { rootPath, branch in
-                        mergeBranchInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onMergeAcrossRoots: presentMultiRootMergeFromPopup,
-                    onRebase: { rootPath, branch in
-                        rebaseCurrentInRoot(rootPath: rootPath, onto: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onCompare: { rootPath, branch in
-                        compareBranchInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onCompareSelected: { selection in
-                        guard selection.count == 2,
-                              let first = selection.first,
-                              selection.allSatisfy({ $0.rootPath == first.rootPath }) else { return }
-                        compareBranchesCommitWiseInRoot(
-                            rootPath: first.rootPath,
-                            first: first.name,
-                            second: selection[1].name
-                        )
-                        branchWorkspace.showPopover = false
-                    },
-                    onCompareSelectedFiles: { selection in
-                        guard selection.count == 2,
-                              let first = selection.first,
-                              selection.allSatisfy({ $0.rootPath == first.rootPath }) else { return }
-                        compareBranchesInRoot(
-                            rootPath: first.rootPath,
-                            first: first.name,
-                            second: selection[1].name
-                        )
-                        branchWorkspace.showPopover = false
-                    },
-                    onUpdateSelected: { selection in
-                        updateSelectedBranchesInRoots(selection)
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteSelected: { selection in
-                        deleteSelectedBranchesInRoots(selection)
-                        branchWorkspace.showPopover = false
-                    },
-                    onPushDialog: { rootPath, branch in
-                        beginMultiRootPushDialog(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onEditRemote: { rootPath, name in
-                        beginMultiRootRemoteConfig(rootPath: rootPath, selectedRemote: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onRemoveRemote: { rootPath, name in
-                        removeRemoteInRoot(rootPath: rootPath, name: name)
-                    },
-                    onRemoveRemoteSelected: { groups in
-                        removeSelectedRemotesInRoots(groups)
-                    },
-                    onConfigureRemotes: {
-                        beginConfigureRemotes()
-                    },
-                    onSetUpstream: { rootPath, branch in
-                        setBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onUnsetUpstream: { rootPath, branch in
-                        unsetBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onRenameBranch: { rootPath, branch in
-                        renameBranchInRoot(rootPath: rootPath, oldName: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onRenameBranchAcrossRoots: { name in
-                        presentMultiRootRenameBranchDialog(name: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteBranchAcrossRoots: { name in
-                        presentMultiRootDeleteBranchDialog(name: name)
-                        branchWorkspace.showPopover = false
-                    },
-                    onDeleteBranch: { rootPath, branch in
-                        deleteBranchInRoot(rootPath: rootPath, name: branch)
-                        branchWorkspace.showPopover = false
-                    },
-                    onCheckoutReference: { rootPath in
-                        checkoutReferenceFromInput(rootPath: rootPath)
-                    },
-                    onOpenWorktree: { path in
-                        branchWorkspace.showPopover = false
-                        openWindow(value: path)
-                    },
-                    onCreateWorktreeFromReference: { rootPath, reference, isTag in
-                        branchWorkspace.showPopover = false
-                        presentNewWorktreeFromReference(
-                            reference,
-                            isTag: isTag,
-                            rootPath: rootPath
-                        )
-                    },
-                    onProjectGitSettings: {
-                        branchWorkspace.showPopover = false
-                        gitSettings.showProjectGitSettings = true
-                    },
-                    onCancel: { branchWorkspace.showPopover = false }
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: BranchPopupAnchorKey.self,
+                    value: proxy.frame(in: .named(BranchPopupAnchorKey.coordinateSpace))
                 )
-                .accessibilityIdentifier("branches-popover")
-                .environment(\.locale, appLocale)
-            } else {
-                RebasedBranchesPopover(
-                projectPath: projectWorkspace.path,
-                branches: branchWorkspace.branches,
-                remoteBranches: branchWorkspace.remoteBranches,
-                recentBranches: branchWorkspace.recentBranches,
-                tags: tagWorkspace.tags,
-                comparisons: branchWorkspace.comparisons,
-                syncStatuses: branchWorkspace.syncStatuses,
-                incomingBranches: gitSettings.autoFetchIncomingBranches,
-                stashes: stashUI.stashes,
-                worktrees: worktreeWorkspace.worktrees,
-                hasRemote: !remoteWorkspace.remotes.isEmpty,
-                protectedBranchPatterns: effectiveProtectedBranchPatterns,
-                isShallow: repositoryStatus.isShallowRepository,
-                hasHeadCommit: repositoryStatus.headId != nil,
-                hasCommitChanges: vcsActionContext.hasLocalChanges,
-                onCheckout: switchBranch,
-                onRenameBranch: renameBranchFromPopup,
-                onDeleteBranch: deleteBranchFromPopup,
-                onCheckoutRecent: checkoutRecentBranch,
-                onCheckoutTag: checkoutTag,
-                onCheckoutAsNewBranch: { reference, isRemote in
-                    presentNewBranchFromReference(reference, isRemote: isRemote)
-                },
-                onDeleteTag: tagDelete,
-                onRenameTag: { old in
-                    let alert = NSAlert()
-                    alert.messageText = String(localized: "Rename Tag")
-                    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-                    field.stringValue = old
-                    alert.accessoryView = field
-                    alert.addButton(withTitle: "Rename")
-                    alert.addButton(withTitle: "Cancel")
-                    if alert.runModal() == .alertFirstButtonReturn {
-                        tagRename(old, field.stringValue)
-                    }
-                },
-                onPushTag: { tag in tagPushToRemote(tag) },
-                tagPushRemotes: remoteWorkspace.remotes.map(\.name),
-                onPushTagToRemote: { tag, remote in
-                    tagPushToRemote(tag, remote: remote)
-                },
-                onShowDiffWithWorkingTree: { branch in
-                    showBranchDiffWithWorkingTree(rootPath: nil, branch: branch)
-                },
-                onPushAllTags: { remote in
-                    pushAllTagsToRemote(remote: remote)
-                },
-                onRemoteTags: {
-                    branchWorkspace.showPopover = false
-                    tagWorkspace.showRemoteTagsDialog = true
-                },
-                onCheckoutAndUpdate: { branch, rebase in checkoutAndUpdate(branch, rebase: rebase) },
-                onUpdateBranch: updateSelectedBranch,
-                onPushBranch: { branch in beginPushDialog(branch: branch) },
-                onForcePushedUpdate: updateForcePushedBranch,
-                onPullRemoteBranch: { branch, rebase in pullRemoteBranch(branch, rebase: rebase) },
-                onCheckoutRemote: checkoutRemoteBranch,
-                onCheckoutRemoteWithRebase: { branch in
-                    presentNewBranchFromReference(
-                        branch.name,
-                        isRemote: true,
-                        afterCreateRebase: true
-                    )
-                },
-                onDeleteRemote: deleteRemoteBranch,
-                onNewBranch: { presentNewBranchDialog() },
-                onCommitChanges: openCommitWorkspaceFromBranchPopup,
-                onFindMerged: {
-                    beginFindMergedBranches()
-                    branchWorkspace.showPopover = false
-                },
-                onCheckoutReference: checkoutReferenceFromInput,
-                onOpenWorktree: { path in
-                    branchWorkspace.showPopover = false
-                    openWindow(value: path)
-                },
-                onCreateWorktreeFromReference: { reference, isTag in
-                    branchWorkspace.showPopover = false
-                    presentNewWorktreeFromReference(reference, isTag: isTag)
-                },
-                onCompare: compareBranchFromPopup,
-                onMerge: openMergeDialog,
-                onRebase: openRebaseDialog,
-                onStash: presentStashDialog,
-                onApplyStash: { stashID, restoreIndex in stashApply(stashID: stashID, restoreIndex: restoreIndex) },
-                onPopStash: { stashID, restoreIndex in stashPop(stashID: stashID, restoreIndex: restoreIndex) },
-                onDropStash: stashDrop(stashID:),
-                onStashBranch: stashBranch(stashID:),
-                onStashDiff: showStashDiffFor(stashID:),
-                onStashClear: stashClearAll,
-                onNewTag: beginNewTagDialog,
-                onShelve: { shelfWorkspace.showCreateDialog = true },
-                onUpdate: { doPull(nil, rebase: $0) },
-                onPush: { beginPushDialog() },
-                onFetch: { doFetch(nil) },
-                onRefresh: { loadRepoData() },
-                onConfigureRemotes: beginConfigureRemotes,
-                onProjectGitSettings: {
-                    branchWorkspace.showPopover = false
-                    gitSettings.showProjectGitSettings = true
-                },
-                onFetchAll: { doFetchAll() },
-                onFetchPrune: doFetchPrune,
-                onFetchUnshallow: doFetchUnshallow,
-                onSetUpstream: { branch in
-                    branchWorkspace.upstreamLocalBranch = branch
-                    branchWorkspace.showUpstreamDialog = true
-                },
-                onUnsetUpstream: unsetBranchUpstream,
-                operationState: operationRecovery.operation,
-                onOperationContinue: {
-                    doOperationContinue()
-                    branchWorkspace.showPopover = false
-                },
-                onOperationSkip: {
-                    doOperationSkip()
-                    branchWorkspace.showPopover = false
-                },
-                onOperationAbort: {
-                    doOperationAbort()
-                    branchWorkspace.showPopover = false
-                }
-                )
-                .accessibilityIdentifier("branches-popover")
-                .environment(\.locale, appLocale)
             }
+        )
+    }
+
+    /// The branches popup, drawn inside the window below its chip.
+    @ViewBuilder
+    func branchPopupLayer(anchor: CGRect) -> some View {
+        if branchWorkspace.showPopover {
+            ZStack(alignment: .topLeading) {
+                // Click anywhere else to close, like a popover does.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { branchWorkspace.showPopover = false }
+                branchesPopoverContent
+                    .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+                    .offset(x: anchor.minX, y: anchor.maxY + 4)
+                    .accessibilityIdentifier("branches-popover")
+            }
+            .onExitCommand { branchWorkspace.showPopover = false }
         }
+    }
+
+    @ViewBuilder
+    var branchesPopoverContent: some View {
+    if multiRootWorkspace.roots.count > 1 && !multiRootWorkspace.branchSnapshots.isEmpty {
+        MultiRootBranchesPopover(
+            projectPath: projectWorkspace.path,
+            protectedBranchPatterns: effectiveProtectedBranchPatterns,
+            snapshots: multiRootWorkspace.branchSnapshots,
+            incomingBranches: gitSettings.autoFetchIncomingBranches,
+            operationContexts: multiRootWorkspace.roots.compactMap { root in
+                guard let kind = root.operation else { return nil }
+                return BranchPopupOperationContext(
+                    rootPath: root.path,
+                    displayName: root.displayName,
+                    relativePath: root.relativePath,
+                    kind: kind,
+                    hasConflicts: operationRecovery.multiRootConflictGroups.contains {
+                        $0.rootPath == root.path && !$0.paths.isEmpty
+                    }
+                )
+            },
+            onOperationAction: { rootPath, action in
+                handleVCSActionRequest(
+                    ArborVCSActionRequest(
+                        kind: .operationRecovery,
+                        projectPath: projectWorkspace.path,
+                        rootPath: rootPath,
+                        shelfName: "",
+                        operationRecoveryAction: action.recoveryAction
+                    )
+                )
+            },
+            onCommitChanges: {
+                branchWorkspace.showPopover = false
+                openMultiRootCommitDialog()
+            },
+            hasCommitChanges: hasAnyMultiRootCommitChanges,
+            onNewBranch: {
+                presentMultiRootNewBranchDialog()
+                branchWorkspace.showPopover = false
+            },
+            onFindMerged: {
+                beginFindMergedBranches()
+                branchWorkspace.showPopover = false
+            },
+            onRemoteTags: {
+                branchWorkspace.showPopover = false
+                tagWorkspace.showMultiRootRemoteTagsDialog = true
+            },
+            onCheckout: { rootPath, reference, isRemote in
+                checkoutBranchInRoot(
+                    rootPath: rootPath,
+                    reference: reference,
+                    isRemote: isRemote
+                )
+                branchWorkspace.showPopover = false
+            },
+            onCheckoutAsNewBranch: { rootPath, reference, isRemote in
+                presentMultiRootNewBranchFromReference(
+                    rootPath: rootPath,
+                    reference: reference,
+                    isRemote: isRemote
+                )
+            },
+            onCheckoutAndUpdate: { rootPath, reference, _, rebase in
+                executeMultiRootCheckoutAndUpdate(
+                    reference: reference,
+                    rootPath: rootPath,
+                    detach: false,
+                    rebase: rebase
+                )
+                branchWorkspace.showPopover = false
+            },
+            onCheckoutWithRebase: { rootPath, reference, isRemote in
+                if isRemote {
+                    presentNewBranchFromReference(
+                        reference,
+                        isRemote: true,
+                        afterCreateRebase: true,
+                        rootPath: rootPath
+                    )
+                } else {
+                    executeMultiRootCheckoutWithRebase(
+                        rootPath: rootPath,
+                        branch: reference
+                    )
+                }
+                branchWorkspace.showPopover = false
+            },
+            onCheckoutRecent: { rootPath, name in
+                checkoutRecentBranchInRoot(rootPath: rootPath, name: name)
+                branchWorkspace.showPopover = false
+            },
+            onCheckoutTag: { rootPath, name in
+                checkoutTagInRoot(rootPath: rootPath, name: name)
+                branchWorkspace.showPopover = false
+            },
+            onDeleteTag: { rootPath, name in
+                deleteTagInRoot(rootPath: rootPath, name: name)
+            },
+            onDeleteTagAcrossRoots: { name in
+                presentMultiRootDeleteTagDialog(name: name)
+                branchWorkspace.showPopover = false
+            },
+            onRenameTag: { rootPath, name in
+                renameTagInRoot(rootPath: rootPath, name: name)
+            },
+            onPushTag: { rootPath, name in
+                pushTagInRoot(rootPath: rootPath, name: name)
+            },
+            onPushTagToRemote: { rootPath, name, remote in
+                pushTagInRoot(rootPath: rootPath, name: name, remote: remote)
+            },
+            onShowDiffWithWorkingTree: { rootPath, name in
+                showBranchDiffWithWorkingTree(rootPath: rootPath, branch: name)
+            },
+            onPushAllTags: { rootPath, remote in
+                pushAllTagsInRoot(rootPath: rootPath, remote: remote)
+            },
+            onApplyStash: { rootPath, stashID, restoreIndex in
+                applyStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
+            },
+            onPopStash: { rootPath, stashID, restoreIndex in
+                popStashInRoot(rootPath: rootPath, stashID: stashID, restoreIndex: restoreIndex)
+            },
+            onDropStash: { rootPath, stashID in
+                dropStashInRoot(rootPath: rootPath, stashID: stashID)
+            },
+            onStashBranch: { rootPath, stashID in
+                stashBranchInRoot(rootPath: rootPath, stashID: stashID)
+            },
+            onStashDiff: { rootPath, stashID in
+                showStashDiffInRoot(rootPath: rootPath, stashID: stashID)
+            },
+            onStashClear: { rootPath in
+                clearStashesInRoot(rootPath: rootPath)
+            },
+            onUpdateBranch: { rootPath, branch in
+                updateBranchInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onForcePushedUpdate: { rootPath, branch in
+                updateForcePushedBranchInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onForcePushedUpdateAcrossRoots: { branch in
+                updateForcePushedBranchAcrossRoots(branch)
+                branchWorkspace.showPopover = false
+            },
+            onPullBranch: { rootPath, branch, rebase in
+                pullBranchInRoot(rootPath: rootPath, branch: branch, rebase: rebase)
+                branchWorkspace.showPopover = false
+            },
+            onPullRemoteBranch: { rootPath, branch, rebase in
+                pullRemoteBranchInRoot(
+                    rootPath: rootPath,
+                    remoteBranch: branch,
+                    rebase: rebase
+                )
+                branchWorkspace.showPopover = false
+            },
+            onDeleteRemote: { rootPath, branch in
+                deleteRemoteBranchInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onDeleteRemoteAcrossRoots: { branch in
+                presentMultiRootRemoteDeleteDialog(branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onMerge: { rootPath, branch in
+                mergeBranchInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onMergeAcrossRoots: presentMultiRootMergeFromPopup,
+            onRebase: { rootPath, branch in
+                rebaseCurrentInRoot(rootPath: rootPath, onto: branch)
+                branchWorkspace.showPopover = false
+            },
+            onCompare: { rootPath, branch in
+                compareBranchInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onCompareSelected: { selection in
+                guard selection.count == 2,
+                      let first = selection.first,
+                      selection.allSatisfy({ $0.rootPath == first.rootPath }) else { return }
+                compareBranchesCommitWiseInRoot(
+                    rootPath: first.rootPath,
+                    first: first.name,
+                    second: selection[1].name
+                )
+                branchWorkspace.showPopover = false
+            },
+            onCompareSelectedFiles: { selection in
+                guard selection.count == 2,
+                      let first = selection.first,
+                      selection.allSatisfy({ $0.rootPath == first.rootPath }) else { return }
+                compareBranchesInRoot(
+                    rootPath: first.rootPath,
+                    first: first.name,
+                    second: selection[1].name
+                )
+                branchWorkspace.showPopover = false
+            },
+            onUpdateSelected: { selection in
+                updateSelectedBranchesInRoots(selection)
+                branchWorkspace.showPopover = false
+            },
+            onDeleteSelected: { selection in
+                deleteSelectedBranchesInRoots(selection)
+                branchWorkspace.showPopover = false
+            },
+            onPushDialog: { rootPath, branch in
+                beginMultiRootPushDialog(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onEditRemote: { rootPath, name in
+                beginMultiRootRemoteConfig(rootPath: rootPath, selectedRemote: name)
+                branchWorkspace.showPopover = false
+            },
+            onRemoveRemote: { rootPath, name in
+                removeRemoteInRoot(rootPath: rootPath, name: name)
+            },
+            onRemoveRemoteSelected: { groups in
+                removeSelectedRemotesInRoots(groups)
+            },
+            onConfigureRemotes: {
+                beginConfigureRemotes()
+            },
+            onSetUpstream: { rootPath, branch in
+                setBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onUnsetUpstream: { rootPath, branch in
+                unsetBranchUpstreamInRoot(rootPath: rootPath, branch: branch)
+                branchWorkspace.showPopover = false
+            },
+            onRenameBranch: { rootPath, branch in
+                renameBranchInRoot(rootPath: rootPath, oldName: branch)
+                branchWorkspace.showPopover = false
+            },
+            onRenameBranchAcrossRoots: { name in
+                presentMultiRootRenameBranchDialog(name: name)
+                branchWorkspace.showPopover = false
+            },
+            onDeleteBranchAcrossRoots: { name in
+                presentMultiRootDeleteBranchDialog(name: name)
+                branchWorkspace.showPopover = false
+            },
+            onDeleteBranch: { rootPath, branch in
+                deleteBranchInRoot(rootPath: rootPath, name: branch)
+                branchWorkspace.showPopover = false
+            },
+            onCheckoutReference: { rootPath in
+                checkoutReferenceFromInput(rootPath: rootPath)
+            },
+            onOpenWorktree: { path in
+                branchWorkspace.showPopover = false
+                openWindow(value: path)
+            },
+            onCreateWorktreeFromReference: { rootPath, reference, isTag in
+                branchWorkspace.showPopover = false
+                presentNewWorktreeFromReference(
+                    reference,
+                    isTag: isTag,
+                    rootPath: rootPath
+                )
+            },
+            onProjectGitSettings: {
+                branchWorkspace.showPopover = false
+                gitSettings.showProjectGitSettings = true
+            },
+            onCancel: { branchWorkspace.showPopover = false }
+        )
+        .accessibilityIdentifier("branches-popover")
+        .environment(\.locale, appLocale)
+    } else {
+        RebasedBranchesPopover(
+        projectPath: projectWorkspace.path,
+        branches: branchWorkspace.branches,
+        remoteBranches: branchWorkspace.remoteBranches,
+        recentBranches: branchWorkspace.recentBranches,
+        tags: tagWorkspace.tags,
+        comparisons: branchWorkspace.comparisons,
+        syncStatuses: branchWorkspace.syncStatuses,
+        incomingBranches: gitSettings.autoFetchIncomingBranches,
+        stashes: stashUI.stashes,
+        worktrees: worktreeWorkspace.worktrees,
+        hasRemote: !remoteWorkspace.remotes.isEmpty,
+        protectedBranchPatterns: effectiveProtectedBranchPatterns,
+        isShallow: repositoryStatus.isShallowRepository,
+        hasHeadCommit: repositoryStatus.headId != nil,
+        hasCommitChanges: vcsActionContext.hasLocalChanges,
+        onCheckout: switchBranch,
+        onRenameBranch: renameBranchFromPopup,
+        onDeleteBranch: deleteBranchFromPopup,
+        onCheckoutRecent: checkoutRecentBranch,
+        onCheckoutTag: checkoutTag,
+        onCheckoutAsNewBranch: { reference, isRemote in
+            presentNewBranchFromReference(reference, isRemote: isRemote)
+        },
+        onDeleteTag: tagDelete,
+        onRenameTag: { old in
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Rename Tag")
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+            field.stringValue = old
+            alert.accessoryView = field
+            alert.addButton(withTitle: "Rename")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                tagRename(old, field.stringValue)
+            }
+        },
+        onPushTag: { tag in tagPushToRemote(tag) },
+        tagPushRemotes: remoteWorkspace.remotes.map(\.name),
+        onPushTagToRemote: { tag, remote in
+            tagPushToRemote(tag, remote: remote)
+        },
+        onShowDiffWithWorkingTree: { branch in
+            showBranchDiffWithWorkingTree(rootPath: nil, branch: branch)
+        },
+        onPushAllTags: { remote in
+            pushAllTagsToRemote(remote: remote)
+        },
+        onRemoteTags: {
+            branchWorkspace.showPopover = false
+            tagWorkspace.showRemoteTagsDialog = true
+        },
+        onCheckoutAndUpdate: { branch, rebase in checkoutAndUpdate(branch, rebase: rebase) },
+        onUpdateBranch: updateSelectedBranch,
+        onPushBranch: { branch in beginPushDialog(branch: branch) },
+        onForcePushedUpdate: updateForcePushedBranch,
+        onPullRemoteBranch: { branch, rebase in pullRemoteBranch(branch, rebase: rebase) },
+        onCheckoutRemote: checkoutRemoteBranch,
+        onCheckoutRemoteWithRebase: { branch in
+            presentNewBranchFromReference(
+                branch.name,
+                isRemote: true,
+                afterCreateRebase: true
+            )
+        },
+        onDeleteRemote: deleteRemoteBranch,
+        onNewBranch: { presentNewBranchDialog() },
+        onCommitChanges: openCommitWorkspaceFromBranchPopup,
+        onFindMerged: {
+            beginFindMergedBranches()
+            branchWorkspace.showPopover = false
+        },
+        onCheckoutReference: checkoutReferenceFromInput,
+        onOpenWorktree: { path in
+            branchWorkspace.showPopover = false
+            openWindow(value: path)
+        },
+        onCreateWorktreeFromReference: { reference, isTag in
+            branchWorkspace.showPopover = false
+            presentNewWorktreeFromReference(reference, isTag: isTag)
+        },
+        onCompare: compareBranchFromPopup,
+        onMerge: openMergeDialog,
+        onRebase: openRebaseDialog,
+        onStash: presentStashDialog,
+        onApplyStash: { stashID, restoreIndex in stashApply(stashID: stashID, restoreIndex: restoreIndex) },
+        onPopStash: { stashID, restoreIndex in stashPop(stashID: stashID, restoreIndex: restoreIndex) },
+        onDropStash: stashDrop(stashID:),
+        onStashBranch: stashBranch(stashID:),
+        onStashDiff: showStashDiffFor(stashID:),
+        onStashClear: stashClearAll,
+        onNewTag: beginNewTagDialog,
+        onShelve: { shelfWorkspace.showCreateDialog = true },
+        onUpdate: { doPull(nil, rebase: $0) },
+        onPush: { beginPushDialog() },
+        onFetch: { doFetch(nil) },
+        onRefresh: { loadRepoData() },
+        onConfigureRemotes: beginConfigureRemotes,
+        onProjectGitSettings: {
+            branchWorkspace.showPopover = false
+            gitSettings.showProjectGitSettings = true
+        },
+        onFetchAll: { doFetchAll() },
+        onFetchPrune: doFetchPrune,
+        onFetchUnshallow: doFetchUnshallow,
+        onSetUpstream: { branch in
+            branchWorkspace.upstreamLocalBranch = branch
+            branchWorkspace.showUpstreamDialog = true
+        },
+        onUnsetUpstream: unsetBranchUpstream,
+        operationState: operationRecovery.operation,
+        onOperationContinue: {
+            doOperationContinue()
+            branchWorkspace.showPopover = false
+        },
+        onOperationSkip: {
+            doOperationSkip()
+            branchWorkspace.showPopover = false
+        },
+        onOperationAbort: {
+            doOperationAbort()
+            branchWorkspace.showPopover = false
+        }
+        )
+        .accessibilityIdentifier("branches-popover")
+        .environment(\.locale, appLocale)
+    }
     }
 
     private func compareBranchFromPopup(_ branch: String) {
@@ -535,5 +563,20 @@ extension ContentView {
         case .refresh:
             refreshBranchCleanup()
         }
+    }
+}
+
+/// Screen position of the branches chip, so the popup can be drawn below it in
+/// the same window.
+struct BranchPopupAnchorKey: PreferenceKey {
+    /// Shared with the window content so the chip frame and the popup layer
+    /// are measured from the same origin.
+    static let coordinateSpace = "arbor.branchPopup.space"
+
+    static var defaultValue: CGRect = .zero
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
     }
 }
