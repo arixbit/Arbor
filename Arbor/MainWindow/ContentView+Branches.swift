@@ -29,6 +29,14 @@ extension ContentView {
         multiRootWorkspace.changeGroups.contains { !$0.changedEntries.isEmpty }
     }
 
+    /// Dismissing the in-window popup and asking for a sheet in the same update
+    /// makes SwiftUI drop the presentation, so hand the follow-up to the next
+    /// runloop turn.
+    func afterBranchPopupCloses(_ action: @escaping () -> Void) {
+        branchWorkspace.showPopover = false
+        DispatchQueue.main.async(execute: action)
+    }
+
     private func openCommitWorkspaceFromBranchPopup() {
         branchWorkspace.showPopover = false
         projectWorkspace.toolWindowMode = .commit
@@ -222,8 +230,7 @@ extension ContentView {
             },
             hasCommitChanges: hasAnyMultiRootCommitChanges,
             onNewBranch: {
-                presentMultiRootNewBranchDialog()
-                branchWorkspace.showPopover = false
+                afterBranchPopupCloses(presentMultiRootNewBranchDialog)
             },
             onFindMerged: {
                 beginFindMergedBranches()
@@ -453,8 +460,7 @@ extension ContentView {
                 )
             },
             onProjectGitSettings: {
-                branchWorkspace.showPopover = false
-                gitSettings.showProjectGitSettings = true
+                afterBranchPopupCloses { gitSettings.showProjectGitSettings = true }
             },
             onCancel: { branchWorkspace.showPopover = false }
         )
@@ -526,7 +532,7 @@ extension ContentView {
             )
         },
         onDeleteRemote: deleteRemoteBranch,
-        onNewBranch: { presentNewBranchDialog() },
+        onNewBranch: { afterBranchPopupCloses { presentNewBranchDialog() } },
         onCommitChanges: openCommitWorkspaceFromBranchPopup,
         onFindMerged: {
             beginFindMergedBranches()
@@ -559,8 +565,7 @@ extension ContentView {
         onRefresh: { loadRepoData() },
         onConfigureRemotes: beginConfigureRemotes,
         onProjectGitSettings: {
-            branchWorkspace.showPopover = false
-            gitSettings.showProjectGitSettings = true
+            afterBranchPopupCloses { gitSettings.showProjectGitSettings = true }
         },
         onFetchAll: { doFetchAll() },
         onFetchPrune: doFetchPrune,

@@ -110,3 +110,29 @@ enum Design {
         static let codeSmall = Font.system(.caption, design: .monospaced)
     }
 }
+
+extension View {
+    /// SwiftUI keeps one presentation per view, so a long chain of `.sheet`
+    /// modifiers leaves most of them unreliable: the window ends up with a
+    /// single active presentation slot and dialogs silently never appear.
+    /// Give every sheet its own layer instead.
+    func sheetLayer<Content: View>(
+        isPresented: Binding<Bool>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        background(
+            Color.clear.sheet(isPresented: isPresented, onDismiss: onDismiss, content: content)
+        )
+    }
+
+    func sheetLayer<Item: Identifiable, Content: View>(
+        item: Binding<Item?>,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping (Item) -> Content
+    ) -> some View {
+        background(
+            Color.clear.sheet(item: item, onDismiss: onDismiss, content: content)
+        )
+    }
+}

@@ -196,7 +196,7 @@ extension ContentView {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .sheet(item: $projectWorkspace.feedbackDetailMessage) { message in
+        .sheetLayer(item: $projectWorkspace.feedbackDetailMessage) { message in
             FeedbackDetailView(
                 message: message,
                 onDismiss: { projectWorkspace.feedbackDetailMessage = nil },
@@ -212,7 +212,7 @@ extension ContentView {
         } message: {
             Text("Configure a GitHub token in Settings, then retry the git operation.")
         }
-        .sheet(isPresented: $hostingWorkspace.showHostingSettings) {
+        .sheetLayer(isPresented: $hostingWorkspace.showHostingSettings) {
             if let hostingRepository {
                 HostingSettingsView(repository: hostingRepository)
             } else {
@@ -220,7 +220,7 @@ extension ContentView {
                     .padding(24)
             }
         }
-        .sheet(isPresented: $hostingWorkspace.showHostingHub) {
+        .sheetLayer(isPresented: $hostingWorkspace.showHostingHub) {
             HostingHubView(
                 remoteURL: remoteWorkspace.remotes.first(where: { HostingProvider.parse(remoteURL: $0.url) != nil })?.url,
                 showSettings: $hostingWorkspace.showHostingSettings,
@@ -260,7 +260,7 @@ extension ContentView {
             )
             .frame(minWidth: 980, minHeight: 620)
         }
-        .sheet(isPresented: $hostingWorkspace.showReviewComment) {
+        .sheetLayer(isPresented: $hostingWorkspace.showReviewComment) {
             if let commit = hostingWorkspace.reviewCommentCommit,
                let repository = hostingWorkspace.reviewCommentRepository ?? hostingRepository {
                 ReviewCommentSheet(
@@ -270,7 +270,7 @@ extension ContentView {
                 )
         }
     }
-        .sheet(item: $pushWorkspace.addCommitsToRemoteBranchContext) { context in
+        .sheetLayer(item: $pushWorkspace.addCommitsToRemoteBranchContext) { context in
             RebasedRemoteBranchSelectionDialog(
                 commits: context.commits,
                 remoteBranches: context.remoteBranches,
@@ -281,7 +281,7 @@ extension ContentView {
                 }
             )
         }
-        .sheet(isPresented: $pushWorkspace.showMultiRootPushOptions) {
+        .sheetLayer(isPresented: $pushWorkspace.showMultiRootPushOptions) {
             MultiRootPushOptionsDialog(
                 snapshots: multiRootWorkspace.branchSnapshots.filter { snapshot in
                     guard let selected = pushWorkspace.multiRootPushOptionsRootPaths else { return true }
@@ -311,7 +311,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $pushWorkspace.showDialog) {
+        .sheetLayer(isPresented: $pushWorkspace.showDialog) {
             PushDialogView(
                 remotes: remoteWorkspace.remotes,
                 branches: branchWorkspace.branches,
@@ -374,7 +374,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(item: $pushWorkspace.multiRootPushContext) { context in
+        .sheetLayer(item: $pushWorkspace.multiRootPushContext) { context in
             PushDialogView(
                 remotes: context.remotes,
                 branches: context.branches,
@@ -418,7 +418,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(item: $remoteWorkspace.multiRootRemoteConfigContext) { context in
+        .sheetLayer(item: $remoteWorkspace.multiRootRemoteConfigContext) { context in
             RemoteConfigDialogView(
                 remotes: context.remotes,
                 name: $remoteWorkspace.multiRootRemoteName,
@@ -447,10 +447,10 @@ extension ContentView {
                 }
             )
         }
-        .sheet(isPresented: $commitWorkspace.showBeforeCommitSettings) {
+        .sheetLayer(isPresented: $commitWorkspace.showBeforeCommitSettings) {
             beforeCommitSettingsSheet
         }
-        .sheet(isPresented: $gitSettings.showProjectGitSettings) {
+        .sheetLayer(isPresented: $gitSettings.showProjectGitSettings) {
             Group {
                 if let projectPath = projectWorkspace.path {
                     ProjectGitIncomingChangesSettingsView(
@@ -480,7 +480,7 @@ extension ContentView {
             }
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $gitSettings.showUpdateProjectOptions) {
+        .sheetLayer(isPresented: $gitSettings.showUpdateProjectOptions) {
             if let projectPath = projectWorkspace.path {
                 UpdateProjectOptionsDialogView(
                     projectPath: projectPath,
@@ -512,7 +512,7 @@ extension ContentView {
                     .padding(24)
             }
         }
-        .sheet(isPresented: $gitSettings.showIdentitySettings) {
+        .sheetLayer(isPresented: $gitSettings.showIdentitySettings) {
             GitIdentitySettingsView(
                 name: $gitSettings.identityName,
                 email: $gitSettings.identityEmail,
@@ -543,7 +543,7 @@ extension ContentView {
                 }
             )
         }
-        .sheet(isPresented: Binding(
+        .sheetLayer(isPresented: Binding(
             get: { fileWorkspace.selectionModePath != nil },
             set: { if !$0 { fileWorkspace.selectionModePath = nil } }
         )) {
@@ -570,7 +570,7 @@ extension ContentView {
                 .frame(minWidth: 900, idealWidth: 1120, minHeight: 560, idealHeight: 640)
             }
         }
-        .sheet(isPresented: $gitSettings.showGpgAgentSettings) {
+        .sheetLayer(isPresented: $gitSettings.showGpgAgentSettings) {
             GpgAgentSettingsView()
         }
         .onChange(of: gitSettings.showIdentitySettings) { _, isPresented in
@@ -584,7 +584,7 @@ extension ContentView {
                 syncMultiRootCommitIdentityDraftFromSettings()
             }
         }
-        .sheet(isPresented: $gitSettings.showGitSSHSettings) {
+        .sheetLayer(isPresented: $gitSettings.showGitSSHSettings) {
             GitSSHSettingsView(
                 command: $gitSettings.gitSSHCommand,
                 knownHostsFile: $gitSettings.gitSSHKnownHostsFile,
@@ -605,7 +605,7 @@ extension ContentView {
                 onCancel: { gitSettings.showGitSSHSettings = false }
             )
         }
-        .sheet(isPresented: $stashUI.showDiff) {
+        .sheetLayer(isPresented: $stashUI.showDiff) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Stash Diff").font(.title3.weight(.semibold))
                 ScrollView {
@@ -629,7 +629,7 @@ extension ContentView {
             .padding(18)
             .frame(minWidth: 700, minHeight: 460)
         }
-        .sheet(isPresented: $branchWorkspace.showNewDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showNewDialog) {
             RebasedNewBranchDialog(
                 title: branchWorkspace.newDialogTitle,
                 name: $branchWorkspace.newName,
@@ -673,7 +673,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $worktreeWorkspace.showCreateDialog) {
+        .sheetLayer(isPresented: $worktreeWorkspace.showCreateDialog) {
             RebasedNewWorktreeDialog(
                 rootPath: worktreeWorkspace.rootPath ?? repo?.workdir(),
                 reference: worktreeWorkspace.reference,
@@ -705,7 +705,7 @@ extension ContentView {
                 onCancel: dismissNewWorktreeDialog
             )
         }
-        .sheet(isPresented: $branchWorkspace.showMultiRootNewDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showMultiRootNewDialog) {
             RebasedMultiRootNewBranchDialog(
                 name: $branchWorkspace.multiRootNewName,
                 baseRevision: $branchWorkspace.multiRootNewBase,
@@ -748,7 +748,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $branchWorkspace.showMultiRootRenameDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showMultiRootRenameDialog) {
             RebasedMultiRootRenameBranchDialog(
                 oldName: branchWorkspace.multiRootRenameOldName,
                 newName: $branchWorkspace.multiRootRenameNewName,
@@ -768,7 +768,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $branchWorkspace.showRenameDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showRenameDialog) {
             RebasedSingleRootRenameBranchDialog(
                 oldName: branchWorkspace.renameOldName,
                 newName: $branchWorkspace.renameNewName,
@@ -793,7 +793,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $branchWorkspace.showMultiRootDeleteDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteBranchDialog(
                 branchName: branchWorkspace.multiRootDeleteName,
                 selectedRootPaths: $branchWorkspace.multiRootDeleteSelectedRootPaths,
@@ -808,7 +808,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $tagWorkspace.showMultiRootDeleteDialog) {
+        .sheetLayer(isPresented: $tagWorkspace.showMultiRootDeleteDialog) {
             RebasedMultiRootDeleteTagDialog(
                 tagName: tagWorkspace.multiRootDeleteName,
                 selectedRootPaths: $tagWorkspace.multiRootDeleteSelectedRootPaths,
@@ -823,7 +823,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $branchWorkspace.showMultiRootRemoteDeleteDialog) {
+        .sheetLayer(isPresented: $branchWorkspace.showMultiRootRemoteDeleteDialog) {
             RebasedMultiRootRemoteDeleteBranchDialog(
                 remoteBranch: branchWorkspace.multiRootRemoteDeleteName,
                 selectedRootPaths: $branchWorkspace.multiRootRemoteDeleteSelectedRootPaths,
@@ -840,7 +840,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $mergeWorkspace.showActionDialog) {
+        .sheetLayer(isPresented: $mergeWorkspace.showActionDialog) {
             RebasedMergeDialog(
                 branch: $mergeWorkspace.branch,
                 strategy: Binding(
@@ -862,7 +862,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $pullWorkspace.showDialog) {
+        .sheetLayer(isPresented: $pullWorkspace.showDialog) {
             PullDialogView(
                 snapshots: pullWorkspace.snapshots,
                 defaultRootPath: repo?.workdir() ?? multiRootWorkspace.roots.first?.path,
@@ -895,7 +895,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $rebaseWorkspace.showActionDialog) {
+        .sheetLayer(isPresented: $rebaseWorkspace.showActionDialog) {
             RebasedRebaseDialog(
                 onto: $rebaseWorkspace.onto,
                 branch: $rebaseWorkspace.branch,
@@ -930,7 +930,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $rebaseWorkspace.showMultiRootEditor) {
+        .sheetLayer(isPresented: $rebaseWorkspace.showMultiRootEditor) {
             MultiRootRebaseTodoEditorView(
                 onto: rebaseWorkspace.onto,
                 branch: rebaseWorkspace.branch,
@@ -952,7 +952,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(item: $rebaseWorkspace.multiRootRawTodoContext) { context in
+        .sheetLayer(item: $rebaseWorkspace.multiRootRawTodoContext) { context in
             RawRebaseTodoEditorView(
                 onto: context.onto,
                 text: $rebaseWorkspace.multiRootRawTodoText,
@@ -966,7 +966,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(item: $rebaseWorkspace.multiRootRollbackContext) { context in
+        .sheetLayer(item: $rebaseWorkspace.multiRootRollbackContext) { context in
             RebasedMultiRootRebaseRollbackView(
                 branch: context.branch,
                 targets: context.targets,
@@ -983,7 +983,7 @@ extension ContentView {
             )
             .environment(\.locale, appLocale)
         }
-        .sheet(isPresented: $stashUI.showCreateDialog) {
+        .sheetLayer(isPresented: $stashUI.showCreateDialog) {
             RebasedStashDialog(
                 roots: stashRootOptions,
                 selectedRootPath: $stashUI.rootPath,
@@ -999,7 +999,7 @@ extension ContentView {
                 onCancel: { stashUI.showCreateDialog = false }
             )
         }
-        .sheet(isPresented: $stashUI.showUnstashDialog) {
+        .sheetLayer(isPresented: $stashUI.showUnstashDialog) {
             RebasedUnstashDialog(
                 roots: multiRootWorkspace.roots,
                 selectedRootPath: stashUI.unstashRootPath,
@@ -1064,7 +1064,7 @@ extension ContentView {
                 onCancel: { stashUI.showUnstashDialog = false }
             )
         }
-        .sheet(isPresented: $stashUI.showUnstashAsDialog) {
+        .sheetLayer(isPresented: $stashUI.showUnstashAsDialog) {
             if let stash = stashUI.stashes.first(where: { $0.id == stashUI.unstashAsStashID }) {
                 RebasedUnstashAsDialog(
                     stash: stash,
@@ -1106,7 +1106,7 @@ extension ContentView {
                     }
             }
         }
-        .sheet(isPresented: $stashUI.showFilesDialog) {
+        .sheetLayer(isPresented: $stashUI.showFilesDialog) {
             RebasedStashFilesDialog(
                 message: $stashUI.filesMessage,
                 entries: repositoryStatus.entries.filter {
@@ -1122,7 +1122,7 @@ extension ContentView {
                 onCancel: { stashUI.showFilesDialog = false }
             )
         }
-        .sheet(isPresented: $cloneWorkspace.showDialog) {
+        .sheetLayer(isPresented: $cloneWorkspace.showDialog) {
             RebasedCloneDialog(
                 url: $cloneWorkspace.url,
                 parentDirectory: $cloneWorkspace.parentDirectory,
@@ -1138,7 +1138,7 @@ extension ContentView {
             )
             .interactiveDismissDisabled(cloneWorkspace.inProgress)
         }
-        .sheet(isPresented: $tagWorkspace.showCreateDialog) {
+        .sheetLayer(isPresented: $tagWorkspace.showCreateDialog) {
             RebasedTagDialog(
                 name: $tagWorkspace.name,
                 revision: $tagWorkspace.at,
@@ -1157,7 +1157,7 @@ extension ContentView {
                 }
             )
         }
-        .sheet(isPresented: $shelfWorkspace.showCreateDialog) {
+        .sheetLayer(isPresented: $shelfWorkspace.showCreateDialog) {
             RebasedShelveDialog(
                 name: $shelfWorkspace.name,
                 repo: repo,
@@ -1173,7 +1173,7 @@ extension ContentView {
                 onCancel: { shelfWorkspace.showCreateDialog = false }
             )
         }
-        .sheet(isPresented: $shelfWorkspace.showLocationDialog) {
+        .sheetLayer(isPresented: $shelfWorkspace.showLocationDialog) {
             RebasedShelfLocationDialog(
                 location: $shelfWorkspace.locationValue,
                 migrateExisting: $shelfWorkspace.locationMigrateExisting,
@@ -1189,7 +1189,7 @@ extension ContentView {
                 onCancel: { shelfWorkspace.showLocationDialog = false }
             )
         }
-        .sheet(item: $fileWorkspace.pendingApplyPatch) { request in
+        .sheetLayer(item: $fileWorkspace.pendingApplyPatch) { request in
             if let repo {
                 RebasedUnshelveDialog(
                     name: request.fileName,
@@ -1216,7 +1216,7 @@ extension ContentView {
                 )
             }
         }
-        .sheet(item: $fileWorkspace.patchExportRequest) { request in
+        .sheetLayer(item: $fileWorkspace.patchExportRequest) { request in
             RebasedPatchExportDialog(
                 request: request,
                 onExport: { options in
@@ -1228,7 +1228,7 @@ extension ContentView {
                 onCancel: { fileWorkspace.patchExportRequest = nil }
             )
         }
-        .sheet(isPresented: $resetWorkspace.showHeadDialog) {
+        .sheetLayer(isPresented: $resetWorkspace.showHeadDialog) {
             RebasedHeadResetDialog(
                 roots: resetHeadRootOptions,
                 selectedRootPath: $resetWorkspace.headRootPath,
@@ -1248,7 +1248,7 @@ extension ContentView {
                 onCancel: { resetWorkspace.showHeadDialog = false }
             )
         }
-        .sheet(isPresented: $resetWorkspace.showDialog) {
+        .sheetLayer(isPresented: $resetWorkspace.showDialog) {
             if let resetTargetCommit = resetWorkspace.targetCommit {
                 RebasedResetDialog(
                     commit: resetTargetCommit,
@@ -1271,7 +1271,7 @@ extension ContentView {
                 )
             }
         }
-        .sheet(item: $commitWorkspace.uncommitRequest) { request in
+        .sheetLayer(item: $commitWorkspace.uncommitRequest) { request in
             RebasedUncommitDialog(
                 request: request,
                 onUncommit: { targetName in
@@ -1281,7 +1281,7 @@ extension ContentView {
                 onCancel: { commitWorkspace.uncommitRequest = nil }
             )
         }
-        .sheet(item: $operationRecovery.smartOperationRequest) { request in
+        .sheetLayer(item: $operationRecovery.smartOperationRequest) { request in
             RebasedSmartOperationDialog(
                 request: request,
                 onSmart: {
