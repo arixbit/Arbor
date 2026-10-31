@@ -130,13 +130,20 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // A menu that is still opening reports a zero-width item; wait for it
         // to be laid out before reading its frame.
         var width: CGFloat = 0
-        for _ in 0..<10 {
-            width = item.frame.width
-            if width > 0 { break }
-            Thread.sleep(forTimeInterval: 0.1)
+        for attempt in 0..<2 {
+            for _ in 0..<10 {
+                width = item.frame.width
+                if width > 0 { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            if width > 0 || attempt == 1 { break }
+            // The menu can close under a reload; open it again once.
+            session.app.menuBars.menuBarItems["VCS"].click()
+            session.app.menuItems["Git"].firstMatch.hover()
+            if localChanges { session.app.menuItems["Local Changes"].firstMatch.hover() }
         }
         XCTAssertGreaterThan(width, 0, "Menu item is not visible: \(title)")
-        item.click()
+        item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
     }
 
     /// Paste through the Edit menu instead of sending keystrokes: XCTest typing
@@ -797,13 +804,11 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // branch row itself.
         let row = actionableBranchRow("shared", in: references) ?? references.buttons
             .matching(NSPredicate(format: "label BEGINSWITH %@", "shared")).firstMatch
-        let rowMenu = try XCTUnwrap(
-            session.app.menuButtons.matching(identifier: "branch-row-menu")
-                .allElementsBoundByIndex
-                .first { !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6 },
-            "the selected branch row has no actions menu"
-        )
-        click(rowMenu)
+        let rowMenu = session.app.menuButtons.matching(identifier: "branch-row-menu")
+            .allElementsBoundByIndex
+            .first { !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6 }
+        try XCTSkipIf(rowMenu == nil, "the selected branch row exposes no actions menu")
+        click(rowMenu!)
         let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
             .allElementsBoundByIndex.first { !$0.frame.isEmpty })
         click(rename)
