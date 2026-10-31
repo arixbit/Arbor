@@ -68,6 +68,12 @@ jobs:
       - name: Reject unjudged Git surface actions
         run: python3 scripts/audit-user-surface.py --snapshot scripts/user-surface.json
 
+      - name: Report display geometry
+        run: |
+          system_profiler SPDisplaysDataType | grep -iE "resolution|retina" || true
+          osascript -e 'tell application "Finder" to get bounds of window of desktop' || true
+          osascript -e 'tell application "System Events" to get name of every desktop' || true
+
       - name: Build and run the click-and-assert suite
         env:
           ONLY_TEST: ${{ inputs.only }}
