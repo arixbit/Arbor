@@ -115,11 +115,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
             XCTFail("\(element) has no stable clickable frame", file: file, line: line)
             return
         }
-        if element.elementType == .menuItem {
-            element.click()
-        } else {
-            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        }
+        // Menu items go through the same coordinate click: `element.click()`
+        // resolves its own, less stable, hit point.
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
     }
 
     private func menu(_ title: String, localChanges: Bool = false) {
@@ -196,7 +194,11 @@ final class ArborUIUserFlowUITests: XCTestCase {
         enter("cloned", into: session.app.textFields["Directory name (optional)"].firstMatch)
         click(session.app.buttons["Clone"].firstMatch)
         let clone = root.appendingPathComponent("cloned")
-        try eventually("clone") { FileManager.default.fileExists(atPath: clone.appendingPathComponent(".git/HEAD").path) }
+        try eventually("clone") {
+            // A completed clone has a checked-out working tree, not only HEAD.
+            FileManager.default.fileExists(atPath: clone.appendingPathComponent(".git/HEAD").path)
+                && FileManager.default.fileExists(atPath: clone.appendingPathComponent("notes.txt").path)
+        }
         // Reopen the cloned repository, as a user returning to a project would.
         session.terminate()
         repo = clone
@@ -701,8 +703,8 @@ final class ArborUIUserFlowUITests: XCTestCase {
             .firstMatch
         XCTAssertTrue(tagMode.waitForExistence(timeout: 5))
         session.recordScreenshot(named: "push-options-zh-Hans")
-        click(session.app.buttons["取消"].firstMatch)
         let pushSheet = session.app.sheets.firstMatch
+        click(pushSheet.buttons["取消"].firstMatch)
         XCTAssertTrue(pushSheet.arborWaitForNonExistence(timeout: 10), "Push sheet did not close")
 
         session.app.activate()
