@@ -115,9 +115,13 @@ final class ArborUIUserFlowUITests: XCTestCase {
             XCTFail("\(element) has no stable clickable frame", file: file, line: line)
             return
         }
-        // Menu items go through the same coordinate click: `element.click()`
-        // resolves its own, less stable, hit point.
-        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        if element.elementType == .menuItem {
+            // A menu item must be clicked through its own element: the menu can
+            // close between reading its frame and clicking a point.
+            element.click()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        }
     }
 
     private func menu(_ title: String, localChanges: Bool = false) {
@@ -143,7 +147,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
             if localChanges { session.app.menuItems["Local Changes"].firstMatch.hover() }
         }
         XCTAssertGreaterThan(width, 0, "Menu item is not visible: \(title)")
-        item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        item.click()
     }
 
     /// Paste through the Edit menu instead of sending keystrokes: XCTest typing
