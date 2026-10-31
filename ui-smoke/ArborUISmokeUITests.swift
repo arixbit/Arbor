@@ -39,6 +39,38 @@ final class ArborUISmokeUITests: XCTestCase {
         }
     }
 
+    /// The branches popup now lives in the window instead of a system popover,
+    /// so its dismissal has to be verified explicitly.
+    @MainActor
+    func testBranchesPopoverClosesLikeAPopover() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        XCTAssertTrue(session.openBranchesPopover(), "the branch chip did not open the branches popover")
+        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertTrue(
+            session.app.descendants(matching: .any)["branches-popover-search"].firstMatch
+                .arborWaitForNonExistence(timeout: 5),
+            "Escape must close the branches popup"
+        )
+
+        XCTAssertTrue(session.openBranchesPopover())
+        // Clicking outside the popup closes it, as a popover would.
+        let editor = session.window.staticTexts["Changes"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.app.descendants(matching: .any)["branches-popover-search"].firstMatch
+                .arborWaitForNonExistence(timeout: 5),
+            "clicking outside must close the branches popup"
+        )
+        session.recordScreenshot(named: "branches-popup-dismissed")
+    }
+
     @MainActor
     func testSettingsControlsReact() throws {
         // Browse… opens a system panel and is skipped by policy, and Reset to
