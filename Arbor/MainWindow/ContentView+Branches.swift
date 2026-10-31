@@ -88,7 +88,7 @@ extension ContentView {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: BranchPopupAnchorKey.self,
-                    value: proxy.frame(in: .named(BranchPopupAnchorKey.coordinateSpace))
+                    value: proxy.frame(in: .global)
                 )
             }
         )
@@ -102,6 +102,9 @@ extension ContentView {
     @ViewBuilder
     func branchPopupLayer(anchor: CGRect) -> some View {
         GeometryReader { proxy in
+            // The chip and this layer are measured in window coordinates; the
+            // offset is the difference, so the popup sits under its chip.
+            let containerOrigin = proxy.frame(in: .global).origin
             if branchWorkspace.showPopover {
                 ZStack(alignment: .topLeading) {
                     // Click anywhere else to close, like a popover does.
@@ -123,11 +126,28 @@ extension ContentView {
                             }
                         )
                         .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
-                        .offset(x: min(anchor.minX, max(0, proxy.size.width - branchPopupContentSize.width - 8)),
-                                y: branchPopupOffset(anchor: anchor, container: proxy.size))
+                        .offset(
+                            x: max(0, min(
+                                anchor.minX - containerOrigin.x,
+                                proxy.size.width - branchPopupContentSize.width - 8
+                            )),
+                            y: branchPopupOffset(
+                                anchor: CGRect(
+                                    x: anchor.minX - containerOrigin.x,
+                                    y: anchor.minY - containerOrigin.y,
+                                    width: anchor.width,
+                                    height: anchor.height
+                                ),
+                                container: proxy.size
+                            )
+                        )
                 }
                 .onPreferenceChange(BranchPopupSizeKey.self) { branchPopupContentSize = $0 }
                 .onExitCommand { branchWorkspace.showPopover = false }
+                // Escape closes a popover even when the focus is still on the
+                // control that opened it, so watch the window's key events.
+                .onAppear { installBranchPopupEscapeMonitor() }
+                .onDisappear { removeBranchPopupEscapeMonitor() }
                 // A popover closes when the app goes to the background; keep
                 // that behavior now that the popup lives in the window.
                 .onReceive(
@@ -137,6 +157,22 @@ extension ContentView {
                 ) { _ in branchWorkspace.showPopover = false }
             }
         }
+    }
+
+    private func installBranchPopupEscapeMonitor() {
+        guard branchPopupEscapeMonitor == nil else { return }
+        branchPopupEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            branchWorkspace.showPopover = false
+            return nil
+        }
+    }
+
+    private func removeBranchPopupEscapeMonitor() {
+        if let monitor = branchPopupEscapeMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        branchPopupEscapeMonitor = nil
     }
 
     private func branchPopupOffset(anchor: CGRect, container: CGSize) -> CGFloat {
@@ -615,10 +651,6 @@ struct BranchPopupSizeKey: PreferenceKey {
 }
 
 struct BranchPopupAnchorKey: PreferenceKey {
-    /// Shared with the window content so the chip frame and the popup layer
-    /// are measured from the same origin.
-    static let coordinateSpace = "arbor.branchPopup.space"
-
     static var defaultValue: CGRect = .zero
 
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) {

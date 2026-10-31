@@ -159,7 +159,6 @@ extension ContentView {
             )
         }
         .frame(minWidth: 980, minHeight: 540 - workspaceTitlebarHeight)
-        .coordinateSpace(name: BranchPopupAnchorKey.coordinateSpace)
         // The branches popup is drawn in the window instead of a system
         // popover: a popover is a separate window that macOS 14 does not
         // expose to accessibility, so VoiceOver users and the UI suite cannot
