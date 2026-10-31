@@ -129,7 +129,15 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let item = session.app.menuItems[title].firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 5))
         XCTAssertTrue(item.isEnabled)
-        XCTAssertGreaterThan(item.frame.width, 0, "Menu item is not visible: \(title)")
+        // A menu that is still opening reports a zero-width item; wait for it
+        // to be laid out before reading its frame.
+        var width: CGFloat = 0
+        for _ in 0..<10 {
+            width = item.frame.width
+            if width > 0 { break }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        XCTAssertGreaterThan(width, 0, "Menu item is not visible: \(title)")
         item.click()
     }
 
@@ -508,6 +516,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         )
         // Opening the recent project makes its window key; a window element
         // is not itself a pointer target, so close it through its own button.
+        // The most recently opened window is the second project.
         let secondWindow = session.app.windows.allElementsBoundByIndex.last ?? session.window
         menu("Stash…", localChanges: true)
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
