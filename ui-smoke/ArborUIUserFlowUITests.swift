@@ -296,6 +296,20 @@ final class ArborUIUserFlowUITests: XCTestCase {
     }
 
     /// How many project windows the app reports, for flows that open a second.
+    /// The branch name also appears under RECENT, whose rows have no actions
+    /// menu. Pick the row that owns a gear, so the flow drives the control a
+    /// user would.
+    private func actionableBranchRow(_ name: String, in references: XCUIElement) -> XCUIElement? {
+        let rows = references.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", name))
+            .allElementsBoundByIndex
+        let gears = session.app.menuButtons.matching(identifier: "branch-row-menu")
+            .allElementsBoundByIndex
+        return rows.first { row in
+            gears.contains { abs($0.frame.midY - row.frame.midY) < 6 }
+        }
+    }
+
     private func windowCount(_ expected: Int, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -609,13 +623,19 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let branchRows = branchQuery.allElementsBoundByIndex
         // `isHittable` is not reliable for rows inside the in-window popup
         // layer; the containment check below covers "the row is on screen".
-        let branch = branchRows.first { session.window.frame.contains($0.frame) } ?? branchRows[0]
+        let branch = actionableBranchRow(shortName, in: references)
+            ?? branchRows.first { session.window.frame.contains($0.frame) }
+            ?? branchRows[0]
         XCTAssertTrue(session.window.frame.contains(branch.frame))
         XCTAssertTrue(references.staticTexts["没有贮藏"].firstMatch.exists)
         capturePopup("multi-root-branch-search-zh-Hans-980")
-        // Only some rows expose a gear to accessibility, so the per-row merge
-        // step cannot be driven; the popup assertions above cover the surface.
-        throw XCTSkip("branch row gears are not exposed for every row")
+        let rowMenu = try XCTUnwrap(
+            session.app.menuButtons.matching(identifier: "branch-row-menu")
+                .allElementsBoundByIndex
+                .first { !$0.frame.isEmpty && abs($0.frame.midY - branch.frame.midY) < 6 },
+            "the searched branch row has no actions menu"
+        )
+        click(rowMenu)
         let merge = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中合并…")
             .allElementsBoundByIndex.first { !$0.frame.isEmpty })
         click(merge)
@@ -768,9 +788,15 @@ final class ArborUIUserFlowUITests: XCTestCase {
         enter("shared", into: session.app.textFields["过滤分支"].firstMatch)
         // "shared" also appears under RECENT, whose rows have no menu; use the
         // branch row itself.
-        let row = references.buttons.matching(NSPredicate(format: "label == %@", "shared")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        throw XCTSkip("branch row gears are not exposed for every row")
+        let row = actionableBranchRow("shared", in: references) ?? references.buttons
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "shared")).firstMatch
+        let rowMenu = try XCTUnwrap(
+            session.app.menuButtons.matching(identifier: "branch-row-menu")
+                .allElementsBoundByIndex
+                .first { !$0.frame.isEmpty && abs($0.frame.midY - row.frame.midY) < 6 },
+            "the selected branch row has no actions menu"
+        )
+        click(rowMenu)
         let rename = try XCTUnwrap(session.app.menuItems.matching(identifier: "在多个仓库中重命名…")
             .allElementsBoundByIndex.first { !$0.frame.isEmpty })
         click(rename)
