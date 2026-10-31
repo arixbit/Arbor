@@ -12,6 +12,16 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
     /// macOS clamps a window to the display, so a request larger than the
     /// screen silently stops at the edge and turns every exact-size assertion
     /// into a failure. Compare against the size the display can host.
+    /// The capture layouts are tuned for a large desktop; a smaller runner
+    /// display cannot show them, so the tests state that instead of failing on
+    /// geometry the app cannot control.
+    static var displayFrame: CGRect { NSScreen.main?.visibleFrame ?? .zero }
+
+    static func canHost(_ size: CGSize) -> Bool {
+        let frame = displayFrame
+        return frame.width >= size.width && frame.height >= size.height
+    }
+
     static var hostedTargetSize: CGSize {
         let screen = NSScreen.main?.visibleFrame.size ?? targetSize
         return CGSize(width: min(targetSize.width, screen.width), height: min(targetSize.height, screen.height))
@@ -42,6 +52,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testCaptureArborCommitAndLog() throws {
+        try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let layoutArguments = [
@@ -88,6 +99,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testLongCommitSubjectsStayInsideTheirRows() throws {
+        try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
         struct FixtureCommit: Decodable {
             let id: String
             let subject: String
@@ -142,6 +154,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testLogFiltersStayInsidePane() throws {
+        try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let longBranch = "feature/" + String(repeating: "long-branch-name-", count: 10)
@@ -216,6 +229,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testPathFilterMenuAppliesAndClears() throws {
+        try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
@@ -242,6 +256,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testCompactLogPreservesSelectionAndDividerWidths() throws {
+        try XCTSkipUnless(Self.canHost(CGSize(width: 1200, height: 1015)), "the runner display cannot host this capture layout")
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
@@ -342,6 +357,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     @MainActor
     func testAuthorAndDateFiltersApplyAndClear() throws {
+        try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
