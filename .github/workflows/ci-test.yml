@@ -18,7 +18,7 @@ jobs:
     # Every main push runs the full Rust and Swift suites here, so the tag
     # build in release.yml can skip them (ARBOR_SKIP_TESTS=1) and only
     # package an already-validated commit.
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       MACOSX_DEPLOYMENT_TARGET: "14.0"

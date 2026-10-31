@@ -10,13 +10,13 @@ permissions:
 
 jobs:
   package:
-    # macOS 14 public runners are Apple Silicon and match the published arm64
+    # macOS 15 public runners are Apple Silicon and match the published arm64
     # artifact name. Signed production releases use the documented maintainer
     # flow in RELEASE.md instead of storing Apple credentials in CI. Sparkle's
     # independent EdDSA key authenticates both signed and unsigned updates.
     # Validation runs in ci-test.yml on every main push; tag builds set
     # ARBOR_SKIP_TESTS=1 and only package the already-tested commit.
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       ARBOR_UNSIGNED: "1"
