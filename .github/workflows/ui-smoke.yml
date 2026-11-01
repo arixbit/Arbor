@@ -103,10 +103,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             arbor-engine/target
-          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
-            cargo-${{ runner.os }}-${{ runner.arch }}-
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}
 
       - name: Install Xcode project generator
         run: ./scripts/ci/install-xcodegen.sh
@@ -136,15 +133,13 @@ jobs:
         id: derived-data
         uses: actions/cache/restore@v4
         with:
-          # The app the tests drive and the test bundle itself. Restoring a
-          # warm build turns a ~250s cold Swift compile into an incremental
-          # one. The exact key never matches, so each run reads the newest
-          # entry for this Xcode version.
+          # The app the tests drive and the test bundle itself, plus Xcode's
+          # module and compilation caches, which a fresh checkout can still
+          # reuse even though it makes every source file look new.
           path: |
             .build/DerivedData
             .build/UISmoke/DerivedData
-          key: dd-ui-${{ steps.xcode.outputs.version }}-${{ github.run_id }}
-          restore-keys: dd-ui-${{ steps.xcode.outputs.version }}-
+          key: dd-ui-v1-${{ steps.xcode.outputs.version }}
 
       - name: Build and run the click-and-assert suite
         env:
@@ -173,7 +168,7 @@ jobs:
           ./scripts/ui-smoke.sh "${args[@]}"
 
       - name: Save the build products
-        if: always() && matrix.shard == 0
+        if: always() && matrix.shard == 0 && steps.derived-data.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |

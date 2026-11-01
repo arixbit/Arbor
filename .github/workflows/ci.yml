@@ -128,13 +128,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             arbor-engine/target
-          # The exact key never matches; the newest entry for this lockfile is
-          # restored through the restore keys, so each run starts from the
-          # previous build instead of from an empty directory.
-          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
-            cargo-${{ runner.os }}-${{ runner.arch }}-
+          # Keyed on the lockfile alone: the dependency artifacts in here are
+          # pinned by it, so the entry only needs rewriting when a dependency
+          # changes. A key that changed on every run would write a 385 MB entry
+          # per push and push everything else out of the 10 GB repository
+          # budget.
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}
 
       - name: Install cargo-nextest
         run: ./scripts/ci/install-nextest.sh
@@ -152,7 +151,7 @@ jobs:
         # Only main writes the cache, so the 10 GB repository budget stays with
         # main and pull requests only read it. This job builds every target, so
         # its cache also covers what the Swift job needs.
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -183,10 +182,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             arbor-engine/target
-          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
-            cargo-${{ runner.os }}-${{ runner.arch }}-
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}
 
       - name: Install Xcode project generator
         run: ./scripts/ci/install-xcodegen.sh
@@ -207,12 +203,14 @@ jobs:
         id: derived-data
         uses: actions/cache/restore@v4
         with:
-          # A warm DerivedData turns a full Swift compile into an incremental
-          # one; the exact key never matches, so every run reads the newest
-          # entry for this Xcode version through the restore key.
+          # A warm DerivedData keeps the module cache and Xcode's
+          # compilation cache, which together halve a rebuild: 196s cold,
+          # 107s warm. The key is stable so the entry is written once and
+          # reused; a fresh checkout stamps every source file with the current
+          # time, so the products themselves are never reused and there is
+          # nothing to refresh here.
           path: .build/DerivedData
-          key: dd-unit-${{ steps.xcode.outputs.version }}-${{ github.run_id }}
-          restore-keys: dd-unit-${{ steps.xcode.outputs.version }}-
+          key: dd-unit-v1-${{ steps.xcode.outputs.version }}
 
       - name: Build the Rust release library and bindings
         run: |
@@ -244,7 +242,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
 
       - name: Save the Xcode build products
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.derived-data.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: .build/DerivedData

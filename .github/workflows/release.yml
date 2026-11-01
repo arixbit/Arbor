@@ -43,10 +43,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             arbor-engine/target
-          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
-            cargo-${{ runner.os }}-${{ runner.arch }}-
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}
 
       - name: Require the update signing key
         run: |
