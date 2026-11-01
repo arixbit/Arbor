@@ -113,32 +113,28 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+      - name: Restore the Rust build
+        id: cargo-cache
+        uses: actions/cache/restore@v4
         with:
-          workspaces: arbor-engine
-          # Shared with the Swift job: both compile the same release profile
-          # into the same target directory.
-          #
-          # The suffix is new on purpose. The previous key was written by a run
-          # that was cancelled before it built anything, so every later run
-          # restored that 240 MB skeleton, matched it exactly, and never saved
-          # the compiled dependencies again -- which is why every job rebuilt
-          # all of them. A new key lets one complete cache be written.
-          #
-          # Bump the suffix whenever the cached shape changes: rust-cache skips
-          # saving when the key matches exactly, so a new option would otherwise
-          # never take effect.
-          shared-key: arbor-cargo-release-v2
-          cache-on-failure: true
-          # Cache the workspace crate's own build products too. Without this,
-          # every job recompiles `arbor-engine` and relinks its 63 test
-          # binaries even when the engine did not change, which was ~100s of
-          # the engine job.
-          cache-workspace-crates: true
-          # Pull requests read the main branch cache; only main pays for
-          # writing it, so the 10 GB repository budget stays with main.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # The registry and the whole release target directory, including the
+          # engine crate's own artifacts. `Swatinem/rust-cache` prunes workspace
+          # artifacts from what it saves, so every job recompiled `arbor-engine`
+          # and relinked its 63 test binaries even when the engine was
+          # untouched: ~100s of this job and 45-80s of the Swift job. Cargo's
+          # own fingerprints decide what is stale, so an unchanged commit does
+          # no work and a changed one rebuilds only what changed.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arbor-engine/target
+          # The exact key never matches; the newest entry for this lockfile is
+          # restored through the restore keys, so each run starts from the
+          # previous build instead of from an empty directory.
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
+            cargo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install cargo-nextest
         run: ./scripts/ci/install-nextest.sh
@@ -151,6 +147,19 @@ jobs:
           # eight on a 12-core machine.
           cargo nextest run --release --all-targets --test-threads 8 \
             --manifest-path arbor-engine/Cargo.toml
+
+      - name: Save the Rust build
+        # Only main writes the cache, so the 10 GB repository budget stays with
+        # main and pull requests only read it. This job builds every target, so
+        # its cache also covers what the Swift job needs.
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arbor-engine/target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
 
   swift:
     name: Swift unit tests
@@ -165,14 +174,19 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+      - name: Restore the Rust build
+        uses: actions/cache/restore@v4
         with:
-          workspaces: arbor-engine
-          shared-key: arbor-cargo-release-v2
-          cache-on-failure: true
-          cache-workspace-crates: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Same cache as the engine job: the release library, the bindgen
+          # binary and every dependency are already built there.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arbor-engine/target
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
+            cargo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Xcode project generator
         run: ./scripts/ci/install-xcodegen.sh
@@ -224,6 +238,7 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath .build/DerivedData \
             -enableCodeCoverage NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             COMPILATION_CACHE_ENABLE_CACHING=YES \
             COMPILATION_CACHE_CAS_PATH="$COMPILATION_CACHE_CAS_PATH" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test

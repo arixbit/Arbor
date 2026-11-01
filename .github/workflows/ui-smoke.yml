@@ -94,16 +94,19 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+      - name: Restore the Rust build
+        uses: actions/cache/restore@v4
         with:
-          workspaces: arbor-engine
-          # Shared with ci.yml: the same release profile goes into the same
-          # target directory, and only main writes the cache.
-          shared-key: arbor-cargo-release-v2
-          cache-on-failure: true
-          cache-workspace-crates: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Same cache ci.yml writes on main: the release library, the bindgen
+          # binary and every dependency are already built there.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arbor-engine/target
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
+            cargo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Xcode project generator
         run: ./scripts/ci/install-xcodegen.sh

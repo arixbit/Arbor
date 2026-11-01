@@ -34,16 +34,19 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+      - name: Restore the Rust build
+        uses: actions/cache/restore@v4
         with:
-          workspaces: arbor-engine
-          # Readers only: main writes this cache, a tag restores the release
-          # profile that main already compiled.
-          shared-key: arbor-cargo-release-v2
-          cache-on-failure: true
-          cache-workspace-crates: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Readers only: ci.yml writes this cache on main, and a tag restores the
+          # release profile that commit already compiled.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            arbor-engine/target
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('arbor-engine/Cargo.lock') }}-
+            cargo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Require the update signing key
         run: |

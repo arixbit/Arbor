@@ -86,6 +86,7 @@ if [[ "$BUILD_APP" == true ]]; then
     -sdk macosx \
     -derivedDataPath "$ROOT_DIR/.build/DerivedData" \
     -enableCodeCoverage NO \
+    COMPILER_INDEX_STORE_ENABLE=NO \
     COMPILATION_CACHE_ENABLE_CACHING=YES \
     COMPILATION_CACHE_CAS_PATH="$ROOT_DIR/.build/DerivedData/CompilationCache.noindex" \
     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
@@ -146,6 +147,7 @@ xcodebuild test \
   -destination 'platform=macOS' \
   -derivedDataPath "$SMOKE_DERIVED" \
   -enableCodeCoverage NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
   COMPILATION_CACHE_ENABLE_CACHING=YES \
   COMPILATION_CACHE_CAS_PATH="$SMOKE_DERIVED/CompilationCache.noindex" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
