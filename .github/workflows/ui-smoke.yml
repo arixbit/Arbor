@@ -168,7 +168,9 @@ jobs:
           ./scripts/ui-smoke.sh "${args[@]}"
 
       - name: Save the build products
-        if: always() && matrix.shard == 0 && steps.derived-data.outputs.cache-hit != 'true'
+        # Only a complete build is worth storing: the entry is keyed on the
+        # Xcode version alone, so a half-built one would be reused forever.
+        if: success() && matrix.shard == 0 && steps.derived-data.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
