@@ -139,3 +139,5 @@ chooses a destination.
 The release target is MIT-licensed. Third-party dependency license status is
 tracked separately in [DEPENDENCY_LICENSES.md](DEPENDENCY_LICENSES.md) and
 must be reviewed before a public release.
+
+<!-- probe: documentation-only change -->
