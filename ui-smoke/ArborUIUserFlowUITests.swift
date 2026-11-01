@@ -326,10 +326,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
     private func windowCount(_ expected: Int, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if session.app.windows.count >= expected { return true }
+            if session.app.windows.count == expected { return true }
             Thread.sleep(forTimeInterval: 0.25)
         }
-        return session.app.windows.count >= expected
+        return session.app.windows.count == expected
     }
 
     private func resizeToMinimumWindow(
@@ -534,6 +534,11 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try write("first project edit\n", to: "notes.txt")
         try Data("second project edit\n".utf8).write(to: other.appendingPathComponent("notes.txt"))
         launch(extraArguments: ["-lastOpenedPaths", "(\"\(other.path)\")"])
+        XCTAssertTrue(windowCount(1, timeout: 5), "the fixture must start in one project window")
+        let firstWindowID = session.window.identifier
+        let firstWindow = session.app.windows.matching(
+            NSPredicate(format: "identifier == %@", firstWindowID)
+        ).firstMatch
         session.app.menuBars.menuBarItems["File"].click()
         session.app.menuItems["Open Recent Project"].firstMatch.click()
         click(session.app.menuItems["other"].firstMatch)
@@ -541,18 +546,24 @@ final class ArborUIUserFlowUITests: XCTestCase {
             windowCount(2, timeout: 15),
             "opening a recent project must create a second window"
         )
-        // Opening the recent project makes its window key; a window element
-        // is not itself a pointer target, so close it through its own button.
-        // The most recently opened window is the second project.
-        let secondWindow = session.app.windows.allElementsBoundByIndex.last ?? session.window
+        // Window order follows focus, not creation order. Keep both project
+        // windows identified even while a sheet changes which window is key.
+        let secondWindow = session.app.windows.matching(
+            NSPredicate(format: "identifier != %@", firstWindowID)
+        ).firstMatch
         menu("Stash…", localChanges: true)
-        click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
+        let stashSheet = secondWindow.sheets.firstMatch
+        click(stashSheet.buttons["Stash"].firstMatch)
+        XCTAssertTrue(stashSheet.arborWaitForNonExistence(timeout: 10), "Stash sheet did not close")
         try eventually("active-window-stash") { try self.git("status", "--porcelain", at: other).isEmpty }
         XCTAssertFalse(try git("status", "--porcelain").isEmpty)
         XCTAssertEqual(try git("stash", "list"), "")
         click(secondWindow.buttons["_XCUI:CloseWindow"].firstMatch)
+        XCTAssertTrue(secondWindow.arborWaitForNonExistence(timeout: 10), "the second project window did not close")
+        XCTAssertTrue(windowCount(1, timeout: 5))
+        XCTAssertTrue(firstWindow.exists, "closing the second project must preserve the first")
         menu("Stash…", localChanges: true)
-        click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)
+        click(firstWindow.sheets.firstMatch.buttons["Stash"].firstMatch)
         try eventually("returned-window-stash") { try self.git("status", "--porcelain").isEmpty }
         XCTAssertFalse(try git("stash", "list").isEmpty)
     }
@@ -706,17 +717,18 @@ final class ArborUIUserFlowUITests: XCTestCase {
         XCTAssertFalse(pull.exists)
 
         menu("Push…")
-        let pushTags = session.app.checkBoxes["推送标签"].firstMatch
+        let pushSheet = session.window.sheets.firstMatch
+        let pushTags = pushSheet.checkBoxes["推送标签"].firstMatch
         XCTAssertTrue(pushTags.waitForExistence(timeout: 10))
         click(pushTags)
-        let tagMode = session.app.popUpButtons
+        let tagMode = pushSheet.popUpButtons
             .matching(NSPredicate(format: "value == %@ OR label == %@", "所有标签", "所有标签"))
             .firstMatch
         XCTAssertTrue(tagMode.waitForExistence(timeout: 5))
         session.recordScreenshot(named: "push-options-zh-Hans")
-        let pushSheet = session.app.sheets.firstMatch
         click(pushSheet.buttons["取消"].firstMatch)
         XCTAssertTrue(pushSheet.arborWaitForNonExistence(timeout: 10), "Push sheet did not close")
+        print("USER_FLOW_PASS push-sheet-dismissed")
 
         session.app.activate()
         let window = session.window

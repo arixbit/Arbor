@@ -192,7 +192,9 @@ final class ArborUISession {
     }
 
     private var launchArguments: [String] {
-        var args: [String] = [fixture.path]
+        // Restored project windows can steal focus and retain sheets from a
+        // previous test, even when this launch requests a fresh fixture.
+        var args: [String] = [fixture.path, "-ApplePersistenceIgnoreState", "YES"]
         if initialToolWindow == "log" {
             args.append("--log")
         }
