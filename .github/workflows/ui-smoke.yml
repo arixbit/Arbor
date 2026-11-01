@@ -100,8 +100,9 @@ jobs:
           workspaces: arbor-engine
           # Shared with ci.yml: the same release profile goes into the same
           # target directory, and only main writes the cache.
-          shared-key: arbor-cargo-release
+          shared-key: arbor-cargo-release-v2
           cache-on-failure: true
+          cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Xcode project generator

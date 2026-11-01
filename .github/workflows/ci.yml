@@ -125,8 +125,17 @@ jobs:
           # restored that 240 MB skeleton, matched it exactly, and never saved
           # the compiled dependencies again -- which is why every job rebuilt
           # all of them. A new key lets one complete cache be written.
-          shared-key: arbor-cargo-release
+          #
+          # Bump the suffix whenever the cached shape changes: rust-cache skips
+          # saving when the key matches exactly, so a new option would otherwise
+          # never take effect.
+          shared-key: arbor-cargo-release-v2
           cache-on-failure: true
+          # Cache the workspace crate's own build products too. Without this,
+          # every job recompiles `arbor-engine` and relinks its 63 test
+          # binaries even when the engine did not change, which was ~100s of
+          # the engine job.
+          cache-workspace-crates: true
           # Pull requests read the main branch cache; only main pays for
           # writing it, so the 10 GB repository budget stays with main.
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -160,8 +169,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: arbor-engine
-          shared-key: arbor-cargo-release
+          shared-key: arbor-cargo-release-v2
           cache-on-failure: true
+          cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Xcode project generator
@@ -197,6 +207,14 @@ jobs:
           ./scripts/generate-xcode-project.sh
 
       - name: Run the Swift unit suite
+        env:
+          # A fresh checkout gives every source file a new timestamp, so the
+          # build is never incremental against restored products. Xcode's
+          # compilation cache is content addressed instead of timestamped, and
+          # it halves the rebuild; keep it inside the cached DerivedData so it
+          # survives between runs.
+          COMPILATION_CACHE_ENABLE_CACHING: "YES"
+          COMPILATION_CACHE_CAS_PATH: ${{ github.workspace }}/.build/DerivedData/CompilationCache.noindex
         run: |
           # The Xcode target links the release static library, so the Rust
           # build above is not optional here. Code coverage is not consumed
@@ -206,6 +224,8 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath .build/DerivedData \
             -enableCodeCoverage NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="$COMPILATION_CACHE_CAS_PATH" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
 
       - name: Save the Xcode build products

@@ -40,8 +40,9 @@ jobs:
           workspaces: arbor-engine
           # Readers only: main writes this cache, a tag restores the release
           # profile that main already compiled.
-          shared-key: arbor-cargo-release
+          shared-key: arbor-cargo-release-v2
           cache-on-failure: true
+          cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Require the update signing key

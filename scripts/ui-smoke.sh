@@ -74,6 +74,11 @@ if [[ "$BUILD_APP" == true ]]; then
   # Coverage instrumentation is not consumed by this suite; it only makes the
   # app the tests drive slower. The flag has to match the test invocation below
   # or Xcode rebuilds the app for the test run.
+  #
+  # A fresh checkout stamps every source file with the current time, so a build
+  # restored from CI can never be incremental. Xcode's compilation cache is
+  # content addressed instead, and keeping it inside the derived data means it
+  # travels with the cache that already holds the build products.
   xcodebuild \
     -project "$ROOT_DIR/Arbor/Arbor.xcodeproj" \
     -scheme Arbor \
@@ -81,6 +86,8 @@ if [[ "$BUILD_APP" == true ]]; then
     -sdk macosx \
     -derivedDataPath "$ROOT_DIR/.build/DerivedData" \
     -enableCodeCoverage NO \
+    COMPILATION_CACHE_ENABLE_CACHING=YES \
+    COMPILATION_CACHE_CAS_PATH="$ROOT_DIR/.build/DerivedData/CompilationCache.noindex" \
     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
     build >/dev/null
 fi
@@ -139,6 +146,8 @@ xcodebuild test \
   -destination 'platform=macOS' \
   -derivedDataPath "$SMOKE_DERIVED" \
   -enableCodeCoverage NO \
+  COMPILATION_CACHE_ENABLE_CACHING=YES \
+  COMPILATION_CACHE_CAS_PATH="$SMOKE_DERIVED/CompilationCache.noindex" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
   "TEST_RUNNER_ARBOR_UI_APP_PATH=$APP_DIR" \
   "TEST_RUNNER_ARBOR_UI_FIXTURE_TEMPLATE=$FIXTURE_TEMPLATE" \
