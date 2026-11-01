@@ -85,7 +85,7 @@ if [[ "$BUILD_APP" == true ]]; then
     -configuration Debug \
     -sdk macosx \
     -derivedDataPath "$ROOT_DIR/.build/DerivedData" \
-    -enableCodeCoverage NO \
+    ENABLE_CODE_COVERAGE=NO \
     COMPILER_INDEX_STORE_ENABLE=NO \
     COMPILATION_CACHE_ENABLE_CACHING=YES \
     COMPILATION_CACHE_CAS_PATH="$ROOT_DIR/.build/DerivedData/CompilationCache.noindex" \
@@ -146,7 +146,7 @@ xcodebuild test \
   -scheme ArborUISmoke \
   -destination 'platform=macOS' \
   -derivedDataPath "$SMOKE_DERIVED" \
-  -enableCodeCoverage NO \
+  ENABLE_CODE_COVERAGE=NO \
   COMPILER_INDEX_STORE_ENABLE=NO \
   COMPILATION_CACHE_ENABLE_CACHING=YES \
   COMPILATION_CACHE_CAS_PATH="$SMOKE_DERIVED/CompilationCache.noindex" \
