@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.29 - 2026-11-01
+
+Branch popup and dialog presentation fixes, with more reliable UI validation.
+
+- The branches popup stays inside the project window, follows its branch chip,
+  and closes with Escape or a click outside the popup. Branch action menus
+  expose their own accessibility identifiers.
+- Dialogs use independent presentation layers so one sheet does not suppress
+  another. Log hides the open-inspector button while commit details are visible.
+- UI tests ignore restored project windows, track each project by its window
+  identifier, and wait for sheets and windows to close before continuing.
+  Layout checks account for the runner's display size.
+
 ## 1.0.28 - 2026-10-27
 
 Saving a file no longer walks the entire working tree.
