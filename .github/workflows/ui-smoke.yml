@@ -3,10 +3,17 @@ name: UI smoke
 # Clicks every visible control on the main surfaces and requires an observable
 # change, so a control that reacts with nothing fails instead of shipping.
 #
-# This is a separate workflow from ci-test.yml on purpose: the suite drives a
-# real window through XCUITest, which needs a logged-in GUI session and takes
-# longer than the unit suite. It runs on pull requests and on demand, and the
-# unit suite stays the fast gate on every push.
+# This stays a separate workflow from ci.yml on purpose: the suite drives a real
+# window through XCUITest, which needs a logged-in GUI session and takes far
+# longer than the unit suite. It runs on pull requests and on demand.
+#
+# The suite cannot run its cases in parallel on one machine: every case drives
+# the same menu bar, window and accessibility tree. The full suite is ~1342s of
+# test execution, so it is split across separate machines instead, one shard
+# per machine, using the balanced plan from scripts/ui-smoke-shard.py. The plan
+# is derived from the test classes in ui-smoke/, and the `ui-smoke` gate verifies
+# that the shards still cover every class, so a new test cannot fall outside the
+# run.
 
 on:
   pull_request:
@@ -17,19 +24,69 @@ on:
         required: false
         default: ""
 
-concurrency:
-  group: ui-smoke-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
+concurrency:
+  # A newer push to a pull request supersedes the older run; a manual run
+  # supersedes the previous manual run on the same branch.
+  group: ui-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # One machine per shard. This is the only place the number appears: the
+  # classify job turns it into the shard matrix below.
+  UI_SMOKE_SHARDS: "3"
+
 jobs:
-  click-and-assert:
+  classify:
+    name: Classify the change
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      shard_list: ${{ steps.plan.outputs.list }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the code changed
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: ./scripts/ci/classify-changes.sh
+
+      # A manual run can name a single test; that needs one machine, not three.
+      - name: Choose the shard plan
+        id: plan
+        env:
+          ONLY: ${{ inputs.only }}
+          SHARDS: ${{ env.UI_SMOKE_SHARDS }}
+        run: |
+          set -euo pipefail
+          count=${SHARDS:-1}
+          if [[ -n "${ONLY:-}" ]]; then count=1; fi
+          list=$(python3 -c 'import json, sys; print(json.dumps(list(range(int(sys.argv[1])))))' "$count")
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
+  shard:
+    name: Click and assert (shard ${{ matrix.shard }})
+    needs: classify
+    if: needs.classify.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.classify.outputs.shard_list || '[0,1,2]') }}
     runs-on: macos-15
     timeout-minutes: 60
-    env:
-      MACOSX_DEPLOYMENT_TARGET: "14.0"
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -41,45 +98,109 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: arbor-engine
-          shared-key: arbor-cargo
+          # Shared with ci.yml: the same release profile goes into the same
+          # target directory, and only main writes the cache.
+          shared-key: arbor-cargo-release
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Xcode project generator
-        run: brew install xcodegen
-
-      - name: Verify runner architecture
-        run: test "$(uname -m)" = arm64
+        run: ./scripts/ci/install-xcodegen.sh
 
       # The suite is written against a current Xcode; the image default is
       # older and exposes different accessibility elements (system-image
       # identifiers, menu button types). Use the newest installed Xcode.
       - name: Use the newest installed Xcode
         run: |
-          ls -d /Applications/Xcode*.app
           newest=$(ls -d /Applications/Xcode*.app | grep -E '/Xcode_[0-9]' | sort -V | tail -1)
-          if [ -z "$newest" ]; then newest=/Applications/Xcode.app; fi
+          if [[ -z "$newest" ]]; then newest=/Applications/Xcode.app; fi
           echo "Selecting $newest"
           sudo xcode-select -s "$newest"
           xcodebuild -version
 
-      - name: Reject untranslated or hardcoded UI literals
-        run: python3 scripts/i18n-audit.py
+      - name: Cache Sparkle
+        uses: actions/cache@v4
+        with:
+          path: build/Sparkle
+          key: sparkle-2.10.1
 
-      - name: Reject unjudged Git surface actions
-        run: python3 scripts/audit-user-surface.py --snapshot scripts/user-surface.json
+      - name: Read the Xcode version
+        id: xcode
+        run: echo "version=$(xcodebuild -version | head -1 | tr -d ' \n')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the build products
+        id: derived-data
+        uses: actions/cache/restore@v4
+        with:
+          # The app the tests drive and the test bundle itself. Restoring a
+          # warm build turns a ~250s cold Swift compile into an incremental
+          # one. The exact key never matches, so each run reads the newest
+          # entry for this Xcode version.
+          path: |
+            .build/DerivedData
+            .build/UISmoke/DerivedData
+          key: dd-ui-${{ steps.xcode.outputs.version }}-${{ github.run_id }}
+          restore-keys: dd-ui-${{ steps.xcode.outputs.version }}-
 
       - name: Build and run the click-and-assert suite
         env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
           ONLY_TEST: ${{ inputs.only }}
         run: |
-          args=(--report build/ui-smoke-results)
-          if [[ -n "$ONLY_TEST" ]]; then args+=(--only "$ONLY_TEST"); fi
+          set -euo pipefail
+          args=(--report "build/ui-smoke-results-$SHARD")
+          if [[ -n "$ONLY_TEST" ]]; then
+            args+=(--only "$ONLY_TEST")
+          else
+            classes=()
+            while IFS= read -r class; do
+              [[ -n "$class" ]] && classes+=("$class")
+            done < <(python3 scripts/ui-smoke-shard.py "$SHARD" "$SHARDS")
+            if [[ ${#classes[@]} -eq 0 ]]; then
+              echo "shard $SHARD of $SHARDS has no test classes; nothing to run"
+              exit 0
+            fi
+            echo "shard $SHARD of $SHARDS: ${classes[*]}"
+            for class in "${classes[@]}"; do
+              args+=(--only "$class")
+            done
+          fi
           ./scripts/ui-smoke.sh "${args[@]}"
+
+      - name: Save the build products
+        if: always() && matrix.shard == 0
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .build/DerivedData
+            .build/UISmoke/DerivedData
+          key: ${{ steps.derived-data.outputs.cache-primary-key }}
 
       - name: Upload screenshots and reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-smoke-results
-          path: build/ui-smoke-results
+          name: ui-smoke-results-${{ matrix.shard }}
+          path: build/ui-smoke-results-${{ matrix.shard }}
           if-no-files-found: warn
+
+  ui-smoke:
+    name: UI smoke
+    # The single check to require in branch protection: it always reports,
+    # including for a documentation-only pull request where every shard was
+    # skipped, so a required check can never leave a pull request waiting.
+    if: always()
+    needs: [classify, shard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify every test class is part of the plan
+        run: python3 scripts/ui-smoke-shard.py --check-discovery
+
+      - name: Fail unless every job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/check-needs.py

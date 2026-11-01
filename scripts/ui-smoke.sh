@@ -6,7 +6,7 @@
 # scripts/make-ui-fixture.sh, and against the app bundle passed in
 # ARBOR_UI_APP_PATH.
 #
-# usage: ui-smoke.sh [--no-build] [--only TestName] [--dump] [--report DIR]
+# usage: ui-smoke.sh [--no-build] [--only Class[TestName]]... [--dump] [--report DIR]
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -14,7 +14,7 @@ APP_DIR="${ARBOR_UI_APP_PATH:-$ROOT_DIR/.build/DerivedData/Build/Products/Debug/
 SMOKE_PROJECT="$ROOT_DIR/.build/UISmoke/ArborUISmoke.xcodeproj"
 SMOKE_DERIVED="$ROOT_DIR/.build/UISmoke/DerivedData"
 BUILD_APP=true
-ONLY_TEST=""
+ONLY_TESTS=()
 DUMP=false
 RESULT_BUNDLE=""
 FOCUS_LABEL=""
@@ -27,8 +27,10 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --only)
-      [[ $# -ge 2 ]] || { echo "--only requires a test name" >&2; exit 2; }
-      ONLY_TEST="$2"
+      [[ $# -ge 2 && -n "$2" ]] || { echo "--only requires a test name" >&2; exit 2; }
+      # Repeatable: CI gives each machine its own slice of the suite, and a
+      # slice is a set of classes rather than one test.
+      ONLY_TESTS+=("$2")
       shift 2
       ;;
     --dump)
@@ -69,12 +71,16 @@ if [[ "$BUILD_APP" == true ]]; then
   cargo build --release --manifest-path "$ROOT_DIR/arbor-engine/Cargo.toml"
   "$ROOT_DIR/scripts/generate-swift-bindings.sh" >/dev/null
   "$ROOT_DIR/scripts/generate-xcode-project.sh"
+  # Coverage instrumentation is not consumed by this suite; it only makes the
+  # app the tests drive slower. The flag has to match the test invocation below
+  # or Xcode rebuilds the app for the test run.
   xcodebuild \
     -project "$ROOT_DIR/Arbor/Arbor.xcodeproj" \
     -scheme Arbor \
     -configuration Debug \
     -sdk macosx \
     -derivedDataPath "$ROOT_DIR/.build/DerivedData" \
+    -enableCodeCoverage NO \
     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
     build >/dev/null
 fi
@@ -117,9 +123,9 @@ if ! grep -q '^[[:space:]]*objectVersion = 63;[[:space:]]*$' "$smoke_project_fil
   exit 1
 fi
 
-if [[ -n "$ONLY_TEST" ]]; then
-  TEST_ARGS+=("-only-testing:ArborUISmokeUITests/$ONLY_TEST")
-fi
+for only in ${ONLY_TESTS[@]+"${ONLY_TESTS[@]}"}; do
+  TEST_ARGS+=("-only-testing:ArborUISmokeUITests/$only")
+done
 if [[ -n "$RESULT_BUNDLE" ]]; then
   mkdir -p "$RESULT_BUNDLE"
   TEST_ARGS+=("-resultBundlePath" "$RESULT_BUNDLE/$(date +%Y%m%d-%H%M%S).xcresult")
@@ -132,6 +138,7 @@ xcodebuild test \
   -scheme ArborUISmoke \
   -destination 'platform=macOS' \
   -derivedDataPath "$SMOKE_DERIVED" \
+  -enableCodeCoverage NO \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
   "TEST_RUNNER_ARBOR_UI_APP_PATH=$APP_DIR" \
   "TEST_RUNNER_ARBOR_UI_FIXTURE_TEMPLATE=$FIXTURE_TEMPLATE" \

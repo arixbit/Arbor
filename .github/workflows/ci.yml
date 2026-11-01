@@ -1,0 +1,233 @@
+name: CI
+
+# The gate for every change: static checks, the Rust engine suite and the Swift
+# unit suite, on the platform the app actually ships to.
+#
+# The shape of this file is deliberate. Each note below records a measured
+# reason, so a later edit does not quietly undo a win:
+#
+# * No workflow-level `paths:` filter. A workflow that the filter skips never
+#   reports its checks, and a required check that never reports leaves a pull
+#   request waiting forever. Every run starts, `classify` decides whether the
+#   change can skip the heavy jobs, and `ci` always reports either way.
+#
+# * Pull requests cancel their own superseded runs; `main` never does. A commit
+#   on main is what a release is cut from, so every one of them gets a complete
+#   run.
+#
+# * Only the release profile is ever built. `cargo test` used to compile every
+#   dependency in the debug profile and then `cargo build --release` compiled
+#   them all again for the app that Xcode links; one profile removes the whole
+#   second copy.
+#
+# * The engine suite is a set of separate test binaries that `cargo test` runs
+#   one after another (~177s of the 653s job). `cargo nextest` runs every test
+#   case concurrently instead.
+#
+# * The Rust suite and the Swift suite do not depend on each other, so they are
+#   separate jobs that run at the same time instead of a chain.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per pull request or branch; a newer push supersedes the older run
+  # on a pull request only.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The native Rust dependencies and the app target must agree on the minimum
+  # macOS version, and this value is part of cargo's build fingerprint: setting
+  # it in one job and not another would invalidate the shared cache.
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  classify:
+    name: Classify the change
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          # The classifier diffs the pushed range, so it needs the history
+          # behind it. The repository is small enough that a full fetch costs
+          # less than a second.
+          fetch-depth: 0
+
+      - name: Decide whether the code changed
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: ./scripts/ci/classify-changes.sh
+
+  static:
+    name: Format and audits
+    needs: classify
+    if: needs.classify.outputs.code == 'true'
+    # None of these look at the operating system, so they do not take a macOS
+    # runner away from the jobs that need one.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path arbor-engine/Cargo.toml --check
+
+      - name: Reject untranslated or hardcoded UI literals
+        run: python3 scripts/i18n-audit.py
+
+      - name: Reject unjudged Git surface actions
+        run: python3 scripts/audit-user-surface.py --snapshot scripts/user-surface.json
+
+  rust:
+    name: Rust engine tests
+    needs: classify
+    if: needs.classify.outputs.code == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arbor-engine
+          # Shared with the Swift job: both compile the same release profile
+          # into the same target directory.
+          #
+          # The suffix is new on purpose. The previous key was written by a run
+          # that was cancelled before it built anything, so every later run
+          # restored that 240 MB skeleton, matched it exactly, and never saved
+          # the compiled dependencies again -- which is why every job rebuilt
+          # all of them. A new key lets one complete cache be written.
+          shared-key: arbor-cargo-release
+          cache-on-failure: true
+          # Pull requests read the main branch cache; only main pays for
+          # writing it, so the 10 GB repository budget stays with main.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install cargo-nextest
+        run: ./scripts/ci/install-nextest.sh
+
+      - name: Run the engine suite
+        run: |
+          # The suite spends most of its time waiting on the git processes the
+          # tests spawn, not on CPU, so more test threads than cores still
+          # shortens the run: 845 tests took 168s at three threads and 98s at
+          # eight on a 12-core machine.
+          cargo nextest run --release --all-targets --test-threads 8 \
+            --manifest-path arbor-engine/Cargo.toml
+
+  swift:
+    name: Swift unit tests
+    needs: classify
+    if: needs.classify.outputs.code == 'true'
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arbor-engine
+          shared-key: arbor-cargo-release
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install Xcode project generator
+        run: ./scripts/ci/install-xcodegen.sh
+
+      - name: Cache Sparkle
+        uses: actions/cache@v4
+        with:
+          # Matches the version prepare-sparkle.sh pins; the script skips its
+          # 15 MB download when this directory is already there.
+          path: build/Sparkle
+          key: sparkle-2.10.1
+
+      - name: Read the Xcode version
+        id: xcode
+        run: echo "version=$(xcodebuild -version | head -1 | tr -d ' \n')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Xcode build products
+        id: derived-data
+        uses: actions/cache/restore@v4
+        with:
+          # A warm DerivedData turns a full Swift compile into an incremental
+          # one; the exact key never matches, so every run reads the newest
+          # entry for this Xcode version through the restore key.
+          path: .build/DerivedData
+          key: dd-unit-${{ steps.xcode.outputs.version }}-${{ github.run_id }}
+          restore-keys: dd-unit-${{ steps.xcode.outputs.version }}-
+
+      - name: Build the Rust release library and bindings
+        run: |
+          cargo build --release --manifest-path arbor-engine/Cargo.toml
+          ./scripts/generate-swift-bindings.sh >/dev/null
+          ./scripts/generate-xcode-project.sh
+
+      - name: Run the Swift unit suite
+        run: |
+          # The Xcode target links the release static library, so the Rust
+          # build above is not optional here. Code coverage is not consumed
+          # anywhere in this workflow, and instrumenting the app only makes it
+          # slower to build and to run.
+          xcodebuild -project Arbor/Arbor.xcodeproj -scheme Arbor \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/DerivedData \
+            -enableCodeCoverage NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO test
+
+      - name: Save the Xcode build products
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: .build/DerivedData
+          key: ${{ steps.derived-data.outputs.cache-primary-key }}
+
+  ci:
+    name: CI
+    # The single check to require in branch protection. It always reports, even
+    # when every other job was skipped for a documentation-only change, so a
+    # required check can never leave a pull request waiting.
+    if: always()
+    needs: [classify, static, rust, swift]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Fail unless every job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/check-needs.py

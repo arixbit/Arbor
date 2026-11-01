@@ -14,8 +14,9 @@ jobs:
     # artifact name. Signed production releases use the documented maintainer
     # flow in RELEASE.md instead of storing Apple credentials in CI. Sparkle's
     # independent EdDSA key authenticates both signed and unsigned updates.
-    # Validation runs in ci-test.yml on every main push; tag builds set
-    # ARBOR_SKIP_TESTS=1 and only package the already-tested commit.
+    # Validation runs in ci.yml on every main push; tag builds set
+    # ARBOR_SKIP_TESTS=1 and only package the already-tested commit, so the
+    # Rust and Swift suites are not run a second time here.
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -23,6 +24,8 @@ jobs:
       ARBOR_ARCHS: arm64
       ARBOR_SKIP_TESTS: "1"
       MACOSX_DEPLOYMENT_TARGET: "14.0"
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
       SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
     steps:
       - name: Check out source
@@ -31,6 +34,16 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arbor-engine
+          # Readers only: main writes this cache, a tag restores the release
+          # profile that main already compiled.
+          shared-key: arbor-cargo-release
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Require the update signing key
         run: |
           if [[ -z "$SPARKLE_EDDSA_PRIVATE_KEY" ]]; then
@@ -38,15 +51,14 @@ jobs:
             exit 1
           fi
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: arbor-engine
-          shared-key: arbor-cargo
-          cache-on-failure: true
-
       - name: Install Xcode project generator
-        run: brew install xcodegen
+        run: ./scripts/ci/install-xcodegen.sh
+
+      - name: Cache Sparkle
+        uses: actions/cache@v4
+        with:
+          path: build/Sparkle
+          key: sparkle-2.10.1
 
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
@@ -77,5 +89,5 @@ jobs:
             --title "Arbor $ARBOR_RELEASE_VERSION (unsigned arm64)" \
             --notes-file "$notes_file" \
             "$release_dir"/Arbor-* \
-            "$release_dir/appcast.xml" \
-            "$release_dir/SHA256SUMS"
+            "$release_dir"/appcast.xml \
+            "$release_dir"/SHA256SUMS

@@ -261,10 +261,11 @@ fn cancelled_native_structured_rebase_kills_pre_rebase_hook() {
         )
     });
 
-    for _ in 0..100 {
-        if marker.exists() {
-            break;
-        }
+    // The hook has to reach its marker before the cancellation below proves
+    // anything. Starting a shell can take seconds on a loaded machine, so wait
+    // until a deadline rather than for a fixed number of polls.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !marker.exists() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(marker.exists(), "pre-rebase hook did not start");
