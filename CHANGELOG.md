@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.30 - 2026-11-02
+
+Commit changes open their diffs in a full-width editor tab.
+
+- Selecting a changed file in the Log, double-clicking it, or using Show Diff
+  and Enter now opens a `Repository Diff: <file>` tab in the Log editor
+  instead of squeezing the diff into the narrow commit-details column. The
+  tab keeps the Log reachable, preserves the loaded Changes list and its
+  selection, offers previous/next file navigation and Side-by-side/Unified
+  mode, and reuses the same tab for Compare with Local.
+- The Log's Show Diff Preview option now controls whether selecting a file
+  opens the diff tab. With it off, Show Diff, double-click and Enter still
+  open the tab. The bottom preview option was removed.
+
 ## 1.0.29 - 2026-11-01
 
 Branch popup and dialog presentation fixes, with more reliable UI validation.
