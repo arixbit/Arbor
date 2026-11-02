@@ -161,6 +161,10 @@ extension ContentView {
             record: tab.record,
             source: tab.source,
             repositoryForCommit: logRepository(for:),
+            siblings: tab.siblings,
+            onSelectFile: { record in
+                selectLogFileDiffTabRecord(record)
+            },
             onClose: closeLogFileDiffTab,
             onSelectPrevious: previous.map { record in
                 { selectLogFileDiffTabRecord(record) }

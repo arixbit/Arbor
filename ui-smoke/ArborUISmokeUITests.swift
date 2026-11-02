@@ -212,6 +212,17 @@ final class ArborUISmokeContractUITests: XCTestCase {
         let diffTabButton = session.window.descendants(matching: .any)["log-file-diff-show-tab"].firstMatch
         XCTAssertTrue(diffTabButton.exists, "the diff tab must stay on the tab strip")
         XCTAssertTrue(diffTabButton.label.contains("Fix.swift"), "the tab must name the changed file")
+        // The reference diff toolbar exposes difference navigation, the file
+        // list, the difference count and diff settings on this row.
+        XCTAssertTrue(
+            session.window.descendants(matching: .any)["log-diff-previous-difference"].firstMatch.exists
+        )
+        XCTAssertTrue(
+            session.window.descendants(matching: .any)["log-diff-next-difference"].firstMatch.exists
+        )
+        XCTAssertTrue(session.window.descendants(matching: .any)["log-diff-files"].firstMatch.exists)
+        XCTAssertTrue(session.window.descendants(matching: .any)["log-diff-settings"].firstMatch.exists)
+        XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.exists)
         XCTAssertFalse(
             session.window.textFields["log-text-filter"].exists,
             "the diff tab must replace the Log surface instead of sharing its column"

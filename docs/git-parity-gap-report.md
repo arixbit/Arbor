@@ -8,9 +8,12 @@ Log 的 Changes 列表此前在右侧详情栏内嵌 diff 预览，详情栏只�
 side-by-side 两栏都会被压到不可读。对照 fork 的 `ChangesBrowserBase` 与
 `EditorTabPreview`，Arbor 现在把同一份 diff 作为 `Repository Diff: <file>`
 editor tab 打开在 Log 编辑区（`LogSelectionState.fileDiffTab` +
-`LogFileDiffView`）：tab 条保留 `Log` 返回入口，diff 占满编辑区宽度，tab 内
-提供上一/下一文件、Side-by-side/Unified 与关闭；返回 Log 时 Changes 列表
-保持存活并同步 tab 的当前记录。`Show Diff Preview` 控制选中即打开 tab，
+`LogFileDiffView`）：tab 条保留 `Log` 返回入口，diff 占满编辑区宽度，diff
+工具栏补齐参考功能——按连续变更块统计并导航上一/下一处差异（⌥⌘↑/↓，滚动到
+目标并标记当前差异）、`1 file` 文件列表、上一/下一文件（⇧⌥←/→）、差异数量、
+Side-by-side/Unified、忽略空白/刷新/复制路径设置和关闭，第二行显示 base
+revision、路径和 target revision；返回 Log 时 Changes 列表保持存活并同步 tab
+的当前记录。`Show Diff Preview` 控制选中即打开 tab，
 关闭后 Show Diff、双击和 Enter 仍打开；`Compare with Local` 复用同一入口。
 原生 `DiffManager`、`DataContext`、外部 diff tool 和 UI automation 仍为
 partial。UI 证据：`ArborUISmokeContractUITests.testLogChangeOpensFullWidthDiffTab`、

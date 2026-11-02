@@ -331,12 +331,15 @@ struct BranchCommitComparisonView: View {
 /// The inline preview is optional in IntelliJ, but Show Diff, double-click,
 /// and Enter remain meaningful when that preview is hidden; keep the same
 /// distinction instead of making the action silently reselect the current
-/// row. The view stays width-agnostic so the same code renders the full-width
-/// editor tab and any future embedded host.
+/// row. The toolbar mirrors IntelliJ's diff viewer: previous/next difference,
+/// the file list, previous/next file, the difference count, the view mode and
+/// diff settings.
 struct LogFileDiffView: View {
     let record: LogChangeRecord
     let source: LogDiffSource
     let repositoryForCommit: (CommitInfo) -> Repository?
+    var siblings: [LogChangeRecord] = []
+    var onSelectFile: ((LogChangeRecord) -> Void)?
     var onClose: (() -> Void)?
     var onSelectPrevious: (() -> Void)?
     var onSelectNext: (() -> Void)?
@@ -344,103 +347,253 @@ struct LogFileDiffView: View {
     @State var fileDiff: FileDiff?
     @State var diffError: String?
     @State var presentationMode: DiffPresentationMode = .sideBySide
+    @State var activeDifference: Int?
+    @State var ignoreWhitespace = false
     @State var diffTask: Task<Void, Never>?
 
     var requestIdentity: String {
-        "\(record.id)\u{1f}\(source.identity)"
+        "\(record.id)\u{1f}\(source.identity)\u{1f}\(ignoreWhitespace ? 1 : 0)"
+    }
+
+    var differenceCount: Int {
+        guard let fileDiff else { return 0 }
+        switch presentationMode {
+        case .sideBySide: return sideBySideDifferenceCount(in: fileDiff.hunks)
+        case .unified: return unifiedDifferenceCount(in: fileDiff.hunks)
+        }
+    }
+
+    var baseRevisionLabel: String {
+        switch source {
+        case .commit:
+            guard let parentIndex = record.parentIndex,
+                  record.commit.parentIds.indices.contains(Int(parentIndex)) else { return "" }
+            return String(record.commit.parentIds[Int(parentIndex)].prefix(7))
+        case let .local(revision):
+            return String(revision.prefix(7))
+        }
+    }
+
+    var targetRevisionLabel: String {
+        switch source {
+        case .commit: return record.commit.shortId
+        case .local: return localizedArborString("Local", locale: AppLanguage.interfaceLocale)
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: repositoryFileSymbol(for: record.change.path))
-                    .foregroundStyle(repositoryFileIconColor(for: record.change.path))
-                Text(record.change.path)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(record.change.path)
-                Text(record.commit.shortId)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                if case .local = source {
-                    Text("Compare with Local")
-                        .font(.caption)
-                        .foregroundStyle(Design.Colors.accent)
-                }
-                Spacer(minLength: 8)
-                Button(action: onSelectPrevious ?? {}) {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.borderless)
-                .help("Previous File")
-                .disabled(onSelectPrevious == nil)
-                Button(action: onSelectNext ?? {}) {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.borderless)
-                .help("Next File")
-                .disabled(onSelectNext == nil)
-                Picker("Diff View", selection: $presentationMode) {
-                    ForEach(DiffPresentationMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                .frame(width: 150)
-                if let onClose {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Close")
-                    .accessibilityLabel("Close")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(height: 40)
-            .overlay(alignment: .bottom) { Divider() }
-
-            if let diffError {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Unable to load diff", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(Design.Colors.error)
-                    Text(diffError)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                    Button("Retry") { load() }
-                        .buttonStyle(.bordered)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(12)
-            } else if let fileDiff {
-                if fileDiff.binary && fileDiff.hunks.isEmpty {
-                    ContentUnavailableView(
-                        "Binary File",
-                        systemImage: "doc.zipper",
-                        description: Text("Git reported a binary change for this path.")
-                    )
-                } else if presentationMode == .unified {
-                    UnifiedDiffView(fileDiff: fileDiff)
-                } else {
-                    SideBySideDiffView(fileDiff: fileDiff)
-                }
-            } else {
-                ProgressView("Loading diff…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            toolbar
+            Divider()
+            revisionHeader
+            Divider()
+            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: requestIdentity) { load() }
+        .onChange(of: presentationMode) { _, _ in
+            // The two presentations have their own row anchors. Leaving the
+            // old ordinal selected would highlight an unrelated run.
+            activeDifference = nil
+        }
         .onDisappear { diffTask?.cancel() }
+    }
+
+    @ViewBuilder
+    var toolbar: some View {
+        HStack(spacing: 6) {
+            Button { moveDifference(-1) } label: {
+                Image(systemName: "arrow.up")
+            }
+            .buttonStyle(.borderless)
+            .help("Previous Difference")
+            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            .disabled(differenceCount == 0)
+            .accessibilityIdentifier("log-diff-previous-difference")
+
+            Button { moveDifference(1) } label: {
+                Image(systemName: "arrow.down")
+            }
+            .buttonStyle(.borderless)
+            .help("Next Difference")
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .disabled(differenceCount == 0)
+            .accessibilityIdentifier("log-diff-next-difference")
+
+            Divider().frame(height: 16)
+
+            Menu {
+                Section("Files") {
+                    ForEach(siblings, id: \.id) { sibling in
+                        Button {
+                            onSelectFile?(sibling)
+                        } label: {
+                            if sibling.id == record.id {
+                                Label(sibling.change.path, systemImage: "checkmark")
+                            } else {
+                                Text(sibling.change.path)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("1 file")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Files")
+            .accessibilityIdentifier("log-diff-files")
+
+            Divider().frame(height: 16)
+
+            Button(action: onSelectPrevious ?? {}) {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.borderless)
+            .help("Previous File")
+            .keyboardShortcut(.leftArrow, modifiers: [.shift, .option])
+            .disabled(onSelectPrevious == nil)
+
+            Button(action: onSelectNext ?? {}) {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+            .help("Next File")
+            .keyboardShortcut(.rightArrow, modifiers: [.shift, .option])
+            .disabled(onSelectNext == nil)
+
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Close")
+                .accessibilityLabel("Close")
+            }
+
+            Spacer(minLength: 8)
+
+            if differenceCount == 1 {
+                Text("1 difference")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if differenceCount > 1 {
+                Text("\(differenceCount) differences")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("Diff View", selection: $presentationMode) {
+                ForEach(DiffPresentationMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .frame(width: 150)
+
+            Menu {
+                Toggle("Ignore Whitespace", isOn: $ignoreWhitespace)
+                Divider()
+                Button("Refresh") { load() }
+                Button("Copy Path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(record.change.path, forType: .string)
+                }
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityIdentifier("log-diff-settings")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 38)
+    }
+
+    @ViewBuilder
+    var revisionHeader: some View {
+        HStack(spacing: 8) {
+            if !baseRevisionLabel.isEmpty {
+                Text(baseRevisionLabel)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            Image(systemName: repositoryFileSymbol(for: record.change.path))
+                .foregroundStyle(repositoryFileIconColor(for: record.change.path))
+            Text(record.change.path)
+                .font(.system(.subheadline, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(record.change.path)
+            if case .local = source {
+                Text("Compare with Local")
+                    .font(.caption)
+                    .foregroundStyle(Design.Colors.accent)
+            }
+            Spacer(minLength: 8)
+            Text(targetRevisionLabel)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+    }
+
+    @ViewBuilder
+    var content: some View {
+        if let diffError {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Unable to load diff", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Design.Colors.error)
+                Text(diffError)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                Button("Retry") { load() }
+                    .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(12)
+        } else if let fileDiff {
+            if fileDiff.binary && fileDiff.hunks.isEmpty {
+                ContentUnavailableView(
+                    "Binary File",
+                    systemImage: "doc.zipper",
+                    description: Text("Git reported a binary change for this path.")
+                )
+            } else if presentationMode == .unified {
+                UnifiedDiffView(fileDiff: fileDiff, activeDifference: activeDifference)
+            } else {
+                SideBySideDiffView(fileDiff: fileDiff, activeDifference: activeDifference)
+            }
+        } else {
+            ProgressView("Loading diff…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    func moveDifference(_ offset: Int) {
+        let count = differenceCount
+        guard count > 0 else {
+            activeDifference = nil
+            return
+        }
+        if let activeDifference {
+            self.activeDifference = min(max(activeDifference + offset, 0), count - 1)
+        } else {
+            self.activeDifference = offset > 0 ? 0 : count - 1
+        }
     }
 
     func load() {
         diffTask?.cancel()
         fileDiff = nil
         diffError = nil
+        activeDifference = nil
         guard let repo = repositoryForCommit(record.commit) else {
             diffError = localizedArborString("The repository for this change is no longer available.", locale: AppLanguage.interfaceLocale)
             return
@@ -450,6 +603,7 @@ struct LogFileDiffView: View {
         let path = record.change.path
         let expectedID = record.id
         let expectedSource = source
+        let settings = makeArborGitDiffSettings(ignoreWhitespace: ignoreWhitespace)
         diffTask = Task.detached(priority: .userInitiated) {
             do {
                 let diff: FileDiff
@@ -459,34 +613,35 @@ struct LogFileDiffView: View {
                         commitId: commitID,
                         parentIndex: parentIndex,
                         path: path,
-                        settings: makeArborGitDiffSettings()
+                        settings: settings
                     )
                 case let .local(revision):
                     diff = try repo.diffRevisionPathWithWorktreeWithSettings(
                         revision: revision,
                         revisionPath: path,
                         worktreePath: path,
-                        settings: makeArborGitDiffSettings()
+                        settings: settings
                     )
                 }
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard self.record.id == expectedID,
-                          self.source == expectedSource else { return }
+                          self.source == expectedSource,
+                          self.ignoreWhitespace == settings.ignoreAllSpace else { return }
                     self.fileDiff = diff
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard self.record.id == expectedID,
-                          self.source == expectedSource else { return }
+                          self.source == expectedSource,
+                          self.ignoreWhitespace == settings.ignoreAllSpace else { return }
                     self.diffError = "\(error)"
                 }
             }
         }
     }
 }
-
 
 func copySelectedComparePaths() {
     let paths = orderedCompareSelection(

@@ -27,34 +27,116 @@ enum DiffPresentationMode: String, CaseIterable, Identifiable {
 
 struct UnifiedDiffView: View {
     let fileDiff: FileDiff
+    /// Ordinal of the difference the toolbar selected. Rows in it get a marker
+    /// and the view scrolls to it when the ordinal changes.
+    var activeDifference: Int? = nil
 
     var body: some View {
+        let rowsByHunk = fileDiff.hunks.map(unifiedDiffRows)
+        let ordinals = differenceOrdinals(isChange: rowsByHunk.map { rows in
+            rows.map { $0.prefix != " " }
+        })
         GeometryReader { proxy in
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(fileDiff.hunks.enumerated()), id: \.offset) { _, hunk in
-                        HunkHeaderView(hunk: hunk)
-                            .frame(minWidth: proxy.size.width, alignment: .leading)
-                        ForEach(Array(unifiedRows(hunk).enumerated()), id: \.offset) { _, row in
-                            UnifiedDiffRowView(row: row)
+            ScrollViewReader { scroller in
+                ScrollView([.vertical, .horizontal]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(fileDiff.hunks.indices, id: \.self) { hindex in
+                            HunkHeaderView(hunk: fileDiff.hunks[hindex])
                                 .frame(minWidth: proxy.size.width, alignment: .leading)
+                            ForEach(
+                                Array(rowsByHunk[hindex].enumerated()),
+                                id: \.offset
+                            ) { rindex, row in
+                                UnifiedDiffRowView(
+                                    row: row,
+                                    isActiveDifference: ordinals[hindex][rindex] == activeDifference
+                                )
+                                .frame(minWidth: proxy.size.width, alignment: .leading)
+                                .id(diffRowAnchorID(hunk: hindex, row: rindex))
+                            }
                         }
                     }
+                    .font(.system(.body, design: .monospaced))
+                    .frame(
+                        minWidth: proxy.size.width,
+                        minHeight: proxy.size.height,
+                        alignment: .topLeading
+                    )
                 }
-                .font(.system(.body, design: .monospaced))
-                .frame(
-                    minWidth: proxy.size.width,
-                    minHeight: proxy.size.height,
-                    alignment: .topLeading
-                )
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                .onChange(of: activeDifference) { _, value in
+                    guard let value,
+                          let anchor = differenceAnchorID(ordinal: value, ordinals: ordinals) else { return }
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        scroller.scrollTo(anchor, anchor: .top)
+                    }
+                }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .scrollContentBackground(.hidden)
     }
+}
 
-    private func unifiedRows(_ hunk: DiffHunk) -> [UnifiedDiffRow] {
+func diffRowAnchorID(hunk: Int, row: Int) -> String {
+    "diff-row-\(hunk)-\(row)"
+}
+
+func differenceOrdinals(isChange: [[Bool]]) -> [[Int?]] {
+    var ordinal = 0
+    return isChange.map { rows in
+        var previousWasChange = false
+        var result: [Int?] = []
+        result.reserveCapacity(rows.count)
+        for isChanged in rows {
+            if isChanged && !previousWasChange { ordinal += 1 }
+            result.append(isChanged ? ordinal - 1 : nil)
+            previousWasChange = isChanged
+        }
+        return result
+    }
+}
+
+func sideBySideDifferenceOrdinals(in hunks: [DiffHunk]) -> [[Int?]] {
+    differenceOrdinals(isChange: hunks.map { hunk in
+        sideBySideRows(hunk).map { row in
+            row.old?.kind == .deletion || row.new?.kind == .addition
+        }
+    })
+}
+
+func unifiedDifferenceOrdinals(in hunks: [DiffHunk]) -> [[Int?]] {
+    differenceOrdinals(isChange: hunks.map { hunk in
+        unifiedDiffRows(hunk).map { $0.prefix != " " }
+    })
+}
+
+func sideBySideDifferenceCount(in hunks: [DiffHunk]) -> Int {
+    differenceCount(in: sideBySideDifferenceOrdinals(in: hunks))
+}
+
+func unifiedDifferenceCount(in hunks: [DiffHunk]) -> Int {
+    differenceCount(in: unifiedDifferenceOrdinals(in: hunks))
+}
+
+func differenceCount(in ordinals: [[Int?]]) -> Int {
+    ordinals
+        .flatMap { $0 }
+        .compactMap { $0 }
+        .max()
+        .map { $0 + 1 } ?? 0
+}
+
+func differenceAnchorID(ordinal: Int, ordinals: [[Int?]]) -> String? {
+    for (hunkIndex, rows) in ordinals.enumerated() {
+        if let rowIndex = rows.firstIndex(where: { $0 == ordinal }) {
+            return diffRowAnchorID(hunk: hunkIndex, row: rowIndex)
+        }
+    }
+    return nil
+}
+
+func unifiedDiffRows(_ hunk: DiffHunk) -> [UnifiedDiffRow] {
         var rows: [UnifiedDiffRow] = []
         var oldIndex = 0
         var newIndex = 0
@@ -116,7 +198,6 @@ struct UnifiedDiffView: View {
             }
         }
         return rows
-    }
 }
 
 struct UnifiedDiffRow: Identifiable {
@@ -132,6 +213,7 @@ struct UnifiedDiffRow: Identifiable {
 
 private struct UnifiedDiffRowView: View {
     let row: UnifiedDiffRow
+    var isActiveDifference = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -151,6 +233,13 @@ private struct UnifiedDiffRowView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 0.5)
         .background(rowBackground)
+        .overlay(alignment: .leading) {
+            if isActiveDifference {
+                Rectangle()
+                    .fill(Design.Colors.accent)
+                    .frame(width: 3)
+            }
+        }
     }
 
     private var rowColor: Color {
