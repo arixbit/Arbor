@@ -219,6 +219,7 @@ struct SideBySideDiffView: View {
     /// Ordinal of the difference the toolbar selected. Rows in it get a marker
     /// and the view scrolls to it when the ordinal changes.
     var activeDifference: Int? = nil
+    var showsLineNumbers = true
 
     var body: some View {
         let items = sideBySideDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
@@ -243,7 +244,8 @@ struct SideBySideDiffView: View {
                                             isOldSelected: isOldSelected(hunkIndex, row),
                                             selectedLines: selectedLines,
                                             onToggleLine: onToggleLine,
-                                            isActiveDifference: ordinals[index] == activeDifference)
+                                            isActiveDifference: ordinals[index] == activeDifference,
+                                            showsLineNumbers: showsLineNumbers)
                                     // A short hunk must still occupy the viewport so
                                     // the two diff columns stay anchored left/top.
                                     .frame(minWidth: proxy.size.width, alignment: .leading)
@@ -434,6 +436,7 @@ struct DiffRowView: View {
     var selectedLines: Set<SelectedDiffLine> = []
     var onToggleLine: (SelectedDiffLine) -> Void = { _ in }
     var isActiveDifference = false
+    var showsLineNumbers = true
 
     var body: some View {
         HStack(spacing: 0) {
@@ -460,7 +463,7 @@ struct DiffRowView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(isOldSelected ? Design.Colors.accent : Design.Colors.secondary.opacity(0.3))
                     .frame(width: 16, alignment: .center)
-            } else {
+            } else if showsLineNumbers {
                 lineNumberText(line?.oldLine ?? 0, side: "old")
             }
         }
@@ -512,7 +515,7 @@ struct DiffRowView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(isNewSelected ? Design.Colors.accent : Design.Colors.secondary.opacity(0.3))
                     .frame(width: 16, alignment: .center)
-            } else {
+            } else if showsLineNumbers {
                 lineNumberText(line?.newLine ?? 0, side: "new")
             }
             Text(highlightedText(line))

@@ -221,7 +221,28 @@ final class ArborUISmokeContractUITests: XCTestCase {
             session.window.descendants(matching: .any)["log-diff-next-difference"].firstMatch.exists
         )
         XCTAssertTrue(session.window.descendants(matching: .any)["log-diff-files"].firstMatch.exists)
-        XCTAssertTrue(session.window.descendants(matching: .any)["log-diff-settings"].firstMatch.exists)
+        for identifier in [
+            "log-diff-ignore-whitespace",
+            "log-diff-word-differences",
+            "log-diff-crlf-sensitive",
+            "log-diff-selection-mode",
+            "log-diff-patch",
+            "log-diff-external",
+            "log-diff-clipboard",
+            "log-diff-properties",
+            "log-diff-blame",
+            "log-diff-three-version",
+            "log-diff-dimensions",
+            "log-diff-workspace",
+            "log-diff-staged",
+            "log-diff-side-by-side",
+            "log-diff-unified",
+        ] {
+            XCTAssertTrue(
+                session.window.descendants(matching: .any)[identifier].firstMatch.exists,
+                "\(identifier) must be present in the diff toolbar"
+            )
+        }
         XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.exists)
         XCTAssertFalse(
             session.window.textFields["log-text-filter"].exists,
@@ -293,6 +314,26 @@ final class ArborUISmokeContractUITests: XCTestCase {
             "the two line-number gutters must be adjacent in the middle of the diff"
         )
         session.recordScreenshot(named: "log-diff-whole-file")
+
+        // Patch mode replaces the diff content with the synthesized patch.
+        session.window.descendants(matching: .any)["log-diff-patch"].firstMatch.click()
+        XCTAssertTrue(
+            session.window.staticTexts.matching(
+                NSPredicate(format: "value CONTAINS %@", "diff --git")
+            ).firstMatch.waitForExistence(timeout: 5),
+            "Patch must show the unified patch text"
+        )
+        session.window.descendants(matching: .any)["log-diff-patch"].firstMatch.click()
+
+        // Blame opens the same sheet for the target revision.
+        let blame = session.window.descendants(matching: .any)["log-diff-blame"].firstMatch
+        XCTAssertTrue(blame.waitForExistence(timeout: 5))
+        blame.click()
+        let blameSheet = session.app.sheets.firstMatch
+        XCTAssertTrue(blameSheet.waitForExistence(timeout: 10), "Blame must open its sheet")
+        XCTAssertTrue(blameSheet.staticTexts["Blame"].exists)
+        blameSheet.buttons["Close"].click()
+        XCTAssertTrue(blameSheet.waitForNonExistence(timeout: 5))
     }
 
     /// With the preview option off a single click only selects; the explicit

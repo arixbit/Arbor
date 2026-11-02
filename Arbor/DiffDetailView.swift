@@ -47,12 +47,16 @@ func isCurrentDiffRequest(
 /// external conversion preference is global in Settings, so background views
 /// such as Log and Shelf can use the same explicit opt-in without duplicating
 /// state plumbing.
-func makeArborGitDiffSettings(ignoreWhitespace: Bool = false) -> DiffSettings {
+func makeArborGitDiffSettings(
+    ignoreWhitespace: Bool = false,
+    wordDiff: Bool = false,
+    crlfSensitive: Bool = true
+) -> DiffSettings {
     DiffSettings(
         ignoreWhitespaceAtEol: false,
         ignoreAllSpace: ignoreWhitespace,
-        wordDiff: false,
-        crlfSensitive: true,
+        wordDiff: wordDiff,
+        crlfSensitive: crlfSensitive,
         useExternalTextconv: UserDefaults.standard.bool(
             forKey: "arbor.git.externalConversion.v1"
         )

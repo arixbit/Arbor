@@ -363,10 +363,28 @@ struct LogFileDiffView: View {
     @State var presentationMode: DiffPresentationMode = .sideBySide
     @State var activeDifference: Int?
     @State var ignoreWhitespace = false
+    @State var wordDiff = false
+    @State var crlfSensitive = true
+    @State var selectionMode = false
+    @State var selectedLines: Set<SelectedDiffLine> = []
+    @State var showsPatch = false
+    @State var showsLineNumbers = true
+    @State var showsProperties = false
+    @State var showsDimensions = false
+    @State var showsBlame = false
+    @State var showsClipboardDiff = false
+    @State var clipboardDiffText = ""
+    @State var actionError: String?
     @State var diffTask: Task<Void, Never>?
 
     var requestIdentity: String {
-        "\(record.id)\u{1f}\(source.identity)\u{1f}\(ignoreWhitespace ? 1 : 0)"
+        "\(record.id)\u{1f}\(source.identity)"
+            + "\u{1f}\(ignoreWhitespace ? 1 : 0)\(wordDiff ? 1 : 0)\(crlfSensitive ? 1 : 0)"
+    }
+
+    var isLocalSource: Bool {
+        if case .local = source { return true }
+        return false
     }
 
     var differenceCount: Int {
@@ -410,129 +428,357 @@ struct LogFileDiffView: View {
             // old ordinal selected would highlight an unrelated run.
             activeDifference = nil
         }
+        .sheet(isPresented: $showsBlame) {
+            LogBlameSheet(path: record.change.path, revisionLabel: targetRevisionLabel) {
+                try await loadBlameLines()
+            }
+        }
+        .sheet(isPresented: $showsClipboardDiff) {
+            DiffTextSheet(
+                title: "Clipboard Diff",
+                subtitle: record.change.path,
+                text: clipboardDiffText
+            )
+        }
+        .alert("Diff Action Failed", isPresented: Binding(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )) {
+            Button("OK") { actionError = nil }
+        } message: {
+            Text(actionError ?? "")
+        }
         .onDisappear { diffTask?.cancel() }
     }
 
     @ViewBuilder
     var toolbar: some View {
-        HStack(spacing: 6) {
-            Button { moveDifference(-1) } label: {
-                Image(systemName: "arrow.up")
-            }
-            .buttonStyle(.borderless)
-            .help("Previous Difference")
-            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            .disabled(differenceCount == 0)
-            .accessibilityIdentifier("log-diff-previous-difference")
+        WrappingHStack(spacing: 6, lineSpacing: 6) {
+            previousDifferenceButton
+            nextDifferenceButton
+            toolbarSeparator
+            fileMenu
+            toolbarSeparator
+            previousFileButton
+            nextFileButton
+            closeButton
+            differenceCountLabel
+            toolbarSeparator
+            ignoreWhitespaceToggle
+            wordDiffToggle
+            crlfToggle
+            selectionModeToggle
+            patchToggle
+            toolbarSeparator
+            externalDiffButton
+            clipboardCompareButton
+            propertiesButton
+            blameButton
+            threeVersionButton
+            dimensionsButton
+            toolbarSeparator
+            workspaceControls
+            toolbarSeparator
+            diffViewControls
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            Button { moveDifference(1) } label: {
-                Image(systemName: "arrow.down")
-            }
-            .buttonStyle(.borderless)
-            .help("Next Difference")
-            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-            .disabled(differenceCount == 0)
-            .accessibilityIdentifier("log-diff-next-difference")
+    var toolbarSeparator: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1, height: 16)
+    }
 
-            Divider().frame(height: 16)
+    var previousDifferenceButton: some View {
+        Button { moveDifference(-1) } label: {
+            Image(systemName: "arrow.up")
+        }
+        .buttonStyle(.borderless)
+        .help("Previous Difference")
+        .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+        .disabled(differenceCount == 0 || showsPatch)
+        .accessibilityIdentifier("log-diff-previous-difference")
+    }
 
-            Menu {
-                Section("Files") {
-                    ForEach(siblings, id: \.id) { sibling in
-                        Button {
-                            onSelectFile?(sibling)
-                        } label: {
-                            if sibling.id == record.id {
-                                Label(sibling.change.path, systemImage: "checkmark")
-                            } else {
-                                Text(sibling.change.path)
-                            }
+    var nextDifferenceButton: some View {
+        Button { moveDifference(1) } label: {
+            Image(systemName: "arrow.down")
+        }
+        .buttonStyle(.borderless)
+        .help("Next Difference")
+        .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+        .disabled(differenceCount == 0 || showsPatch)
+        .accessibilityIdentifier("log-diff-next-difference")
+    }
+
+    var fileMenu: some View {
+        Menu {
+            Section("Files") {
+                ForEach(siblings, id: \.id) { sibling in
+                    Button {
+                        onSelectFile?(sibling)
+                    } label: {
+                        if sibling.id == record.id {
+                            Label(sibling.change.path, systemImage: "checkmark")
+                        } else {
+                            Text(sibling.change.path)
                         }
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("1 file")
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .semibold))
-                }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Files")
-            .accessibilityIdentifier("log-diff-files")
-
-            Divider().frame(height: 16)
-
-            Button(action: onSelectPrevious ?? {}) {
-                Image(systemName: "chevron.left")
+        } label: {
+            HStack(spacing: 4) {
+                Text("1 file")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
             }
-            .buttonStyle(.borderless)
-            .help("Previous File")
-            .keyboardShortcut(.leftArrow, modifiers: [.shift, .option])
-            .disabled(onSelectPrevious == nil)
-
-            Button(action: onSelectNext ?? {}) {
-                Image(systemName: "chevron.right")
-            }
-            .buttonStyle(.borderless)
-            .help("Next File")
-            .keyboardShortcut(.rightArrow, modifiers: [.shift, .option])
-            .disabled(onSelectNext == nil)
-
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.borderless)
-                .help("Close")
-                .accessibilityLabel("Close")
-            }
-
-            Spacer(minLength: 8)
-
-            if differenceCount == 1 {
-                Text("1 difference")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if differenceCount > 1 {
-                Text("\(differenceCount) differences")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Picker("Diff View", selection: $presentationMode) {
-                ForEach(DiffPresentationMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .frame(width: 150)
-
-            Menu {
-                Toggle("Ignore Whitespace", isOn: $ignoreWhitespace)
-                Divider()
-                Button("Refresh") { load() }
-                Button("Copy Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(record.change.path, forType: .string)
-                }
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .accessibilityIdentifier("log-diff-settings")
         }
-        .padding(.horizontal, 10)
-        .frame(height: 38)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Files")
+        .accessibilityIdentifier("log-diff-files")
+    }
+
+    var previousFileButton: some View {
+        Button(action: onSelectPrevious ?? {}) {
+            Image(systemName: "chevron.left")
+        }
+        .buttonStyle(.borderless)
+        .help("Previous File")
+        .keyboardShortcut(.leftArrow, modifiers: [.shift, .option])
+        .disabled(onSelectPrevious == nil)
+        .accessibilityIdentifier("log-diff-previous-file")
+    }
+
+    var nextFileButton: some View {
+        Button(action: onSelectNext ?? {}) {
+            Image(systemName: "chevron.right")
+        }
+        .buttonStyle(.borderless)
+        .help("Next File")
+        .keyboardShortcut(.rightArrow, modifiers: [.shift, .option])
+        .disabled(onSelectNext == nil)
+        .accessibilityIdentifier("log-diff-next-file")
+    }
+
+    @ViewBuilder
+    var closeButton: some View {
+        if let onClose {
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Close")
+            .accessibilityLabel("Close")
+            .accessibilityIdentifier("log-file-diff-close")
+        }
+    }
+
+    @ViewBuilder
+    var differenceCountLabel: some View {
+        if differenceCount == 1 {
+            Text("1 difference")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if differenceCount > 1 {
+            Text("\(differenceCount) differences")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    var ignoreWhitespaceToggle: some View {
+        DiffToolbarToggle(
+            title: "Ignore Whitespace",
+            isOn: $ignoreWhitespace,
+            identifier: "log-diff-ignore-whitespace"
+        )
+    }
+
+    var wordDiffToggle: some View {
+        DiffToolbarToggle(
+            title: "Word Differences",
+            isOn: $wordDiff,
+            identifier: "log-diff-word-differences"
+        )
+    }
+
+    var crlfToggle: some View {
+        DiffToolbarToggle(
+            title: "CRLF Sensitive",
+            isOn: $crlfSensitive,
+            identifier: "log-diff-crlf-sensitive"
+        )
+    }
+
+    var selectionModeToggle: some View {
+        DiffToolbarToggle(
+            title: "Selection Mode",
+            isOn: Binding(
+                get: { selectionMode },
+                set: { enabled in
+                    selectionMode = enabled
+                    if enabled { presentationMode = .sideBySide }
+                }
+            ),
+            identifier: "log-diff-selection-mode"
+        )
+    }
+
+    var patchToggle: some View {
+        DiffToolbarToggle(
+            title: "Patch",
+            isOn: $showsPatch,
+            identifier: "log-diff-patch"
+        )
+    }
+
+    var externalDiffButton: some View {
+        DiffToolbarButton(
+            title: "External Diff",
+            systemImage: nil,
+            identifier: "log-diff-external",
+            isEnabled: fullFile != nil,
+            help: "Open both versions in an external diff tool",
+            action: openExternalDiff
+        )
+    }
+
+    var clipboardCompareButton: some View {
+        DiffToolbarButton(
+            title: "Compare with Clipboard",
+            systemImage: nil,
+            identifier: "log-diff-clipboard",
+            isEnabled: fullFile?.newLines != nil,
+            help: "Compare the target file with the clipboard",
+            action: compareWithClipboard
+        )
+    }
+
+    var propertiesButton: some View {
+        DiffToolbarButton(
+            title: "File Properties",
+            systemImage: nil,
+            identifier: "log-diff-properties",
+            action: { showsProperties = true }
+        )
+        .popover(isPresented: $showsProperties, arrowEdge: .bottom) {
+            LogDiffPropertiesView(
+                record: record,
+                source: source,
+                fullFile: fullFile,
+                differenceCount: differenceCount,
+                isBinary: fileDiff?.binary ?? false
+            )
+        }
+    }
+
+    var blameButton: some View {
+        DiffToolbarButton(
+            title: "Blame",
+            systemImage: nil,
+            identifier: "log-diff-blame",
+            action: { showsBlame = true }
+        )
+    }
+
+    var threeVersionButton: some View {
+        DiffToolbarButton(
+            title: "Three-version Compare",
+            systemImage: nil,
+            identifier: "log-diff-three-version",
+            isEnabled: false,
+            help: "Available for local changes",
+            action: {}
+        )
+    }
+
+    var dimensionsButton: some View {
+        DiffToolbarButton(
+            title: "Dimensions",
+            systemImage: nil,
+            identifier: "log-diff-dimensions",
+            action: { showsDimensions = true }
+        )
+        .popover(isPresented: $showsDimensions, arrowEdge: .bottom) {
+            Toggle("Line Numbers", isOn: $showsLineNumbers)
+                .toggleStyle(.checkbox)
+                .padding(12)
+        }
+    }
+
+    var workspaceControls: some View {
+        HStack(spacing: 6) {
+            workspaceChoice
+            stagedChoice
+        }
+    }
+
+    var workspaceChoice: some View {
+        DiffToolbarChoice(
+            title: "Workspace",
+            isSelected: isLocalSource,
+            identifier: "log-diff-workspace",
+            isEnabled: false,
+            action: {}
+        )
+    }
+
+    var stagedChoice: some View {
+        DiffToolbarChoice(
+            title: "Staged",
+            isSelected: false,
+            identifier: "log-diff-staged",
+            isEnabled: false,
+            action: {}
+        )
+    }
+
+    var diffViewControls: some View {
+        HStack(spacing: 6) {
+            diffViewLabel
+            sideBySideChoice
+            unifiedChoice
+        }
+    }
+
+    var diffViewLabel: some View {
+        Text("Diff View")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    var sideBySideChoice: some View {
+        DiffToolbarChoice(
+            title: "Side-by-side",
+            isSelected: presentationMode == .sideBySide,
+            identifier: "log-diff-side-by-side",
+            action: { presentationMode = .sideBySide }
+        )
+    }
+
+    var unifiedChoice: some View {
+        DiffToolbarChoice(
+            title: "Unified",
+            isSelected: presentationMode == .unified,
+            identifier: "log-diff-unified",
+            action: {
+                presentationMode = .unified
+                selectionMode = false
+            }
+        )
     }
 
     @ViewBuilder
     var revisionHeader: some View {
         HStack(spacing: 8) {
             if !baseRevisionLabel.isEmpty {
+                Text("Old Version")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Text(baseRevisionLabel)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -550,6 +796,9 @@ struct LogFileDiffView: View {
                     .foregroundStyle(Design.Colors.accent)
             }
             Spacer(minLength: 8)
+            Text("New Version")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             Text(targetRevisionLabel)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
@@ -572,6 +821,14 @@ struct LogFileDiffView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(12)
+        } else if let fileDiff, showsPatch {
+            ScrollView([.vertical, .horizontal]) {
+                Text(logFilePatchText(record: record, fileDiff: fileDiff))
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(12)
+            }
         } else if let fileDiff {
             if fileDiff.binary && fileDiff.hunks.isEmpty {
                 ContentUnavailableView(
@@ -583,18 +840,31 @@ struct LogFileDiffView: View {
                 UnifiedDiffView(
                     fileDiff: fileDiff,
                     fullFile: fullFile,
-                    activeDifference: activeDifference
+                    activeDifference: activeDifference,
+                    showsLineNumbers: showsLineNumbers
                 )
             } else {
                 SideBySideDiffView(
                     fileDiff: fileDiff,
                     fullFile: fullFile,
-                    activeDifference: activeDifference
+                    selectionMode: selectionMode,
+                    selectedLines: selectedLines,
+                    onToggleLine: toggleSelectedLine,
+                    activeDifference: activeDifference,
+                    showsLineNumbers: showsLineNumbers
                 )
             }
         } else {
             ProgressView("Loading diff…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    func toggleSelectedLine(_ line: SelectedDiffLine) {
+        if selectedLines.contains(line) {
+            selectedLines.remove(line)
+        } else {
+            selectedLines.insert(line)
         }
     }
 
@@ -611,12 +881,102 @@ struct LogFileDiffView: View {
         }
     }
 
+    func openExternalDiff() {
+        guard let fullFile else {
+            actionError = localizedArborString(
+                "Full file contents are unavailable for an external diff.",
+                locale: AppLanguage.interfaceLocale
+            )
+            return
+        }
+        let oldLines = fullFile.oldLines ?? []
+        let newLines = fullFile.newLines ?? []
+        let path = record.change.path
+        Task.detached(priority: .userInitiated) {
+            do {
+                try ExternalDiffLauncher.launch(
+                    oldLines: oldLines,
+                    newLines: newLines,
+                    path: path
+                )
+            } catch {
+                await MainActor.run { actionError = "\(error)" }
+            }
+        }
+    }
+
+    func compareWithClipboard() {
+        guard let targetLines = fullFile?.newLines else {
+            actionError = localizedArborString(
+                "Full file contents are unavailable for a clipboard comparison.",
+                locale: AppLanguage.interfaceLocale
+            )
+            return
+        }
+        guard let clipboard = NSPasteboard.general.string(forType: .string),
+              !clipboard.isEmpty else {
+            actionError = localizedArborString(
+                "The clipboard does not contain text.",
+                locale: AppLanguage.interfaceLocale
+            )
+            return
+        }
+        let target = targetLines.joined(separator: "\n")
+        Task.detached(priority: .userInitiated) {
+            do {
+                let diff = try TextDiffRunner.unifiedDiff(left: clipboard, right: target)
+                await MainActor.run {
+                    clipboardDiffText = diff
+                    showsClipboardDiff = true
+                }
+            } catch {
+                await MainActor.run { actionError = "\(error)" }
+            }
+        }
+    }
+
+    func loadBlameLines() async throws -> [BlameLine] {
+        guard let repo = repositoryForCommit(record.commit) else {
+            throw NSError(
+                domain: "Arbor.Blame",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: localizedArborString(
+                        "The repository for this change is no longer available.",
+                        locale: AppLanguage.interfaceLocale
+                    )
+                ]
+            )
+        }
+        let path = record.change.path
+        switch source {
+        case .commit:
+            let commitID = record.commit.id
+            return try await Task.detached(priority: .userInitiated) {
+                try repo.blamePreviousRevision(
+                    path: path,
+                    commitId: commitID,
+                    options: BlameOptions(
+                        ignoreWhitespaces: false,
+                        movement: .none,
+                        preferCommitDate: true
+                    )
+                )
+            }.value
+        case .local:
+            return try await Task.detached(priority: .userInitiated) {
+                try repo.blameWorktree(path: path)
+            }.value
+        }
+    }
+
     func load() {
         diffTask?.cancel()
         fileDiff = nil
         fullFile = nil
         diffError = nil
         activeDifference = nil
+        selectedLines = []
         guard let repo = repositoryForCommit(record.commit) else {
             diffError = localizedArborString("The repository for this change is no longer available.", locale: AppLanguage.interfaceLocale)
             return
@@ -628,7 +988,12 @@ struct LogFileDiffView: View {
         let oldPath = record.change.oldPath ?? path
         let expectedID = record.id
         let expectedSource = source
-        let settings = makeArborGitDiffSettings(ignoreWhitespace: ignoreWhitespace)
+        let expectedIdentity = requestIdentity
+        let settings = makeArborGitDiffSettings(
+            ignoreWhitespace: ignoreWhitespace,
+            wordDiff: wordDiff,
+            crlfSensitive: crlfSensitive
+        )
         let baseRevision: String? = {
             guard case .commit = expectedSource else { return nil }
             if let parentIndex,
@@ -689,11 +1054,10 @@ struct LogFileDiffView: View {
 
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard self.record.id == expectedID,
-                          self.source == expectedSource,
-                          self.ignoreWhitespace == settings.ignoreAllSpace else { return }
+                    guard self.requestIdentity == expectedIdentity else { return }
                     self.fileDiff = diff
                     self.fullFile = loadedFullFile
+                    self.selectedLines = []
                     // Open on the first difference like the reference diff
                     // viewer; on a large file this avoids landing on an
                     // unchanged page far above every change. Defer one run
@@ -701,9 +1065,7 @@ struct LogFileDiffView: View {
                     // change and scrolls to its anchor.
                     if self.differenceCount > 0 {
                         DispatchQueue.main.async {
-                            guard self.record.id == expectedID,
-                                  self.source == expectedSource,
-                                  self.ignoreWhitespace == settings.ignoreAllSpace,
+                            guard self.requestIdentity == expectedIdentity,
                                   self.activeDifference == nil else { return }
                             self.activeDifference = 0
                         }
@@ -712,9 +1074,7 @@ struct LogFileDiffView: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard self.record.id == expectedID,
-                          self.source == expectedSource,
-                          self.ignoreWhitespace == settings.ignoreAllSpace else { return }
+                    guard self.requestIdentity == expectedIdentity else { return }
                     self.diffError = "\(error)"
                 }
             }

@@ -52,6 +52,7 @@ struct UnifiedDiffView: View {
     /// Ordinal of the difference the toolbar selected. Rows in it get a marker
     /// and the view scrolls to it when the ordinal changes.
     var activeDifference: Int? = nil
+    var showsLineNumbers = true
 
     var body: some View {
         let items = unifiedDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
@@ -68,7 +69,8 @@ struct UnifiedDiffView: View {
                             case let .row(row):
                                 UnifiedDiffRowView(
                                     row: row,
-                                    isActiveDifference: ordinals[index] == activeDifference
+                                    isActiveDifference: ordinals[index] == activeDifference,
+                                    showsLineNumbers: showsLineNumbers
                                 )
                                 .frame(minWidth: proxy.size.width, alignment: .leading)
                                 .id(diffRowAnchorID(index))
@@ -284,15 +286,18 @@ struct UnifiedDiffRow: Identifiable {
 private struct UnifiedDiffRowView: View {
     let row: UnifiedDiffRow
     var isActiveDifference = false
+    var showsLineNumbers = true
 
     var body: some View {
         HStack(spacing: 0) {
-            Text(row.oldLine == 0 ? " " : String(row.oldLine))
-                .frame(width: 44, alignment: .trailing)
-                .foregroundStyle(.secondary)
-            Text(row.newLine == 0 ? " " : String(row.newLine))
-                .frame(width: 44, alignment: .trailing)
-                .foregroundStyle(.secondary)
+            if showsLineNumbers {
+                Text(row.oldLine == 0 ? " " : String(row.oldLine))
+                    .frame(width: 44, alignment: .trailing)
+                    .foregroundStyle(.secondary)
+                Text(row.newLine == 0 ? " " : String(row.newLine))
+                    .frame(width: 44, alignment: .trailing)
+                    .foregroundStyle(.secondary)
+            }
             Text(row.prefix)
                 .frame(width: 22, alignment: .center)
                 .foregroundStyle(rowColor)

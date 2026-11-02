@@ -13,9 +13,12 @@ editor tab 打开在 Log 编辑区（`LogSelectionState.fileDiffTab` +
 side-by-side 两侧行号都贴近中间分隔线（左侧右对齐、右侧左对齐）；diff
 工具栏补齐参考功能——按连续变更块统计并导航上一/下一处差异（⌥⌘↑/↓，滚动到
 目标并标记当前差异）、`1 file` 文件列表、上一/下一文件（⇧⌥←/→）、差异数量、
-Side-by-side/Unified、忽略空白/刷新/复制路径设置和关闭，第二行显示 base
-revision、路径和 target revision；返回 Log 时 Changes 列表保持存活并同步 tab
-的当前记录。`Show Diff Preview` 控制选中即打开 tab，
+忽略空白、词级差异、CRLF 敏感、选择模式、补丁（统一 patch 文本）、External
+Diff（FileMerge）、与剪贴板比较（`diff -u` patch 窗口）、文件属性、Blame、
+三版本比较、维度（行号显示）、工作区/已暂存、diff 视图/并排/统一 diff 和关闭；
+工具栏按可用宽度自动换行，窄窗口不会裁掉右侧按钮。三版本比较、工作区、已暂存
+依赖本地改动，在提交对比中保持禁用。第二行显示旧版本、路径和新版本；返回 Log
+时 Changes 列表保持存活并同步 tab 的当前记录。`Show Diff Preview` 控制选中即打开 tab，
 关闭后 Show Diff、双击和 Enter 仍打开；`Compare with Local` 复用同一入口。
 原生 `DiffManager`、`DataContext`、外部 diff tool 和 UI automation 仍为
 partial。UI 证据：`ArborUISmokeContractUITests.testLogChangeOpensFullWidthDiffTab`、

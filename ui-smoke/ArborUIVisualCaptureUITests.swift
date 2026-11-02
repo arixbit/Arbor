@@ -227,6 +227,56 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         }
     }
 
+    /// The reference diff toolbar keeps every action reachable. Wrapping the
+    /// row must not clip the right-hand actions when the editor gets narrow.
+    @MainActor
+    func testLogDiffToolbarKeepsEveryControlWhenNarrow() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        let commit = session.window.staticTexts["Revise the fixture guide"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: 15))
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        XCTAssertTrue(changesTree.waitForExistence(timeout: 10))
+        let file = changesTree.staticTexts["Guide.md"].firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 10))
+        file.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+                .waitForExistence(timeout: 10)
+        )
+
+        let identifiers = [
+            "log-diff-ignore-whitespace",
+            "log-diff-word-differences",
+            "log-diff-crlf-sensitive",
+            "log-diff-selection-mode",
+            "log-diff-patch",
+            "log-diff-external",
+            "log-diff-clipboard",
+            "log-diff-properties",
+            "log-diff-blame",
+            "log-diff-three-version",
+            "log-diff-dimensions",
+            "log-diff-workspace",
+            "log-diff-staged",
+            "log-diff-side-by-side",
+            "log-diff-unified",
+        ]
+
+        resize(session.window, to: CGSize(width: 1100, height: 760), label: "diff-toolbar-narrow")
+        for identifier in identifiers {
+            let control = session.window.descendants(matching: .any)[identifier].firstMatch
+            XCTAssertTrue(control.exists, "\(identifier) is missing at a narrow width")
+            XCTAssertTrue(control.isHittable, "\(identifier) is not reachable at a narrow width")
+        }
+        capture(window: session.window, named: "log-diff-toolbar-narrow")
+    }
+
     @MainActor
     func testPathFilterMenuAppliesAndClears() throws {
         try XCTSkipUnless(Self.canHost(Self.targetSize), "the runner display cannot host this capture layout")
