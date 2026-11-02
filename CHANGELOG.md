@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.31 - 2026-11-02
+
+The diff tab now has the reference diff viewer's toolbar.
+
+- Previous/next difference navigation (⌥⌘↑ and ⌥⌘↓) counts contiguous changed
+  runs rather than Git hunks, scrolls the target into view and marks it. The
+  toolbar shows the difference count and the file list, and previous/next file
+  uses ⇧⌥← and ⇧⌥→.
+- Diff settings offer ignore-whitespace, refresh and copy path. The second row
+  shows the base revision, file path and target revision, matching the
+  reference diff header.
+- The side-by-side and unified presentations share one difference model, so
+  switching the view keeps the same numbering.
+
 ## 1.0.30 - 2026-11-02
 
 Commit changes open their diffs in a full-width editor tab.
