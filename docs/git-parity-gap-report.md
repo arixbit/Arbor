@@ -16,9 +16,11 @@ side-by-side 两侧行号都贴近中间分隔线（左侧右对齐、右侧左�
 忽略空白、词级差异、CRLF 敏感、选择模式、补丁（统一 patch 文本）、External
 Diff（FileMerge）、与剪贴板比较（`diff -u` patch 窗口）、文件属性、Blame、
 三版本比较、维度（行号显示）、工作区/已暂存、diff 视图/并排/统一 diff 和关闭；
-工具栏按可用宽度自动换行，窄窗口不会裁掉右侧按钮。三版本比较、工作区、已暂存
-依赖本地改动，在提交对比中保持禁用。第二行显示旧版本、路径和新版本；返回 Log
-时 Changes 列表保持存活并同步 tab 的当前记录。`Show Diff Preview` 控制选中即打开 tab，
+控件采用参考的扁平复选框/胶囊按钮，动作条优先保持单行，第二行放差异导航、
+`1 file`、路径、旧/新/任意版本、差异数量和 Stage/Rollback；仅在宽度不足时自动
+换行，窄窗口不会裁掉右侧按钮。三版本比较、工作区、已暂存和 Stage/Rollback
+依赖本地改动，在提交对比中保持禁用。返回 Log 时 Changes 列表保持存活并同步
+tab 的当前记录。`Show Diff Preview` 控制选中即打开 tab，
 关闭后 Show Diff、双击和 Enter 仍打开；`Compare with Local` 复用同一入口。
 原生 `DiffManager`、`DataContext`、外部 diff tool 和 UI automation 仍为
 partial。UI 证据：`ArborUISmokeContractUITests.testLogChangeOpensFullWidthDiffTab`、

@@ -266,6 +266,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             "log-diff-staged",
             "log-diff-side-by-side",
             "log-diff-unified",
+            "log-diff-stage-hunk",
+            "log-diff-rollback-hunk",
         ]
 
         resize(session.window, to: CGSize(width: 1100, height: 760), label: "diff-toolbar-narrow")
@@ -275,6 +277,32 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertTrue(control.isHittable, "\(identifier) is not reachable at a narrow width")
         }
         capture(window: session.window, named: "log-diff-toolbar-narrow")
+    }
+
+    /// The reference toolbar is shown in Chinese; verify the same control
+    /// density and row layout with the localized labels.
+    @MainActor
+    func testLogDiffToolbarChineseLayout() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.appLanguage", "zh-Hans"]
+        session.launch()
+        defer { session.terminate() }
+
+        let commit = session.window.staticTexts["Revise the fixture guide"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: 15))
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        XCTAssertTrue(changesTree.waitForExistence(timeout: 10))
+        let file = changesTree.staticTexts["Guide.md"].firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: 10))
+        file.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+                .waitForExistence(timeout: 10)
+        )
+        capture(window: session.window, named: "log-diff-toolbar-zh")
     }
 
     @MainActor

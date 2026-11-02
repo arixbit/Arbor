@@ -453,16 +453,8 @@ struct LogFileDiffView: View {
 
     @ViewBuilder
     var toolbar: some View {
-        WrappingHStack(spacing: 6, lineSpacing: 6) {
-            previousDifferenceButton
-            nextDifferenceButton
-            toolbarSeparator
-            fileMenu
-            toolbarSeparator
-            previousFileButton
-            nextFileButton
-            closeButton
-            differenceCountLabel
+        WrappingHStack(spacing: 5, lineSpacing: 5) {
+            pathLabel
             toolbarSeparator
             ignoreWhitespaceToggle
             wordDiffToggle
@@ -481,9 +473,25 @@ struct LogFileDiffView: View {
             toolbarSeparator
             diffViewControls
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Design.Colors.chrome)
+    }
+
+    var pathLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: repositoryFileSymbol(for: record.change.path))
+                .font(.system(size: 11))
+                .foregroundStyle(repositoryFileIconColor(for: record.change.path))
+            Text(record.change.path)
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 130, alignment: .leading)
+        }
+        .help(record.change.path)
     }
 
     var toolbarSeparator: some View {
@@ -496,7 +504,11 @@ struct LogFileDiffView: View {
         Button { moveDifference(-1) } label: {
             Image(systemName: "arrow.up")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 18, height: 22)
+        .contentShape(Rectangle())
         .help("Previous Difference")
         .keyboardShortcut(.upArrow, modifiers: [.command, .option])
         .disabled(differenceCount == 0 || showsPatch)
@@ -507,7 +519,11 @@ struct LogFileDiffView: View {
         Button { moveDifference(1) } label: {
             Image(systemName: "arrow.down")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 18, height: 22)
+        .contentShape(Rectangle())
         .help("Next Difference")
         .keyboardShortcut(.downArrow, modifiers: [.command, .option])
         .disabled(differenceCount == 0 || showsPatch)
@@ -530,11 +546,23 @@ struct LogFileDiffView: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 Text("1 file")
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: 7, weight: .semibold))
             }
+            .font(Design.Typography.interface(11))
+            .padding(.horizontal, 6)
+            .frame(height: 22)
+            .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 4))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(
+                        Color(nsColor: .separatorColor).opacity(0.7),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -546,7 +574,11 @@ struct LogFileDiffView: View {
         Button(action: onSelectPrevious ?? {}) {
             Image(systemName: "chevron.left")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 18, height: 22)
+        .contentShape(Rectangle())
         .help("Previous File")
         .keyboardShortcut(.leftArrow, modifiers: [.shift, .option])
         .disabled(onSelectPrevious == nil)
@@ -557,7 +589,11 @@ struct LogFileDiffView: View {
         Button(action: onSelectNext ?? {}) {
             Image(systemName: "chevron.right")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 18, height: 22)
+        .contentShape(Rectangle())
         .help("Next File")
         .keyboardShortcut(.rightArrow, modifiers: [.shift, .option])
         .disabled(onSelectNext == nil)
@@ -565,27 +601,14 @@ struct LogFileDiffView: View {
     }
 
     @ViewBuilder
-    var closeButton: some View {
-        if let onClose {
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.borderless)
-            .help("Close")
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("log-file-diff-close")
-        }
-    }
-
-    @ViewBuilder
     var differenceCountLabel: some View {
         if differenceCount == 1 {
             Text("1 difference")
-                .font(.caption)
+                .font(Design.Typography.interface(10))
                 .foregroundStyle(.secondary)
         } else if differenceCount > 1 {
             Text("\(differenceCount) differences")
-                .font(.caption)
+                .font(Design.Typography.interface(10))
                 .foregroundStyle(.secondary)
         }
     }
@@ -632,7 +655,8 @@ struct LogFileDiffView: View {
         DiffToolbarToggle(
             title: "Patch",
             isOn: $showsPatch,
-            identifier: "log-diff-patch"
+            identifier: "log-diff-patch",
+            bordered: true
         )
     }
 
@@ -711,7 +735,7 @@ struct LogFileDiffView: View {
     }
 
     var workspaceControls: some View {
-        HStack(spacing: 6) {
+        DiffToolbarGroup {
             workspaceChoice
             stagedChoice
         }
@@ -738,16 +762,18 @@ struct LogFileDiffView: View {
     }
 
     var diffViewControls: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             diffViewLabel
-            sideBySideChoice
-            unifiedChoice
+            DiffToolbarGroup {
+                sideBySideChoice
+                unifiedChoice
+            }
         }
     }
 
     var diffViewLabel: some View {
         Text("Diff View")
-            .font(.caption)
+            .font(Design.Typography.interface(10))
             .foregroundStyle(.secondary)
     }
 
@@ -774,37 +800,64 @@ struct LogFileDiffView: View {
 
     @ViewBuilder
     var revisionHeader: some View {
-        HStack(spacing: 8) {
-            if !baseRevisionLabel.isEmpty {
-                Text("Old Version")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(baseRevisionLabel)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            Image(systemName: repositoryFileSymbol(for: record.change.path))
-                .foregroundStyle(repositoryFileIconColor(for: record.change.path))
-            Text(record.change.path)
-                .font(.system(.subheadline, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(record.change.path)
-            if case .local = source {
-                Text("Compare with Local")
-                    .font(.caption)
-                    .foregroundStyle(Design.Colors.accent)
-            }
-            Spacer(minLength: 8)
-            Text("New Version")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(targetRevisionLabel)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+        WrappingHStack(spacing: 5, lineSpacing: 4) {
+            previousDifferenceButton
+            nextDifferenceButton
+            fileMenu
+            previousFileButton
+            nextFileButton
+            toolbarSeparator
+            versionField("Old Version", baseRevisionLabel)
+            versionField("New Version", targetRevisionLabel)
+            versionField("Compare Arbitrary Versions", "", isEnabled: false)
+            differenceCountLabel
+            DiffToolbarButton(
+                title: "Stage Hunk",
+                systemImage: "plus",
+                identifier: "log-diff-stage-hunk",
+                isEnabled: false,
+                help: "Available for local changes",
+                action: {}
+            )
+            DiffToolbarButton(
+                title: "Rollback Hunk",
+                systemImage: "arrow.uturn.backward",
+                identifier: "log-diff-rollback-hunk",
+                isEnabled: false,
+                help: "Available for local changes",
+                action: {}
+            )
         }
-        .padding(.horizontal, 12)
-        .frame(height: 30)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    func versionField(
+        _ title: LocalizedStringKey,
+        _ value: String,
+        isEnabled: Bool = true
+    ) -> some View {
+        HStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 6)
+        }
+        .frame(height: 20)
+        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 4))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(
+                    Color(nsColor: .separatorColor).opacity(0.7),
+                    lineWidth: 1
+                )
+        }
+        .opacity(isEnabled ? 1 : 0.5)
     }
 
     @ViewBuilder

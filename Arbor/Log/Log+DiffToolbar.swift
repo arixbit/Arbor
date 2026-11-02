@@ -66,17 +66,63 @@ struct WrappingHStack: Layout {
 }
 
 /// Small toolbar controls that match the reference diff viewer's density.
+/// These are flat editor-toolbar controls, not macOS form controls.
 struct DiffToolbarToggle: View {
     let title: LocalizedStringKey
     @Binding var isOn: Bool
     let identifier: String
+    var bordered = false
 
     var body: some View {
-        Toggle(title, isOn: $isOn)
-            .toggleStyle(.checkbox)
-            .controlSize(.small)
-            .fixedSize()
-            .accessibilityIdentifier(identifier)
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(isOn ? Design.Colors.accent : Color.clear)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(
+                                isOn
+                                    ? Design.Colors.accent
+                                    : Color(nsColor: .separatorColor).opacity(0.85),
+                                lineWidth: 1
+                            )
+                    }
+                    .overlay {
+                        if isOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 13, height: 13)
+                Text(title)
+                    .font(Design.Typography.interface(11))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, bordered ? 6 : 3)
+            .frame(height: 22)
+            .background(
+                bordered ? Design.Colors.surface : Color.clear,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .overlay {
+                if bordered {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            Color(nsColor: .separatorColor).opacity(0.7),
+                            lineWidth: 1
+                        )
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -90,14 +136,32 @@ struct DiffToolbarButton: View {
 
     var body: some View {
         Button(action: action) {
-            if let systemImage {
-                Label(title, systemImage: systemImage)
-            } else {
+            HStack(spacing: 3) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 10, weight: .medium))
+                }
                 Text(title)
+                    .font(Design.Typography.interface(11))
+                    .lineLimit(1)
             }
+            .foregroundStyle(isEnabled ? .primary : .secondary)
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(
+                Design.Colors.surface,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(
+                        Color(nsColor: .separatorColor).opacity(0.7),
+                        lineWidth: 1
+                    )
+            }
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .fixedSize()
         .disabled(!isEnabled)
         .help(help ?? title)
@@ -116,19 +180,13 @@ struct DiffToolbarChoice: View {
         Button(action: action) {
             Text(title)
                 .font(Design.Typography.interface(11))
-                .padding(.horizontal, 8)
-                .frame(height: 20)
+                .foregroundStyle(isSelected ? .primary : .secondary)
+                .padding(.horizontal, 7)
+                .frame(height: 18)
                 .background(
                     isSelected ? Design.Colors.selection : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 5)
+                    in: RoundedRectangle(cornerRadius: 3)
                 )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(
-                            isSelected ? Design.Colors.accent.opacity(0.55) : .clear,
-                            lineWidth: 1
-                        )
-                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -136,6 +194,26 @@ struct DiffToolbarChoice: View {
         .opacity(isEnabled ? 1 : 0.45)
         .accessibilityIdentifier(identifier)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+struct DiffToolbarGroup<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: 1) {
+            content
+        }
+        .padding(2)
+        .background(Design.Colors.surface, in: RoundedRectangle(cornerRadius: 4))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(
+                    Color(nsColor: .separatorColor).opacity(0.7),
+                    lineWidth: 1
+                )
+        }
+        .fixedSize()
     }
 }
 
