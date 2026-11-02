@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.33 - 2026-11-02
+
+The Repository Diff toolbar mirrors the reference viewer and stays usable at
+any window width.
+
+- The toolbar adds Ignore Whitespace, Word Differences, CRLF Sensitive,
+  Selection Mode and Patch toggles; External Diff (FileMerge), Compare with
+  Clipboard, File Properties, Blame, Three-version Compare and Dimensions; and
+  Workspace/Staged plus Side-by-side/Unified choices. Actions that need local
+  changes remain disabled for committed comparisons.
+- The toolbar wraps onto as many rows as the available width requires, so no
+  control disappears when the editor gets narrow.
+- Patch shows a unified patch, Blame opens a revision-aware sheet, File
+  Properties lists revisions, modes, line counts and differences, and
+  Dimensions toggles line numbers.
+
 ## 1.0.32 - 2026-11-02
 
 The diff tab shows the complete file, with both line-number gutters centered.
