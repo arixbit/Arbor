@@ -8,7 +8,9 @@ Log 的 Changes 列表此前在右侧详情栏内嵌 diff 预览，详情栏只�
 side-by-side 两栏都会被压到不可读。对照 fork 的 `ChangesBrowserBase` 与
 `EditorTabPreview`，Arbor 现在把同一份 diff 作为 `Repository Diff: <file>`
 editor tab 打开在 Log 编辑区（`LogSelectionState.fileDiffTab` +
-`LogFileDiffView`）：tab 条保留 `Log` 返回入口，diff 占满编辑区宽度，diff
+`LogFileDiffView`）：tab 条保留 `Log` 返回入口，diff 占满编辑区宽度，按参考
+展示整个文件（读取两侧 revision/工作区内容，hunk 之间未改动行不再折叠），
+side-by-side 两侧行号都贴近中间分隔线（左侧右对齐、右侧左对齐）；diff
 工具栏补齐参考功能——按连续变更块统计并导航上一/下一处差异（⌥⌘↑/↓，滚动到
 目标并标记当前差异）、`1 file` 文件列表、上一/下一文件（⇧⌥←/→）、差异数量、
 Side-by-side/Unified、忽略空白/刷新/复制路径设置和关闭，第二行显示 base

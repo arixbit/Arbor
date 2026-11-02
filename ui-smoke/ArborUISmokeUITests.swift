@@ -248,6 +248,53 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.recordScreenshot(named: "log-diff-tab-restored")
     }
 
+    /// The reference diff viewer shows the complete file, not only Git hunks,
+    /// and keeps both line-number gutters next to the center divider. The
+    /// fixture's revised guide has two hunks several lines apart.
+    @MainActor
+    func testLogDiffTabShowsWholeFileAndCenteredGutters() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        let commit = session.window.staticTexts["Revise the fixture guide"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the revised guide commit")
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
+        let changedFile = changesTree.staticTexts["Guide.md"].firstMatch
+        XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the changed guide file did not load")
+        changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let diffTab = session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+        XCTAssertTrue(diffTab.waitForExistence(timeout: 10), "the guide diff did not open")
+
+        // The two changes are in separate hunks; the unchanged line between
+        // them proves the whole file is rendered rather than only the hunks.
+        XCTAssertTrue(
+            session.window.staticTexts["Line 15"].firstMatch.waitForExistence(timeout: 10),
+            "unchanged lines between hunks must be visible when the whole file is shown"
+        )
+        XCTAssertTrue(session.window.staticTexts["2 differences"].firstMatch.exists)
+
+        // Both gutters sit against the center divider: the left number ends
+        // just before it, the right number starts just after it.
+        let oldNumber = session.window.staticTexts["diff-old-line-5"].firstMatch
+        let newNumber = session.window.staticTexts["diff-new-line-5"].firstMatch
+        XCTAssertTrue(oldNumber.waitForExistence(timeout: 10))
+        XCTAssertTrue(newNumber.waitForExistence(timeout: 10))
+        XCTAssertLessThan(
+            newNumber.frame.minX - oldNumber.frame.maxX,
+            80,
+            "the two line-number gutters must be adjacent in the middle of the diff"
+        )
+        session.recordScreenshot(named: "log-diff-whole-file")
+    }
+
     /// With the preview option off a single click only selects; the explicit
     /// Show Diff / double-click / Enter action still opens the diff tab.
     @MainActor

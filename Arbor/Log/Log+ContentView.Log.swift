@@ -21,7 +21,10 @@ var logWorkspace: some View {
                 .opacity(showsLogFileDiffTab ? 0 : 1)
                 .allowsHitTesting(!showsLogFileDiffTab)
                 .disabled(showsLogFileDiffTab)
-                .accessibilityHidden(showsLogFileDiffTab)
+                // Apply the modifier only while hidden: an explicit
+                // `accessibilityHidden(false)` on the ancestor can leave the
+                // compact inspector's covered graph in the accessibility tree.
+                .modifier(AccessibilityHiddenWhen(showsLogFileDiffTab))
             if showsLogFileDiffTab, let diffTab = logSelectionState.fileDiffTab {
                 logFileDiffTabContent(diffTab)
             }
@@ -33,6 +36,25 @@ var logWorkspace: some View {
 /// page, it does not discard the opened diff.
 var showsLogFileDiffTab: Bool {
     logSelectionState.fileDiffTabActive && logSelectionState.fileDiffTab != nil
+}
+
+/// Conditionally hide a subtree from accessibility without ever applying
+/// `accessibilityHidden(false)` to an ancestor of the compact inspector.
+private struct AccessibilityHiddenWhen: ViewModifier {
+    let isHidden: Bool
+
+    init(_ isHidden: Bool) {
+        self.isHidden = isHidden
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isHidden {
+            content.accessibilityHidden(true)
+        } else {
+            content
+        }
+    }
 }
 
 private var logWorkspaceSplit: some View {

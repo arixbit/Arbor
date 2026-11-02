@@ -74,7 +74,26 @@ cat > docs/README.md <<'MARKDOWN'
 Fixture documentation.
 MARKDOWN
 
+# A longer file with a modification in a later commit gives the Log diff
+# whole-file context to render (unchanged lines between two hunks).
+{
+  echo '# Fixture Guide'
+  echo
+  for n in $(seq -w 1 28); do echo "Line $n"; done
+} > docs/Guide.md
+
 commit_at "2024-01-03T09:00:00+00:00" "Document the fixture"
+
+python3 - <<'PY'
+from pathlib import Path
+path = Path("docs/Guide.md")
+lines = path.read_text().splitlines()
+lines[4] += " (revised)"
+lines[24] += " (revised)"
+path.write_text("\n".join(lines) + "\n")
+PY
+
+commit_at "2024-01-03T12:00:00+00:00" "Revise the fixture guide"
 
 git switch --quiet --create feature/alpha
 cat > src/Feature.swift <<'SWIFT'

@@ -199,8 +199,17 @@ struct FileTreeDiffRequest: Identifiable {
     var id: String { "\(repo.workdir() ?? ""):\(entry.path):\(initialMode)" }
 }
 
+/// One display row of the side-by-side presentation. Headers only appear when
+/// the full file is unavailable; the reference hides them while showing the
+/// whole file continuously.
+enum SideBySideDisplayItem {
+    case hunkHeader(Int)
+    case row(DiffRow, hunkIndex: Int)
+}
+
 struct SideBySideDiffView: View {
     let fileDiff: FileDiff
+    var fullFile: FullFileDiff? = nil
     var selectionMode: Bool = false
     var selectedLines: Set<SelectedDiffLine> = []
     var onToggleLine: (SelectedDiffLine) -> Void = { _ in }
@@ -212,33 +221,33 @@ struct SideBySideDiffView: View {
     var activeDifference: Int? = nil
 
     var body: some View {
-        let rowsByHunk = fileDiff.hunks.map(sideBySideRows)
-        let ordinals = differenceOrdinals(isChange: rowsByHunk.map { rows in
-            rows.map { $0.old?.kind == .deletion || $0.new?.kind == .addition }
-        })
+        let items = sideBySideDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
+        let ordinals = sideBySideDifferenceOrdinals(items)
         GeometryReader { proxy in
             ScrollViewReader { scroller in
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(fileDiff.hunks.indices, id: \.self) { hindex in
-                            HunkHeaderView(
-                                hunk: fileDiff.hunks[hindex],
-                                actions: hunkActions,
-                                actionsDisabled: hunkActionsDisabled,
-                                onAction: { action in onHunkAction(action, hindex) }
-                            )
-                            .frame(minWidth: proxy.size.width, alignment: .leading)
-                            ForEach(Array(rowsByHunk[hindex].enumerated()), id: \.offset) { rindex, row in
-                                DiffRowView(row: row, hunkIndex: hindex,
+                        ForEach(items.indices, id: \.self) { index in
+                            switch items[index] {
+                            case let .hunkHeader(hunkIndex):
+                                HunkHeaderView(
+                                    hunk: fileDiff.hunks[hunkIndex],
+                                    actions: hunkActions,
+                                    actionsDisabled: hunkActionsDisabled,
+                                    onAction: { action in onHunkAction(action, hunkIndex) }
+                                )
+                                .frame(minWidth: proxy.size.width, alignment: .leading)
+                            case let .row(row, hunkIndex):
+                                DiffRowView(row: row, hunkIndex: hunkIndex,
                                             selectionMode: selectionMode,
-                                            isOldSelected: isOldSelected(hindex, row),
+                                            isOldSelected: isOldSelected(hunkIndex, row),
                                             selectedLines: selectedLines,
                                             onToggleLine: onToggleLine,
-                                            isActiveDifference: ordinals[hindex][rindex] == activeDifference)
+                                            isActiveDifference: ordinals[index] == activeDifference)
                                     // A short hunk must still occupy the viewport so
                                     // the two diff columns stay anchored left/top.
                                     .frame(minWidth: proxy.size.width, alignment: .leading)
-                                    .id(diffRowAnchorID(hunk: hindex, row: rindex))
+                                    .id(diffRowAnchorID(index))
                             }
                         }
                     }
@@ -270,6 +279,118 @@ struct SideBySideDiffView: View {
         return selectedLines.contains(SelectedDiffLine(hunkIndex: hindex, oldLine: old.oldLine))
     }
 
+}
+
+func sideBySideDifferenceOrdinals(_ items: [SideBySideDisplayItem]) -> [Int?] {
+    var ordinal = 0
+    var previousWasChange = false
+    return items.map { item in
+        guard case let .row(row, _) = item else {
+            previousWasChange = false
+            return nil
+        }
+        let isChange = row.old?.kind == .deletion || row.new?.kind == .addition
+        if isChange && !previousWasChange { ordinal += 1 }
+        previousWasChange = isChange
+        return isChange ? ordinal - 1 : nil
+    }
+}
+
+func sideBySideDifferenceCount(in hunks: [DiffHunk]) -> Int {
+    // Count per hunk: concatenating changed rows from two hunks would merge
+    // the last run of one hunk with the first run of the next one.
+    hunks.reduce(0) { count, hunk in
+        count + countDifferenceRuns(
+            sideBySideRows(hunk).map {
+                $0.old?.kind == .deletion || $0.new?.kind == .addition
+            }
+        )
+    }
+}
+
+func sideBySideDisplayItems(
+    fileDiff: FileDiff,
+    fullFile: FullFileDiff?
+) -> [SideBySideDisplayItem] {
+    if let fullFile,
+       let rows = fullFileSideBySideRows(fileDiff: fileDiff, fullFile: fullFile) {
+        return rows.map { .row($0.row, hunkIndex: $0.hunkIndex) }
+    }
+    return fileDiff.hunks.enumerated().flatMap { hunkIndex, hunk in
+        [SideBySideDisplayItem.hunkHeader(hunkIndex)] + sideBySideRows(hunk).map {
+            .row($0, hunkIndex: hunkIndex)
+        }
+    }
+}
+
+/// Whole-file to paired rows. Rows before, between and after hunks are
+/// unchanged pairs read from the full file; a change of line count between
+/// hunks cannot happen because Git would have merged those regions into one
+/// hunk.
+func fullFileSideBySideRows(
+    fileDiff: FileDiff,
+    fullFile: FullFileDiff
+) -> [(row: DiffRow, hunkIndex: Int)]? {
+    guard fullFile.oldLines != nil || fullFile.newLines != nil else { return nil }
+    var rows: [(row: DiffRow, hunkIndex: Int)] = []
+    var oldCursor = 1
+    var newCursor = 1
+    for (hunkIndex, hunk) in fileDiff.hunks.enumerated() {
+        let oldStart = max(1, Int(hunk.oldStart))
+        let newStart = max(1, Int(hunk.newStart))
+        while oldCursor < oldStart, newCursor < newStart,
+              let row = sideBySideContextRow(
+                  fullFile: fullFile,
+                  oldNumber: oldCursor,
+                  newNumber: newCursor
+              ) {
+            rows.append((row, hunkIndex))
+            oldCursor += 1
+            newCursor += 1
+        }
+        rows.append(contentsOf: sideBySideRows(hunk).map { ($0, hunkIndex) })
+        oldCursor = max(oldCursor, oldStart + hunk.oldLines.count)
+        newCursor = max(newCursor, newStart + hunk.newLines.count)
+    }
+    while let row = sideBySideContextRow(
+        fullFile: fullFile,
+        oldNumber: oldCursor,
+        newNumber: newCursor
+    ) {
+        rows.append((row, max(0, fileDiff.hunks.count - 1)))
+        oldCursor += 1
+        newCursor += 1
+    }
+    return rows
+}
+
+private func sideBySideContextRow(
+    fullFile: FullFileDiff,
+    oldNumber: Int,
+    newNumber: Int
+) -> DiffRow? {
+    guard let oldLines = fullFile.oldLines,
+          let newLines = fullFile.newLines,
+          oldLines.indices.contains(oldNumber - 1),
+          newLines.indices.contains(newNumber - 1) else { return nil }
+    return DiffRow(
+        old: DiffLine(
+            kind: .context,
+            oldLine: UInt32(oldNumber),
+            newLine: 0,
+            text: oldLines[oldNumber - 1],
+            spans: [],
+            highlights: []
+        ),
+        new: DiffLine(
+            kind: .context,
+            oldLine: 0,
+            newLine: UInt32(newNumber),
+            text: newLines[newNumber - 1],
+            spans: [],
+            highlights: []
+        )
+    )
 }
 
 /// Pairs old and new lines into the two-column layout. Kept at file scope so
@@ -320,20 +441,19 @@ struct DiffRowView: View {
             Divider()
             newCell
         }
-        .overlay(alignment: .leading) {
-            if isActiveDifference {
-                Rectangle()
-                    .fill(Design.Colors.accent)
-                    .frame(width: 3)
-            }
-        }
     }
 
+    /// The reference puts both line-number gutters next to the center divider:
+    /// the left file's numbers are right-aligned at the divider and the right
+    /// file's numbers start immediately after it.
     @ViewBuilder
     var oldCell: some View {
         let line = row.old
         let isDeletion = line?.kind == .deletion
         HStack(spacing: 8) {
+            Text(highlightedText(line))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if selectionMode && isDeletion {
                 // 选择标记列（IntelliJ 式，替代行号）
                 Text(isOldSelected ? "✓" : " ")
@@ -341,21 +461,37 @@ struct DiffRowView: View {
                     .foregroundStyle(isOldSelected ? Design.Colors.accent : Design.Colors.secondary.opacity(0.3))
                     .frame(width: 16, alignment: .center)
             } else {
-                Text(line.map { $0.oldLine == 0 ? " " : String($0.oldLine) } ?? " ")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
+                lineNumberText(line?.oldLine ?? 0, side: "old")
             }
-            Text(highlightedText(line))
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 0.5)
         .background(oldBackground(isDeletion: isDeletion))
+        .overlay(alignment: .trailing) {
+            if isActiveDifference {
+                Rectangle()
+                    .fill(Design.Colors.accent)
+                    .frame(width: 2)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             guard selectionMode, let line, line.kind == .deletion, line.oldLine > 0 else { return }
             onToggleLine(SelectedDiffLine(hunkIndex: hunkIndex, oldLine: line.oldLine))
+        }
+    }
+
+    @ViewBuilder
+    func lineNumberText(_ number: UInt32, side: String) -> some View {
+        let content = Text(number == 0 ? " " : String(number))
+            .foregroundStyle(isActiveDifference ? Design.Colors.accent : .secondary)
+            // Both gutters hug the center divider: the left file's numbers
+            // are right-aligned before it, the right file's start after it.
+            .frame(width: 44, alignment: side == "old" ? .trailing : .leading)
+        if number == 0 {
+            content
+        } else {
+            content.accessibilityIdentifier("diff-\(side)-line-\(number)")
         }
     }
 
@@ -377,9 +513,7 @@ struct DiffRowView: View {
                     .foregroundStyle(isNewSelected ? Design.Colors.accent : Design.Colors.secondary.opacity(0.3))
                     .frame(width: 16, alignment: .center)
             } else {
-                Text(line.map { $0.newLine == 0 ? " " : String($0.newLine) } ?? " ")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
+                lineNumberText(line?.newLine ?? 0, side: "new")
             }
             Text(highlightedText(line))
                 .foregroundStyle(.primary)
@@ -388,6 +522,13 @@ struct DiffRowView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 0.5)
         .background(newBackground(isAddition: isAddition))
+        .overlay(alignment: .leading) {
+            if isActiveDifference {
+                Rectangle()
+                    .fill(Design.Colors.accent)
+                    .frame(width: 2)
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             guard selectionMode, let line, line.kind == .addition, line.newLine > 0 else { return }

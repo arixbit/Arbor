@@ -2,6 +2,19 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+/// Splits a file into display lines. CRLF is normalized because the diff
+/// engine compares logical lines, and a trailing newline must not add an empty
+/// numbered line.
+func fileTextLines(_ text: String) -> [String] {
+    var normalized = text
+    if normalized.contains("\r\n") {
+        normalized = normalized.replacingOccurrences(of: "\r\n", with: "\n")
+    }
+    var lines = normalized.components(separatedBy: "\n")
+    if lines.last == "" { lines.removeLast() }
+    return lines
+}
+
 extension ContentView {
 
 /// Git Log is the editor workspace to the right of the selected Git tool
@@ -345,6 +358,7 @@ struct LogFileDiffView: View {
     var onSelectNext: (() -> Void)?
 
     @State var fileDiff: FileDiff?
+    @State var fullFile: FullFileDiff?
     @State var diffError: String?
     @State var presentationMode: DiffPresentationMode = .sideBySide
     @State var activeDifference: Int?
@@ -566,9 +580,17 @@ struct LogFileDiffView: View {
                     description: Text("Git reported a binary change for this path.")
                 )
             } else if presentationMode == .unified {
-                UnifiedDiffView(fileDiff: fileDiff, activeDifference: activeDifference)
+                UnifiedDiffView(
+                    fileDiff: fileDiff,
+                    fullFile: fullFile,
+                    activeDifference: activeDifference
+                )
             } else {
-                SideBySideDiffView(fileDiff: fileDiff, activeDifference: activeDifference)
+                SideBySideDiffView(
+                    fileDiff: fileDiff,
+                    fullFile: fullFile,
+                    activeDifference: activeDifference
+                )
             }
         } else {
             ProgressView("Loading diff…")
@@ -592,6 +614,7 @@ struct LogFileDiffView: View {
     func load() {
         diffTask?.cancel()
         fileDiff = nil
+        fullFile = nil
         diffError = nil
         activeDifference = nil
         guard let repo = repositoryForCommit(record.commit) else {
@@ -601,9 +624,19 @@ struct LogFileDiffView: View {
         let commitID = record.commit.id
         let parentIndex = record.parentIndex
         let path = record.change.path
+        // A rename's base side lives under the old path in the parent tree.
+        let oldPath = record.change.oldPath ?? path
         let expectedID = record.id
         let expectedSource = source
         let settings = makeArborGitDiffSettings(ignoreWhitespace: ignoreWhitespace)
+        let baseRevision: String? = {
+            guard case .commit = expectedSource else { return nil }
+            if let parentIndex,
+               record.commit.parentIds.indices.contains(Int(parentIndex)) {
+                return record.commit.parentIds[Int(parentIndex)]
+            }
+            return record.commit.parentIds.first
+        }()
         diffTask = Task.detached(priority: .userInitiated) {
             do {
                 let diff: FileDiff
@@ -623,12 +656,58 @@ struct LogFileDiffView: View {
                         settings: settings
                     )
                 }
+
+                // The reference diff viewer shows the complete file, not only
+                // the hunks. Read both sides so unchanged lines between hunks
+                // can be rendered continuously. Falls back to hunks when a
+                // side is binary, truncated or unreadable.
+                var loadedFullFile: FullFileDiff?
+                if !diff.binary,
+                   !settings.useExternalTextconv {
+                    let oldContent: FileContent?
+                    let newContent: FileContent?
+                    switch expectedSource {
+                    case .commit:
+                        oldContent = baseRevision.flatMap {
+                            try? repo.readRevisionFile(revision: $0, path: oldPath)
+                        }
+                        newContent = try? repo.readRevisionFile(revision: commitID, path: path)
+                    case let .local(revision):
+                        oldContent = try? repo.readRevisionFile(revision: revision, path: oldPath)
+                        newContent = try? repo.readWorktreeFile(path: path)
+                    }
+                    let oldLines = oldContent.flatMap {
+                        $0.binary || $0.truncated ? nil : fileTextLines($0.text)
+                    }
+                    let newLines = newContent.flatMap {
+                        $0.binary || $0.truncated ? nil : fileTextLines($0.text)
+                    }
+                    if oldLines != nil || newLines != nil {
+                        loadedFullFile = FullFileDiff(oldLines: oldLines, newLines: newLines)
+                    }
+                }
+
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard self.record.id == expectedID,
                           self.source == expectedSource,
                           self.ignoreWhitespace == settings.ignoreAllSpace else { return }
                     self.fileDiff = diff
+                    self.fullFile = loadedFullFile
+                    // Open on the first difference like the reference diff
+                    // viewer; on a large file this avoids landing on an
+                    // unchanged page far above every change. Defer one run
+                    // loop so the freshly created diff view observes the
+                    // change and scrolls to its anchor.
+                    if self.differenceCount > 0 {
+                        DispatchQueue.main.async {
+                            guard self.record.id == expectedID,
+                                  self.source == expectedSource,
+                                  self.ignoreWhitespace == settings.ignoreAllSpace,
+                                  self.activeDifference == nil else { return }
+                            self.activeDifference = 0
+                        }
+                    }
                 }
             } catch {
                 guard !Task.isCancelled else { return }

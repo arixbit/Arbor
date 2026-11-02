@@ -25,34 +25,53 @@ enum DiffPresentationMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Whole-file texts for both sides of a diff.
+///
+/// The reference diff viewer shows the complete file and lets the difference
+/// arrows jump between changed runs. Git's `FileDiff` only carries hunks with
+/// a few context lines, so the log's Repository Diff tab also reads both file
+/// versions and renders every line; hunk data still supplies the changed rows
+/// and line numbers. A nil side means the file does not exist there (added or
+/// deleted file) or could not be read completely.
+struct FullFileDiff: Equatable {
+    var oldLines: [String]?
+    var newLines: [String]?
+}
+
+/// One line of the unified presentation. Hunk headers only appear when the
+/// full file is unavailable; the reference hides them while showing the whole
+/// file continuously.
+enum UnifiedDisplayItem {
+    case hunkHeader(Int)
+    case row(UnifiedDiffRow)
+}
+
 struct UnifiedDiffView: View {
     let fileDiff: FileDiff
+    var fullFile: FullFileDiff? = nil
     /// Ordinal of the difference the toolbar selected. Rows in it get a marker
     /// and the view scrolls to it when the ordinal changes.
     var activeDifference: Int? = nil
 
     var body: some View {
-        let rowsByHunk = fileDiff.hunks.map(unifiedDiffRows)
-        let ordinals = differenceOrdinals(isChange: rowsByHunk.map { rows in
-            rows.map { $0.prefix != " " }
-        })
+        let items = unifiedDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
+        let ordinals = unifiedDifferenceOrdinals(items)
         GeometryReader { proxy in
             ScrollViewReader { scroller in
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(fileDiff.hunks.indices, id: \.self) { hindex in
-                            HunkHeaderView(hunk: fileDiff.hunks[hindex])
-                                .frame(minWidth: proxy.size.width, alignment: .leading)
-                            ForEach(
-                                Array(rowsByHunk[hindex].enumerated()),
-                                id: \.offset
-                            ) { rindex, row in
+                        ForEach(items.indices, id: \.self) { index in
+                            switch items[index] {
+                            case let .hunkHeader(hunkIndex):
+                                HunkHeaderView(hunk: fileDiff.hunks[hunkIndex])
+                                    .frame(minWidth: proxy.size.width, alignment: .leading)
+                            case let .row(row):
                                 UnifiedDiffRowView(
                                     row: row,
-                                    isActiveDifference: ordinals[hindex][rindex] == activeDifference
+                                    isActiveDifference: ordinals[index] == activeDifference
                                 )
                                 .frame(minWidth: proxy.size.width, alignment: .leading)
-                                .id(diffRowAnchorID(hunk: hindex, row: rindex))
+                                .id(diffRowAnchorID(index))
                             }
                         }
                     }
@@ -78,126 +97,177 @@ struct UnifiedDiffView: View {
     }
 }
 
-func diffRowAnchorID(hunk: Int, row: Int) -> String {
-    "diff-row-\(hunk)-\(row)"
+// MARK: - Difference navigation shared by both presentations
+
+func diffRowAnchorID(_ index: Int) -> String {
+    "diff-row-\(index)"
 }
 
-func differenceOrdinals(isChange: [[Bool]]) -> [[Int?]] {
-    var ordinal = 0
-    return isChange.map { rows in
-        var previousWasChange = false
-        var result: [Int?] = []
-        result.reserveCapacity(rows.count)
-        for isChanged in rows {
-            if isChanged && !previousWasChange { ordinal += 1 }
-            result.append(isChanged ? ordinal - 1 : nil)
-            previousWasChange = isChanged
-        }
-        return result
+func differenceAnchorID(ordinal: Int, ordinals: [Int?]) -> String? {
+    guard let index = ordinals.firstIndex(where: { $0 == ordinal }) else { return nil }
+    return diffRowAnchorID(index)
+}
+
+/// Counts contiguous changed runs, matching the reference's difference count
+/// rather than Git's hunk count.
+func countDifferenceRuns(_ flags: [Bool]) -> Int {
+    var count = 0
+    var previousWasChange = false
+    for flag in flags {
+        if flag && !previousWasChange { count += 1 }
+        previousWasChange = flag
     }
+    return count
 }
 
-func sideBySideDifferenceOrdinals(in hunks: [DiffHunk]) -> [[Int?]] {
-    differenceOrdinals(isChange: hunks.map { hunk in
-        sideBySideRows(hunk).map { row in
-            row.old?.kind == .deletion || row.new?.kind == .addition
+func unifiedDifferenceOrdinals(_ items: [UnifiedDisplayItem]) -> [Int?] {
+    var ordinal = 0
+    var previousWasChange = false
+    return items.map { item in
+        guard case let .row(row) = item else {
+            previousWasChange = false
+            return nil
         }
-    })
-}
-
-func unifiedDifferenceOrdinals(in hunks: [DiffHunk]) -> [[Int?]] {
-    differenceOrdinals(isChange: hunks.map { hunk in
-        unifiedDiffRows(hunk).map { $0.prefix != " " }
-    })
-}
-
-func sideBySideDifferenceCount(in hunks: [DiffHunk]) -> Int {
-    differenceCount(in: sideBySideDifferenceOrdinals(in: hunks))
+        let isChange = row.prefix != " "
+        if isChange && !previousWasChange { ordinal += 1 }
+        previousWasChange = isChange
+        return isChange ? ordinal - 1 : nil
+    }
 }
 
 func unifiedDifferenceCount(in hunks: [DiffHunk]) -> Int {
-    differenceCount(in: unifiedDifferenceOrdinals(in: hunks))
-}
-
-func differenceCount(in ordinals: [[Int?]]) -> Int {
-    ordinals
-        .flatMap { $0 }
-        .compactMap { $0 }
-        .max()
-        .map { $0 + 1 } ?? 0
-}
-
-func differenceAnchorID(ordinal: Int, ordinals: [[Int?]]) -> String? {
-    for (hunkIndex, rows) in ordinals.enumerated() {
-        if let rowIndex = rows.firstIndex(where: { $0 == ordinal }) {
-            return diffRowAnchorID(hunk: hunkIndex, row: rowIndex)
-        }
+    hunks.reduce(0) { count, hunk in
+        count + countDifferenceRuns(unifiedDiffRows(hunk).map { $0.prefix != " " })
     }
-    return nil
+}
+
+func unifiedDisplayItems(fileDiff: FileDiff, fullFile: FullFileDiff?) -> [UnifiedDisplayItem] {
+    if let fullFile,
+       let rows = fullFileUnifiedRows(fileDiff: fileDiff, fullFile: fullFile) {
+        return rows.map { .row($0) }
+    }
+    return fileDiff.hunks.enumerated().flatMap { hunkIndex, hunk in
+        [UnifiedDisplayItem.hunkHeader(hunkIndex)] + unifiedDiffRows(hunk).map { .row($0) }
+    }
+}
+
+/// Whole-file to unified rows. Rows before, between and after hunks are
+/// unchanged pairs read from the full file; a change of line count between
+/// hunks cannot happen because Git would have merged those regions into one
+/// hunk.
+func fullFileUnifiedRows(fileDiff: FileDiff, fullFile: FullFileDiff) -> [UnifiedDiffRow]? {
+    guard fullFile.oldLines != nil || fullFile.newLines != nil else { return nil }
+    var rows: [UnifiedDiffRow] = []
+    var oldCursor = 1
+    var newCursor = 1
+    for hunk in fileDiff.hunks {
+        let oldStart = max(1, Int(hunk.oldStart))
+        let newStart = max(1, Int(hunk.newStart))
+        while oldCursor < oldStart, newCursor < newStart,
+              let row = unifiedContextRow(fullFile: fullFile, oldNumber: oldCursor, newNumber: newCursor) {
+            rows.append(row)
+            oldCursor += 1
+            newCursor += 1
+        }
+        rows.append(contentsOf: unifiedDiffRows(hunk))
+        oldCursor = max(oldCursor, oldStart + hunk.oldLines.count)
+        newCursor = max(newCursor, newStart + hunk.newLines.count)
+    }
+    while let row = unifiedContextRow(fullFile: fullFile, oldNumber: oldCursor, newNumber: newCursor) {
+        rows.append(row)
+        oldCursor += 1
+        newCursor += 1
+    }
+    return rows
+}
+
+private func unifiedContextRow(
+    fullFile: FullFileDiff,
+    oldNumber: Int,
+    newNumber: Int
+) -> UnifiedDiffRow? {
+    guard let oldLines = fullFile.oldLines,
+          let newLines = fullFile.newLines,
+          oldLines.indices.contains(oldNumber - 1),
+          newLines.indices.contains(newNumber - 1) else { return nil }
+    let text = newLines[newNumber - 1]
+    return UnifiedDiffRow(
+        line: DiffLine(
+            kind: .context,
+            oldLine: UInt32(oldNumber),
+            newLine: UInt32(newNumber),
+            text: text,
+            spans: [],
+            highlights: []
+        ),
+        oldLine: UInt32(oldNumber),
+        newLine: UInt32(newNumber),
+        prefix: " "
+    )
 }
 
 func unifiedDiffRows(_ hunk: DiffHunk) -> [UnifiedDiffRow] {
-        var rows: [UnifiedDiffRow] = []
-        var oldIndex = 0
-        var newIndex = 0
+    var rows: [UnifiedDiffRow] = []
+    var oldIndex = 0
+    var newIndex = 0
 
-        while oldIndex < hunk.oldLines.count || newIndex < hunk.newLines.count {
-            let old = oldIndex < hunk.oldLines.count ? hunk.oldLines[oldIndex] : nil
-            let new = newIndex < hunk.newLines.count ? hunk.newLines[newIndex] : nil
+    while oldIndex < hunk.oldLines.count || newIndex < hunk.newLines.count {
+        let old = oldIndex < hunk.oldLines.count ? hunk.oldLines[oldIndex] : nil
+        let new = newIndex < hunk.newLines.count ? hunk.newLines[newIndex] : nil
 
-            if let old, let new, old.kind == .context, new.kind == .context {
-                rows.append(UnifiedDiffRow(
-                    line: old,
-                    oldLine: old.oldLine,
-                    newLine: new.newLine,
-                    prefix: " "
-                ))
-                oldIndex += 1
-                newIndex += 1
-            } else if let old, old.kind == .deletion {
-                rows.append(UnifiedDiffRow(
-                    line: old,
-                    oldLine: old.oldLine,
-                    newLine: 0,
-                    prefix: "-"
-                ))
-                oldIndex += 1
-            } else if let new, new.kind == .addition {
-                rows.append(UnifiedDiffRow(
-                    line: new,
-                    oldLine: 0,
-                    newLine: new.newLine,
-                    prefix: "+"
-                ))
-                newIndex += 1
-            } else if let old, let new {
-                rows.append(UnifiedDiffRow(
-                    line: old,
-                    oldLine: old.oldLine,
-                    newLine: new.newLine,
-                    prefix: " "
-                ))
-                oldIndex += 1
-                newIndex += 1
-            } else if let old {
-                rows.append(UnifiedDiffRow(
-                    line: old,
-                    oldLine: old.oldLine,
-                    newLine: 0,
-                    prefix: "-"
-                ))
-                oldIndex += 1
-            } else if let new {
-                rows.append(UnifiedDiffRow(
-                    line: new,
-                    oldLine: 0,
-                    newLine: new.newLine,
-                    prefix: "+"
-                ))
-                newIndex += 1
-            }
+        if let old, let new, old.kind == .context, new.kind == .context {
+            rows.append(UnifiedDiffRow(
+                line: old,
+                oldLine: old.oldLine,
+                newLine: new.newLine,
+                prefix: " "
+            ))
+            oldIndex += 1
+            newIndex += 1
+        } else if let old, old.kind == .deletion {
+            rows.append(UnifiedDiffRow(
+                line: old,
+                oldLine: old.oldLine,
+                newLine: 0,
+                prefix: "-"
+            ))
+            oldIndex += 1
+        } else if let new, new.kind == .addition {
+            rows.append(UnifiedDiffRow(
+                line: new,
+                oldLine: 0,
+                newLine: new.newLine,
+                prefix: "+"
+            ))
+            newIndex += 1
+        } else if let old, let new {
+            rows.append(UnifiedDiffRow(
+                line: old,
+                oldLine: old.oldLine,
+                newLine: new.newLine,
+                prefix: " "
+            ))
+            oldIndex += 1
+            newIndex += 1
+        } else if let old {
+            rows.append(UnifiedDiffRow(
+                line: old,
+                oldLine: old.oldLine,
+                newLine: 0,
+                prefix: "-"
+            ))
+            oldIndex += 1
+        } else if let new {
+            rows.append(UnifiedDiffRow(
+                line: new,
+                oldLine: 0,
+                newLine: new.newLine,
+                prefix: "+"
+            ))
+            newIndex += 1
         }
-        return rows
+    }
+    return rows
 }
 
 struct UnifiedDiffRow: Identifiable {
