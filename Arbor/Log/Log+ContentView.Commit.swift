@@ -8,12 +8,13 @@ extension ContentView {
 ///
 ///   graph selection -> commit metadata/details
 ///   graph selection -> async Changes browser
-///   Changes selection -> async file diff preview
+///   Changes selection -> diff editor tab
 ///
 /// Keeping those pieces in one `CommitDetailView` made a stale detail load
 /// able to replace or hide the Changes browser. This wrapper mirrors
-/// `MainFrame`: metadata is one splitter component and the Changes browser is
-/// another, with its own selected path and diff task.
+/// `MainFrame`: metadata is one splitter component, the Changes browser is
+/// another with its own selected path, and the diff is an editor tab owned by
+/// `LogSelectionState` so it never shrinks into this narrow inspector.
 struct LogCommitInspectorView: View {
     let repo: Repository?
     let repositoryForCommit: (CommitInfo) -> Repository?
@@ -38,8 +39,10 @@ struct LogCommitInspectorView: View {
     let onCopyPatchSelection: ([LogChangeRecord]) -> Void
     let onCreateBranch: (CommitInfo) -> Void
     let showsMetadata: Bool
+    /// 与 IntelliJ 的 `Show Diff Preview` 对应：选中文件时直接打开 diff tab。
     let showsDiffPreview: Bool
-    let diffPreviewVertical: Bool
+    let activeDiffRecordID: String?
+    let onOpenFileDiff: (LogChangeRecord, LogDiffSource, [LogChangeRecord]) -> Void
     @Binding var showsChangesFromParents: Bool
     @Binding var showsOnlyAffectedChanges: Bool
     let affectedPathSelections: [LogPathFilterSelection]
@@ -66,7 +69,8 @@ struct LogCommitInspectorView: View {
                         remotesForCommit: remotesForCommit,
                         commits: commits,
                         showsDiffPreview: showsDiffPreview,
-                        diffPreviewVertical: diffPreviewVertical,
+                        activeDiffRecordID: activeDiffRecordID,
+                        onOpenFileDiff: onOpenFileDiff,
                         showsChangesFromParents: $showsChangesFromParents,
                         showsOnlyAffectedChanges: $showsOnlyAffectedChanges,
                         affectedPathSelections: affectedPathSelections,
@@ -115,7 +119,8 @@ struct LogCommitInspectorView: View {
                     remotesForCommit: remotesForCommit,
                     commits: commits,
                     showsDiffPreview: showsDiffPreview,
-                    diffPreviewVertical: diffPreviewVertical,
+                    activeDiffRecordID: activeDiffRecordID,
+                    onOpenFileDiff: onOpenFileDiff,
                     showsChangesFromParents: $showsChangesFromParents,
                     showsOnlyAffectedChanges: $showsOnlyAffectedChanges,
                     affectedPathSelections: affectedPathSelections,

@@ -27,6 +27,16 @@ final class LogSelectionState: ObservableObject {
     @Published var detailCommit: CommitInfo?
     @Published var detailLoadTask: Task<Void, Never>?
 
+    // MARK: - 文件 Diff tab
+
+    /// Changes Browser 的 Show Diff / 双击 / Enter 在 Log 编辑区打开独立
+    /// diff tab（IntelliJ 的 `EditorTabPreview`），而不是把 diff 挤进右侧
+    /// 详情栏。nil 表示没有打开的 diff tab。
+    @Published var fileDiffTab: LogFileDiffTab?
+    /// 与 `fileDiffTab` 分开保存：切回 Log 只改变当前页签，diff tab 仍然
+    /// 保留在 tab 条上，与 IntelliJ 的编辑器页签一致。
+    @Published var fileDiffTabActive = false
+
     // MARK: - Tab
 
     @Published var tabs: [LogTabDescriptor]

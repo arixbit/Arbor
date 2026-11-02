@@ -139,12 +139,13 @@ struct ContentView: View {
     // the narrower right-hand column.
     // At 1642pt this leaves a 280pt inspector beside the dominant Log table.
     @AppStorage("arbor.logGraphWidth.v8") var savedLogGraphWidth: Double = 688
-    // These are the same three persistent Log presentation properties exposed
-    // by rebased's VcsLog UI actions. They are deliberately state, not layout
+    // These are the persistent Log presentation properties exposed by
+    // rebased's VcsLog UI actions. They are deliberately state, not layout
     // hacks: changing them must not reload or replace the selected commit.
+    // Show Diff Preview opens the selected change in the Log editor's diff
+    // tab; the diff itself never shares the narrow details column.
     @AppStorage("arbor.log.showDetails.v1") var logShowDetails = true
     @AppStorage("arbor.log.showDiffPreview.v1") var logShowDiffPreview = true
-    @AppStorage("arbor.log.diffPreviewVertical.v1") var logDiffPreviewVertical = false
     @AppStorage("arbor.log.compactReferences.v2") var logCompactReferences = true
     @AppStorage("arbor.log.commitColumns.v1") var logShowCommitColumns = false
     @AppStorage("arbor.log.authorColumn.v1") var logShowAuthorColumn = true

@@ -182,6 +182,97 @@ final class ArborUISmokeContractUITests: XCTestCase {
         XCTAssertTrue(session.window.staticTexts["0 staged"].waitForExistence(timeout: 10))
     }
 
+    /// The reference opens a change's diff as a `Repository Diff: <file>`
+    /// editor tab. The Log's narrow inspector must not host the diff itself,
+    /// where a side-by-side view is unreadable.
+    @MainActor
+    func testLogChangeOpensFullWidthDiffTab() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        let commit = session.window.staticTexts["Fix beta behaviour"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the fixture commits")
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
+        let changedFile = changesTree.staticTexts["Fix.swift"].firstMatch
+        XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the commit's changed files did not load")
+        changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let diffTab = session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+        XCTAssertTrue(
+            diffTab.waitForExistence(timeout: 10),
+            "selecting a changed file must open its diff as a full-width editor tab"
+        )
+        let diffTabButton = session.window.descendants(matching: .any)["log-file-diff-show-tab"].firstMatch
+        XCTAssertTrue(diffTabButton.exists, "the diff tab must stay on the tab strip")
+        XCTAssertTrue(diffTabButton.label.contains("Fix.swift"), "the tab must name the changed file")
+        XCTAssertFalse(
+            session.window.textFields["log-text-filter"].exists,
+            "the diff tab must replace the Log surface instead of sharing its column"
+        )
+        session.recordScreenshot(named: "log-diff-tab")
+
+        let returnToLog = session.window.descendants(matching: .any)["log-file-diff-return-to-log"].firstMatch
+        XCTAssertTrue(returnToLog.exists, "the diff tab must keep the Log reachable")
+        returnToLog.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(session.window.textFields["log-text-filter"].waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            changesTree.staticTexts["Fix.swift"].firstMatch.waitForExistence(timeout: 10),
+            "returning to Log must keep the loaded Changes list instead of reloading the commit"
+        )
+        XCTAssertFalse(diffTab.exists)
+        session.recordScreenshot(named: "log-diff-tab-back-to-log")
+
+        // Switching to Log keeps the diff tab on the tab strip; selecting it
+        // again must restore the same diff without reopening the file.
+        XCTAssertTrue(diffTabButton.exists, "the diff tab must stay on the tab strip after returning to Log")
+        diffTabButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(diffTab.waitForExistence(timeout: 10), "selecting the diff tab must restore the diff")
+        session.recordScreenshot(named: "log-diff-tab-restored")
+    }
+
+    /// With the preview option off a single click only selects; the explicit
+    /// Show Diff / double-click / Enter action still opens the diff tab.
+    @MainActor
+    func testLogDiffTabRequiresExplicitActionWhenPreviewIsOff() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = ["-arbor.log.showDiffPreview.v1", "NO"]
+        session.launch()
+        defer { session.terminate() }
+
+        let commit = session.window.staticTexts["Fix beta behaviour"].firstMatch
+        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the fixture commits")
+        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
+        let changedFile = changesTree.staticTexts["Fix.swift"].firstMatch
+        XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the commit's changed files did not load")
+        changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        let diffTab = session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+        XCTAssertFalse(
+            diffTab.waitForExistence(timeout: 2),
+            "a single click must not open a diff tab while Show Diff Preview is off"
+        )
+        XCTAssertTrue(session.window.textFields["log-text-filter"].exists)
+
+        changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleClick()
+        XCTAssertTrue(
+            diffTab.waitForExistence(timeout: 10),
+            "double-click must open the diff tab even when inline preview is off"
+        )
+    }
+
     @MainActor
     func testCommitOptionCheckboxesToggle() throws {
         let fixture = try ArborUIFixture.create()

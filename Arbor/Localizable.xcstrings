@@ -10227,6 +10227,17 @@
         }
       }
     },
+    "Repository Diff: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库 Diff：%@"
+          }
+        }
+      }
+    },
     "Repository URL" : {
       "extractionState" : "stale",
       "localizations" : {

@@ -153,9 +153,10 @@ enum LogChangesFilter: String, CaseIterable, Equatable {
 
 
 /// First-class Log Changes browser. A selection change clears the old tree
-/// immediately, loads the selected commit set off the main actor, and only
-/// then enables file-level diff loading. This prevents the previous commit's
-/// files from remaining actionable while the new commit is still loading.
+/// immediately and reloads the selected commit set off the main actor, so the
+/// previous commit's files never remain actionable while the new commit is
+/// still loading. File diffs open in the Log editor's own diff tab
+/// (`LogFileDiffTab`) instead of a squeezed split inside this inspector.
 struct LogChangesBrowserView: View {
     static let maximumCommitsPerSelection = 50
 
@@ -164,7 +165,10 @@ struct LogChangesBrowserView: View {
     let remotesForCommit: (CommitInfo) -> [RemoteInfo]
     let commits: [CommitInfo]
     let showsDiffPreview: Bool
-    let diffPreviewVertical: Bool
+    /// 当前在 Log 编辑区打开的 diff tab 记录。tab 内的上一/下一导航会回写
+    /// 这里，让隐藏的 Changes 列表保持同一选中行。
+    let activeDiffRecordID: String?
+    let onOpenFileDiff: (LogChangeRecord, LogDiffSource, [LogChangeRecord]) -> Void
     @Binding var showsChangesFromParents: Bool
     @Binding var showsOnlyAffectedChanges: Bool
     let affectedPathSelections: [LogPathFilterSelection]
@@ -189,18 +193,13 @@ struct LogChangesBrowserView: View {
     @State var records: [LogChangeRecord] = []
     @State var selectedRecordID: String?
     @State var selectedRecordIDs: Set<String> = []
-    @State var fileDiff: FileDiff?
-    @State var diffError: String?
     @State var loadError: String?
     @State var isLoading = false
     @State var changesTask: Task<Void, Never>?
-    @State var diffTask: Task<Void, Never>?
-    @State var presentationMode: DiffPresentationMode = .sideBySide
     @State var selectedParentIndex = 0
     @State var groupByDirectory = true
     @State var collapsedChangeNodes: Set<String> = []
     @State var treeCache = LogChangeTreeCache()
-    @State var diffSource: LogDiffSource = .commit
     @State var activeFilter: LogChangesFilter?
     @State var filteredOutRecordIDs: Set<String> = []
     @State var pendingFilterRecordIDs: Set<String> = []
@@ -208,7 +207,6 @@ struct LogChangesBrowserView: View {
     @State var filterError: String?
     @State var filterTask: Task<Void, Never>?
     @State var submoduleChangeRequest: SubmoduleChangeRequest?
-    @State var standaloneDiffRecord: LogChangeRecord?
     @State var affectedHistoryResolveTask: Task<Void, Never>?
     @FocusState var changesTreeFocused: Bool
 
@@ -307,9 +305,6 @@ struct LogChangesBrowserView: View {
         selectedRecordIDs = selectedRecordIDs.intersection(validIDs)
         if let selectedRecordID, !validIDs.contains(selectedRecordID) {
             self.selectedRecordID = nil
-            fileDiff = nil
-            diffError = nil
-            diffSource = .commit
         }
     }
 
@@ -561,21 +556,6 @@ struct LogChangesBrowserView: View {
                     .help("Show the complete changeset of this revision with the followed file highlighted")
                 }
                 Spacer()
-                if showsDiffPreview && selectedRecordID != nil {
-                    if case .local = diffSource {
-                        Text("Compare with Local")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Picker("Diff View", selection: $presentationMode) {
-                        ForEach(DiffPresentationMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .controlSize(.small)
-                        .frame(width: 150)
-                }
                 Button {
                     guard let selectedRecord, selectedRecords.count == 1 else { return }
                     onShowFileHistoryForRevision(
@@ -589,24 +569,6 @@ struct LogChangesBrowserView: View {
                 .foregroundStyle(.secondary)
                 .help("Show History for Revision")
                 .disabled(selectedRecords.count != 1)
-                if let selectedRecordIndex {
-                    Button {
-                        selectAdjacentChange(offset: -1)
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Previous File")
-                    .disabled(adjacentChangeIndex(count: rows.count, current: selectedRecordIndex, offset: -1) == nil)
-                    Button {
-                        selectAdjacentChange(offset: 1)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Next File")
-                    .disabled(adjacentChangeIndex(count: rows.count, current: selectedRecordIndex, offset: 1) == nil)
-                }
                 if canApplySelectedChanges {
                     Button {
                         onApplySelectedChanges(selectedRecords, true)
@@ -813,22 +775,6 @@ struct LogChangesBrowserView: View {
                         : (activeFilter == nil ? "No changed files" : "No files remain after filtering")))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if showsDiffPreview && selectedRecordID != nil {
-                GeometryReader { geometry in
-                if diffPreviewVertical || geometry.size.width < 520 {
-                    VSplitView {
-                        changesTree
-                        diffPreview
-                            .frame(minHeight: 120, idealHeight: 240, maxHeight: .infinity)
-                    }
-                } else {
-                    HSplitView {
-                        changesTree
-                        diffPreview
-                            .frame(minWidth: 220, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-                }
             } else {
                 changesTree
             }
@@ -853,21 +799,23 @@ struct LogChangesBrowserView: View {
         .onChange(of: showsOnlyAffectedChanges) { _, _ in
             selectedRecordIDs = []
             selectedRecordID = nil
-            fileDiff = nil
-            diffError = nil
-            diffSource = .commit
             normalizeSelectionAfterFiltering()
         }
         .onChange(of: affectedPathSelections) { _, _ in
             guard showsOnlyAffectedChanges else { return }
             selectedRecordIDs = []
             selectedRecordID = nil
-            fileDiff = nil
-            diffError = nil
-            diffSource = .commit
             normalizeSelectionAfterFiltering()
         }
-        .onChange(of: selectedRecordID) { _, id in loadDiff(id, source: diffSource) }
+        // The diff tab owns previous/next file navigation. Mirror its active
+        // record back into the hidden Changes list so returning to Log does
+        // not show a different file than the one the diff tab displayed.
+        .onChange(of: activeDiffRecordID) { _, id in
+            guard let id, rows.contains(where: { $0.id == id }) else { return }
+            guard selectedRecordID != id else { return }
+            selectedRecordID = id
+            selectedRecordIDs = [id]
+        }
         .sheet(item: $submoduleChangeRequest) { request in
             if let repo = repositoryForCommit(request.commit) {
                 SubmoduleChangeView(
@@ -883,15 +831,8 @@ struct LogChangesBrowserView: View {
                 }
             }
         }
-        .sheet(item: $standaloneDiffRecord) { record in
-            LogStandaloneDiffView(
-                record: record,
-                repositoryForCommit: repositoryForCommit
-            )
-        }
         .onDisappear {
             changesTask?.cancel()
-            diffTask?.cancel()
             filterTask?.cancel()
         }
     }
@@ -943,6 +884,7 @@ struct LogChangesBrowserView: View {
             }
         }
         .listStyle(.inset)
+        .accessibilityIdentifier("log-changes-tree")
         .focusable()
         .focused($changesTreeFocused)
         .onKeyPress(.upArrow, action: handleUpKeyPress)
@@ -1131,60 +1073,9 @@ struct LogChangesBrowserView: View {
                             selected.contains($0.id)
                         })?.id
                         changesTreeFocused = true
-                        diffSource = .commit
                     }
             }
             return AnyView(group)
-        }
-    }
-
-    @ViewBuilder
-    var diffPreview: some View {
-        VStack(spacing: 0) {
-            if let selectedRecord, isSubmodule(selectedRecord.change) {
-                HStack(spacing: 8) {
-                    Label("Submodule gitlink", systemImage: "square.stack.3d.up")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Show Submodule Changes") {
-                        showSubmoduleChanges(selectedRecord)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                .padding(8)
-                Divider()
-            }
-
-            Group {
-                if let diffError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Unable to load diff", systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(Design.Colors.error)
-                        Text(diffError).font(.caption).textSelection(.enabled)
-                        if let selectedRecordID {
-                            Button("Retry") { loadDiff(selectedRecordID) }
-                                .buttonStyle(.bordered)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(12)
-                } else if let fileDiff {
-                    if presentationMode == .unified {
-                        UnifiedDiffView(fileDiff: fileDiff)
-                    } else {
-                        SideBySideDiffView(fileDiff: fileDiff)
-                    }
-                } else if selectedRecordID != nil {
-                    ProgressView("Loading diff…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    Text("Select a changed file to view its diff")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
         }
     }
 
@@ -1202,9 +1093,11 @@ struct LogChangesBrowserView: View {
         )
     }
 
+    /// IntelliJ 的 Show Diff / 双击 / Enter 在编辑区打开独立 diff tab。
+    /// 内嵌预览只是可选的“选中即预览”，不再决定这条 action 是否存在。
     func openStandaloneDiff(_ record: LogChangeRecord) {
-        select(record, extending: false)
-        standaloneDiffRecord = record
+        select(record, extending: false, presentsDiff: false)
+        onOpenFileDiff(record, .commit, rows)
     }
 
     func changeKindText(_ kind: TreeChangeKind) -> LocalizedStringKey {
@@ -1266,7 +1159,6 @@ struct LogChangesBrowserView: View {
 
     func loadChanges() {
         changesTask?.cancel()
-        diffTask?.cancel()
         filterTask?.cancel()
         affectedHistoryResolveTask?.cancel()
         records = []
@@ -1276,10 +1168,7 @@ struct LogChangesBrowserView: View {
         filterError = nil
         selectedRecordID = nil
         selectedRecordIDs = []
-        fileDiff = nil
-        diffError = nil
         loadError = nil
-        diffSource = .commit
         guard !commits.isEmpty else {
             isLoading = false
             return
@@ -1328,9 +1217,12 @@ struct LogChangesBrowserView: View {
         }
     }
 
-    func select(_ record: LogChangeRecord, extending: Bool? = nil) {
+    func select(
+        _ record: LogChangeRecord,
+        extending: Bool? = nil,
+        presentsDiff: Bool? = nil
+    ) {
         changesTreeFocused = true
-        diffSource = .commit
         let flags = NSEvent.modifierFlags
         let command = flags.contains(.command)
         let shift = flags.contains(.shift)
@@ -1359,21 +1251,20 @@ struct LogChangesBrowserView: View {
         } else {
             selectedRecordID = rows.first(where: { selectedRecordIDs.contains($0.id) })?.id
         }
+        // IntelliJ's "Show Diff Preview" option opens the selected change in a
+        // preview tab. Multi-selections and keyboard navigation keep the
+        // Changes list focused, and the toggle can be turned off to only
+        // select rows; double-click, Enter and Show Diff always open the tab.
+        let shouldPresentDiff = presentsDiff
+            ?? (showsDiffPreview && !command && !shift && !shouldExtend)
+        if shouldPresentDiff {
+            onOpenFileDiff(record, .commit, rows)
+        }
     }
 
     var selectedRecordIndex: Int? {
         guard let selectedRecordID else { return nil }
         return rows.firstIndex(where: { $0.id == selectedRecordID })
-    }
-
-    func selectAdjacentChange(offset: Int) {
-        guard let selectedRecordIndex,
-              let nextIndex = adjacentChangeIndex(
-                  count: rows.count,
-                  current: selectedRecordIndex,
-                  offset: offset
-              ) else { return }
-        select(rows[nextIndex], extending: false)
     }
 
     func moveSelection(by offset: Int) {
@@ -1382,7 +1273,7 @@ struct LogChangesBrowserView: View {
             current: selectedRecordIndex,
             offset: offset
         ) else { return }
-        select(rows[nextIndex], extending: false)
+        select(rows[nextIndex], extending: false, presentsDiff: false)
     }
 
     func handleUpKeyPress() -> KeyPress.Result {
@@ -1419,58 +1310,10 @@ struct LogChangesBrowserView: View {
     }
 
     func compareWithLocal(_ record: LogChangeRecord, revision: String) {
-        let source = LogDiffSource.local(revision: revision)
-        diffSource = source
-        selectedRecordIDs = [record.id]
-        if selectedRecordID == record.id {
-            loadDiff(record.id, source: source)
-        } else {
-            selectedRecordID = record.id
-        }
+        select(record, extending: false, presentsDiff: false)
+        onOpenFileDiff(record, .local(revision: revision), rows)
     }
 
-    func loadDiff(_ id: String?, source: LogDiffSource? = nil) {
-        diffTask?.cancel()
-        fileDiff = nil
-        diffError = nil
-        guard let id, let record = rows.first(where: { $0.id == id }),
-              let repo = repositoryForCommit(record.commit) else { return }
-        let expectedID = id
-        let requestedSource = source ?? diffSource
-        diffTask = Task.detached(priority: .userInitiated) {
-            do {
-                let diff: FileDiff
-                switch requestedSource {
-                case .commit:
-                    diff = try repo.commitFileDiffWithSettings(
-                        commitId: record.commit.id,
-                        parentIndex: record.parentIndex,
-                        path: record.change.path,
-                        settings: makeArborGitDiffSettings()
-                    )
-                case let .local(revision):
-                    diff = try repo.diffRevisionPathWithWorktreeWithSettings(
-                        revision: revision,
-                        revisionPath: record.change.path,
-                        worktreePath: record.change.path,
-                        settings: makeArborGitDiffSettings()
-                    )
-                }
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    guard self.selectedRecordID == expectedID,
-                          self.diffSource == requestedSource else { return }
-                    self.fileDiff = diff
-                }
-            } catch {
-                await MainActor.run {
-                    guard self.selectedRecordID == expectedID,
-                          self.diffSource == requestedSource else { return }
-                    self.diffError = "\(error)"
-                }
-            }
-        }
-    }
 }
 
 }

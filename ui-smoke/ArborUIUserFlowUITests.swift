@@ -468,10 +468,12 @@ final class ArborUIUserFlowUITests: XCTestCase {
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleClick()
         XCTAssertTrue(session.app.staticTexts["picked content"].firstMatch.waitForExistence(timeout: 10))
         session.recordScreenshot(named: "history-diff")
-        // The diff is a sheet in the compact layout and part of the inspector
-        // when the window is wide.
-        let done = session.app.sheets.firstMatch.buttons["Done"].firstMatch
-        if done.exists { click(done) }
+        // The standalone diff opens as an editor tab over the Log, matching
+        // the reference Changes Browser's Repository Diff tab. Return to the
+        // Log tab before touching anything else on the Log surface.
+        let returnToLog = session.window.descendants(matching: .any)["log-file-diff-return-to-log"].firstMatch
+        XCTAssertTrue(returnToLog.waitForExistence(timeout: 10), "the diff tab must offer a Log tab")
+        click(returnToLog)
         // The inspector repeats the commit subject, and its context menu is a
         // different one; return to the Log before opening the row menu.
         let closeInspector = session.window.descendants(matching: .any)["log-close-inspector"].firstMatch

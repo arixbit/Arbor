@@ -512,6 +512,8 @@ func resetProjectState() {
     logSelectionState.tabs = [LogTabDescriptor()]
     logSelectionState.activeTabID = nil
     logSelectionState.detailCommit = nil
+    logSelectionState.fileDiffTab = nil
+    logSelectionState.fileDiffTabActive = false
     branchComparison.firstEntries = []
     branchComparison.secondEntries = []
     branchComparison.selectionID = nil

@@ -7,6 +7,35 @@ extension ContentView {
 
 @ViewBuilder
 var logWorkspace: some View {
+    VStack(spacing: 0) {
+        if let diffTab = logSelectionState.fileDiffTab {
+            logFileDiffTabBar(diffTab)
+            Divider()
+        }
+        ZStack {
+            // The Log tab keeps its graph, changes browser and selection
+            // alive underneath the diff tab. Rebuilding them on every diff
+            // would drop the change list the user is browsing, which is the
+            // exact loop the standalone diff tab is meant to support.
+            logWorkspaceSplit
+                .opacity(showsLogFileDiffTab ? 0 : 1)
+                .allowsHitTesting(!showsLogFileDiffTab)
+                .disabled(showsLogFileDiffTab)
+                .accessibilityHidden(showsLogFileDiffTab)
+            if showsLogFileDiffTab, let diffTab = logSelectionState.fileDiffTab {
+                logFileDiffTabContent(diffTab)
+            }
+        }
+    }
+}
+
+/// The diff tab is an editor tab: switching to Log only changes the active
+/// page, it does not discard the opened diff.
+var showsLogFileDiffTab: Bool {
+    logSelectionState.fileDiffTabActive && logSelectionState.fileDiffTab != nil
+}
+
+private var logWorkspaceSplit: some View {
     GeometryReader { geometry in
         // Both columns need their minimum plus the native 6pt divider.
         // Below that width, drill into details without sacrificing the list
@@ -127,7 +156,8 @@ var logInspector: some View {
                 onCreateBranch: createBranchFromCommit,
                 showsMetadata: logShowDetails,
                 showsDiffPreview: logShowDiffPreview,
-                diffPreviewVertical: logDiffPreviewVertical,
+                activeDiffRecordID: logSelectionState.fileDiffTab?.record.id,
+                onOpenFileDiff: openLogFileDiffTab,
                 showsChangesFromParents: $logShowChangesFromParents,
                 showsOnlyAffectedChanges: $logShowOnlyAffectedChanges,
                 affectedPathSelections: activeLogPathFilterSelections()
@@ -160,7 +190,8 @@ var logInspector: some View {
                 onCreateBranch: createBranchFromCommit,
                 showsMetadata: logShowDetails,
                 showsDiffPreview: logShowDiffPreview,
-                diffPreviewVertical: logDiffPreviewVertical,
+                activeDiffRecordID: logSelectionState.fileDiffTab?.record.id,
+                onOpenFileDiff: openLogFileDiffTab,
                 showsChangesFromParents: $logShowChangesFromParents,
                 showsOnlyAffectedChanges: $logShowOnlyAffectedChanges,
                 affectedPathSelections: activeLogPathFilterSelections()
@@ -191,7 +222,8 @@ var logInspector: some View {
                 onCreateBranch: createBranchFromCommit,
                 showsMetadata: logShowDetails,
                 showsDiffPreview: logShowDiffPreview,
-                diffPreviewVertical: logDiffPreviewVertical,
+                activeDiffRecordID: logSelectionState.fileDiffTab?.record.id,
+                onOpenFileDiff: openLogFileDiffTab,
                 showsChangesFromParents: $logShowChangesFromParents,
                 showsOnlyAffectedChanges: $logShowOnlyAffectedChanges,
                 affectedPathSelections: activeLogPathFilterSelections(),

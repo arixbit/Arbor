@@ -288,7 +288,6 @@ var logGraphGearMenu: some View {
         Divider()
         Toggle("Show Commit Details", isOn: $logShowDetails)
         Toggle("Show Diff Preview", isOn: $logShowDiffPreview)
-        Toggle("Diff Preview on Bottom", isOn: $logDiffPreviewVertical)
         Divider()
         Toggle("Compact References", isOn: $logCompactReferences)
         Menu("Log Columns") {

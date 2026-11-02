@@ -13,6 +13,8 @@ VFS/PSI/dirty-scope 生命周期、Swing/UI automation，以及少量已记录�
 本清单早期记录中保留的 `partial` 字样均按上述已接受的宿主生命周期/呈现差异解读；
 矩阵中的 `verified-partial` 是 V1 状态的权威统计。
 
+2026-11-02 Changes Browser 独立 diff tab：对照 fork 的 `ChangesBrowserBase` + `EditorTabPreview`，Log 的 Changes 列表不再把 side-by-side diff 塞进最右侧详情栏；选中文件（Show Diff Preview 开启时）或双击/Enter/Show Diff 会在 Log 编辑区打开 `Repository Diff: <file>` tab，diff 占满编辑区宽度，tab 内提供上一/下一文件、Side-by-side/Unified 切换和关闭。返回 Log 时保留已加载的 Changes 列表与选中行，`Compare with Local` 复用同一 tab。内嵌分栏与底部预览设置移除；`Show Diff Preview` 现在表示“选中即打开 diff tab”，关闭后仍可用显式 action 打开。原生 `DiffManager`、`DataContext`、外部 diff tool 与 UI automation 仍为 partial。
+
 2026-08-28 `Git.Show.Stash`：补齐 VCS > Git > Local Changes > Show Stash，直接打开现有 Stash/Shelf 工作页；`Unstash…` 仍保持为独立的恢复弹窗动作。Local Changes 子菜单顺序同步 fork：Shelve、Show Shelf、Show Stash、Stash、Unstash、Revert。证据：`/Users/arix/src/rebased/plugins/git4idea/backend/resources/intellij.vcs.git.backend.xml` 的 `Git.Show.Stash` 注册与 `GitShowStashTabAction`。
 
 2026-08-28 `Git.Stash.UnstashAs`：Stash 行菜单增加单 stash 对话框，支持 Apply/Pop、恢复 staged state、可选新分支和 Git branch name 校验；执行前按 stash ID 重新解析当前栈位置，避免刷新或删除导致 index 错位。原生 SavedPatches/DataContext/VcsNotifier lifecycle 与 UI automation 仍为 partial。

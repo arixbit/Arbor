@@ -326,38 +326,61 @@ struct BranchCommitComparisonView: View {
 }
 
 
-enum LogDiffSource: Equatable {
-    case commit
-    case local(revision: String)
-}
-
-
-/// Standalone Changes Browser diff action. The inline preview is optional in
-/// IntelliJ, but Show Diff, double-click, and Enter remain meaningful when
-/// that preview is hidden; keep the same distinction instead of making the
-/// action silently reselect the current row.
-struct LogStandaloneDiffView: View {
+/// Changes Browser 的独立 diff 视图，打开在 Log 编辑区的 tab 里。
+///
+/// The inline preview is optional in IntelliJ, but Show Diff, double-click,
+/// and Enter remain meaningful when that preview is hidden; keep the same
+/// distinction instead of making the action silently reselect the current
+/// row. The view stays width-agnostic so the same code renders the full-width
+/// editor tab and any future embedded host.
+struct LogFileDiffView: View {
     let record: LogChangeRecord
+    let source: LogDiffSource
     let repositoryForCommit: (CommitInfo) -> Repository?
+    var onClose: (() -> Void)?
+    var onSelectPrevious: (() -> Void)?
+    var onSelectNext: (() -> Void)?
 
-    @Environment(\.dismiss) private var dismiss
     @State var fileDiff: FileDiff?
     @State var diffError: String?
     @State var presentationMode: DiffPresentationMode = .sideBySide
     @State var diffTask: Task<Void, Never>?
 
+    var requestIdentity: String {
+        "\(record.id)\u{1f}\(source.identity)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text("Diff")
-                    .font(.headline)
+                Image(systemName: repositoryFileSymbol(for: record.change.path))
+                    .foregroundStyle(repositoryFileIconColor(for: record.change.path))
                 Text(record.change.path)
                     .font(.system(.subheadline, design: .monospaced))
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(record.change.path)
                 Text(record.commit.shortId)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
-                Spacer()
+                if case .local = source {
+                    Text("Compare with Local")
+                        .font(.caption)
+                        .foregroundStyle(Design.Colors.accent)
+                }
+                Spacer(minLength: 8)
+                Button(action: onSelectPrevious ?? {}) {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .help("Previous File")
+                .disabled(onSelectPrevious == nil)
+                Button(action: onSelectNext ?? {}) {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.borderless)
+                .help("Next File")
+                .disabled(onSelectNext == nil)
                 Picker("Diff View", selection: $presentationMode) {
                     ForEach(DiffPresentationMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -366,10 +389,18 @@ struct LogStandaloneDiffView: View {
                 .pickerStyle(.segmented)
                 .controlSize(.small)
                 .frame(width: 150)
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Close")
+                    .accessibilityLabel("Close")
+                }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(height: 40)
             .overlay(alignment: .bottom) { Divider() }
 
             if let diffError {
@@ -401,8 +432,8 @@ struct LogStandaloneDiffView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 760, minHeight: 480)
-        .task(id: record.id) { load() }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: requestIdentity) { load() }
         .onDisappear { diffTask?.cancel() }
     }
 
@@ -418,23 +449,37 @@ struct LogStandaloneDiffView: View {
         let parentIndex = record.parentIndex
         let path = record.change.path
         let expectedID = record.id
+        let expectedSource = source
         diffTask = Task.detached(priority: .userInitiated) {
             do {
-                let diff = try repo.commitFileDiffWithSettings(
-                    commitId: commitID,
-                    parentIndex: parentIndex,
-                    path: path,
-                    settings: makeArborGitDiffSettings()
-                )
+                let diff: FileDiff
+                switch expectedSource {
+                case .commit:
+                    diff = try repo.commitFileDiffWithSettings(
+                        commitId: commitID,
+                        parentIndex: parentIndex,
+                        path: path,
+                        settings: makeArborGitDiffSettings()
+                    )
+                case let .local(revision):
+                    diff = try repo.diffRevisionPathWithWorktreeWithSettings(
+                        revision: revision,
+                        revisionPath: path,
+                        worktreePath: path,
+                        settings: makeArborGitDiffSettings()
+                    )
+                }
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard self.record.id == expectedID else { return }
+                    guard self.record.id == expectedID,
+                          self.source == expectedSource else { return }
                     self.fileDiff = diff
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    guard self.record.id == expectedID else { return }
+                    guard self.record.id == expectedID,
+                          self.source == expectedSource else { return }
                     self.diffError = "\(error)"
                 }
             }
