@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.34 - 2026-11-02
+
+The Repository Diff toolbar now follows the reference viewer's flat, dense
+layout instead of macOS form controls.
+
+- The action row is one compact line with the reference buttons and flat
+  checkbox/pill styling; it only wraps when the editor is genuinely too narrow.
+- A second row keeps the difference navigation, file list, path, old/new/
+  arbitrary version fields, difference count and Stage/Rollback controls.
+  Local-only actions stay disabled for committed comparisons.
+- The Chinese toolbar layout and narrow-width control reachability are covered
+  by UI tests.
+
 ## 1.0.33 - 2026-11-02
 
 The Repository Diff toolbar mirrors the reference viewer and stays usable at
