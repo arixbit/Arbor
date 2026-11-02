@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.32 - 2026-11-02
+
+The diff tab shows the complete file, with both line-number gutters centered.
+
+- The Repository Diff tab now renders whole file contents instead of only the
+  Git hunks, so unchanged lines between changes stay visible and the difference
+  arrows move through the real file. The tab opens on the first difference.
+  Files whose contents cannot be read completely (binary or truncated) fall
+  back to the previous hunk view.
+- In side-by-side mode the left file's line numbers are right-aligned at the
+  center divider and the right file's numbers start immediately after it,
+  matching the reference diff viewer.
+- The compact Log inspector again hides its covered graph from VoiceOver after
+  the diff tab was introduced.
+
 ## 1.0.31 - 2026-11-02
 
 The diff tab now has the reference diff viewer's toolbar.
