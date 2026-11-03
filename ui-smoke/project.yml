@@ -16,6 +16,7 @@ targets:
       - path: ArborUISmokeUITests.swift
       - path: ArborUIDiagnosticsUITests.swift
       - path: ArborUIVisualCaptureUITests.swift
+      - path: ArborUIParityUITests.swift
       - path: ArborUIUserFlowUITests.swift
       - path: Support
     settings:
