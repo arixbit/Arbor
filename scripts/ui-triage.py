@@ -26,12 +26,43 @@ SOURCE_DIRS = ("Arbor",)
 LOCALIZATION = "Arbor/Localizable.xcstrings"
 
 # 参考里这些名字是自绘控件拼出来的句子，按整串回查没有意义。
+def load_aliases() -> dict[str, str]:
+    """别名表把参考的叫法换成 Arbor 的叫法，回查要用 Arbor 那边的名字。"""
+    path = ROOT / "scripts/parity-aliases.tsv"
+    aliases: dict[str, str] = {}
+    if not path.exists():
+        return aliases
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cells = [cell.strip() for cell in line.split("\t")]
+        if len(cells) >= 2:
+            aliases[cells[0].casefold()] = cells[1]
+    return aliases
+
+
+ALIASES = load_aliases()
+
+
 # 这些角色名是参考平台给容器/表格起的名字，不是用户能看见的文案，回查没有意义。
 STRUCTURAL_ROLES = {"outline", "outlinerow", "table", "cell", "tabgroup", "group", "other"}
 
 
-def searchable(name: str) -> str | None:
+# 和 ui-parity.py 同一套归一化：省略号、尾随冒号、快捷键提示都不算差异。
+NOISE = re.compile(r"\s*(?:\.{2,}|…|\(\s*[⌘⌥⌃⇧A-Za-z0-9+↩␣]+\s*\)|:)\s*$")
+
+
+def alias_key(name: str) -> str:
     text = name.strip()
+    previous = None
+    while previous != text:
+        previous = text
+        text = NOISE.sub("", text).strip()
+    return text.casefold()
+
+
+def searchable(name: str) -> str | None:
+    text = ALIASES.get(alias_key(name), name.strip())
     if not text or len(text) < 3:
         return None
     # IDE 宿主能力，不是 Git 工作台的控件。
