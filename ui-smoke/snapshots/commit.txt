@@ -2,9 +2,9 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	325,16 10×10
-      button	Push	359,16 10×10
-      button	main	392,14 51×16
+      button	Update	322,16 10×10
+      button	Push	356,16 10×10
+      button	main	390,14 51×16
       button	Search	1516,14 14×15
       menubutton	More Git Actions	1549,14 35×16
       menubutton	Settings	1594,12 37×18

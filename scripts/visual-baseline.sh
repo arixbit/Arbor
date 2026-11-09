@@ -45,7 +45,8 @@ rm -rf "$OUT_DIR/shots" "$OUT_DIR/png"
 mkdir -p "$OUT_DIR/png"
 for bundle in "$OUT_DIR"/xcresult*/; do
   [[ -d "$bundle" ]] || continue
-  result="$(find "$bundle" -maxdepth 1 -name '*.xcresult' | head -1)"
+  # 取最新的结果包：目录里如果留下多个，取第一个会导出上一次的截图。
+  result="$(find "$bundle" -maxdepth 1 -name '*.xcresult' | sort | tail -1)"
   [[ -n "$result" ]] || continue
   staging="$(mktemp -d)"
   if xcrun xcresulttool export attachments --path "$result" --output-path "$staging" >/dev/null 2>&1; then
