@@ -14,7 +14,6 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 
 | 缺口 | 出现界面 | 说明 |
 | --- | --- | --- |
-| Open New Git Log Tab | commit, log | 参考：把 Log 再开一个独立标签，用来同时看两个过滤条件下的历史。Arbor 只有一个 Log 视图，需要多实例。 |
 
 ## 已判定：不复刻或已有等价入口
 
@@ -38,6 +37,7 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 - `commit` button `Git` → `Arbor/AboutView.swift`
 - `commit` button `Graph Options` → `Arbor/Workspace/Workspace+ContentView.Log.swift`
 - `commit` button `Hide` → `Arbor/HostingProvider.swift`
+- `commit` button `Open New Git Log Tab` → `Arbor/Log/Log+ContentView.Graph.swift`
 - `commit` button `Options` → `Arbor/PullDialogView.swift`
 - `commit` menu `Paths:` → `Arbor/PullDialogView.swift`
 - `commit` button `Project` → `Arbor/ArborApp.swift`
@@ -67,6 +67,7 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 - `log` button `Expand All` → `Arbor/LogGraphView.swift`
 - `log` button `Git` → `Arbor/AboutView.swift`
 - `log` button `Graph Options` → `Arbor/Workspace/Workspace+ContentView.Log.swift`
+- `log` button `Open New Git Log Tab` → `Arbor/Log/Log+ContentView.Graph.swift`
 - `log` menu `Paths:` → `Arbor/PullDialogView.swift`
 - `log` button `Project` → `Arbor/ArborApp.swift`
 - `log` button `Refresh` → `Arbor/FeedbackCenter.swift`

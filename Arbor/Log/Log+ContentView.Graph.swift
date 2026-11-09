@@ -440,7 +440,10 @@ var logGraphGearMenu: some View {
                 openWindow(id: "git-log", value: request)
             }
             .disabled(projectWorkspace.repository == nil || projectWorkspace.path == nil)
-            Button("Open Another Log Tab") { openAnotherLogTab() }
+            // 参考实现把这个入口放在日志工具栏上；Arbor 的元素都在这个动作菜单里，
+            // 用同一个名字，对账和搜索才找得到。
+            Button("Open New Git Log Tab") { openAnotherLogTab() }
+                .accessibilityIdentifier("open-new-git-log-tab")
         }
         Divider()
         Button(logRefreshButtonTitle) {

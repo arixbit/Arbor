@@ -1,5 +1,4 @@
 # 同一个入口在两套实现里的不同叫法。每行：<参考名字>\t<Arbor 名字>\n# 只写确认是同一件事的，不要为了压数字把真实差异也配掉。\nshelve silently	Stash changes silently
 rollback	Revert
 update project	Update
-open new git log tab	New Log Tab
 select files to commit and specify commit message	Commit message
