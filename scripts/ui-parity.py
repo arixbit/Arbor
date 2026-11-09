@@ -87,8 +87,14 @@ class Node:
         return "other"
 
     @property
+    def canonical(self) -> str:
+        """归一化后的名字，已经过别名表。"""
+        plain = normalize(self.name)
+        return normalize(ALIASES.get(plain, plain))
+
+    @property
     def key(self) -> str:
-        return f"{self.bucket}|{normalize(self.name)}"
+        return f"{self.bucket}|{self.canonical}"
 
     @property
     def box(self) -> str:
@@ -109,7 +115,38 @@ class Node:
 
     @property
     def commentable(self) -> bool:
-        return bool(self.name) and not self.name.isspace() and self.role not in EXCLUDED_ROLES
+        return (
+            bool(self.name) and not self.name.isspace()
+            and self.role not in EXCLUDED_ROLES
+            and self.canonical not in IGNORED
+        )
+
+
+ALIASES: dict[str, str] = {}
+IGNORED: set[str] = set()
+
+
+def load_table(path: Path, columns: int) -> list[list[str]]:
+    """读 tsv：忽略空行和 # 注释，按列数截断。"""
+    rows: list[list[str]] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cells = [cell.strip() for cell in line.split("\t")]
+        if len(cells) < columns or not cells[0]:
+            continue
+        rows.append(cells)
+    return rows
+
+
+def load_reference_tables(directory: Path) -> None:
+    """别名把参考的叫法映射到 Arbor 的叫法；忽略表是「参考有、但我们不该有」。"""
+    for cells in load_table(directory / "parity-aliases.tsv", 2):
+        ALIASES[normalize(cells[0])] = cells[1]
+    for cells in load_table(directory / "parity-ignore.tsv", 1):
+        IGNORED.add(normalize(cells[0]))
 
 
 def normalize(name: str) -> str:
@@ -208,8 +245,26 @@ def pair(reference: list[Node], replica: list[Node]) -> Pairing:
             matched.append((node, counterpart))
         else:
             missing.append(node)
+    # 第二轮：不带类别、只按名字配。同一件事在两套实现里可能一个暴露成
+    # statictext、一个暴露成 button（参考的 Commit/Stash 工具窗标签就是如此），
+    # 只比类别会把它们算成「缺」。
+    leftover: dict[str, list[Node]] = {}
+    for node in replica:
+        if id(node) in used:
+            continue
+        leftover.setdefault(node.canonical, []).append(node)
+    still_missing: list[Node] = []
+    for node in missing:
+        candidates = leftover.get(node.canonical)
+        if candidates:
+            counterpart = candidates.pop(0)
+            used.add(id(counterpart))
+            matched.append((node, counterpart))
+        else:
+            still_missing.append(node)
+
     extra = [node for node in replica if id(node) not in used]
-    return Pairing(matched, missing, extra)
+    return Pairing(matched, still_missing, extra)
 
 
 KINDS = {
@@ -463,7 +518,14 @@ def main() -> int:
                         help="位置/尺寸差多少 pt 以上算不一致（默认 3）")
     parser.add_argument("--markdown", action="store_true", help="同时写出 markdown 表格")
     parser.add_argument("--limit", type=int, default=8, help="终端里每类最多列几条（默认 8）")
+    parser.add_argument("--tables", default=None,
+                        help="别名表和忽略表所在目录（默认仓库 scripts/）")
     args = parser.parse_args()
+
+    tables = Path(args.tables) if args.tables else Path(__file__).resolve().parent
+    load_reference_tables(tables)
+    if ALIASES:
+        print(f"别名表 {len(ALIASES)} 条 · 忽略表 {len(IGNORED)} 条（{tables}）")
 
     root = Path(args.dir)
     tree_dir = root / "tree"

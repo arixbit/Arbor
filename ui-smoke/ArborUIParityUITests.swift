@@ -53,8 +53,21 @@ final class ArborUIParityUITests: XCTestCase {
 
     /// Both dumps must describe the same canvas, otherwise every coordinate to
     /// the right of the first split differs by the window size difference.
+    /// 窗口靠右时右下角拖不出更宽的窗口：右边缘已经顶到屏幕。先把窗口挪到屏幕
+    /// 左缘，再拖角。参考实现默认停在 (200, 59)，于是它只能长到 1600 pt，
+    /// 而 Arbor 是 1642 pt——42 pt 的差会让右侧每个控件都「位置不一致」。
+    @MainActor
+    private func moveToLeftEdge(_ window: XCUIElement) {
+        let bar = window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
+        bar.press(forDuration: 0.3, thenDragTo: bar.withOffset(CGVector(dx: -window.frame.minX + 4, dy: 0)))
+        Thread.sleep(forTimeInterval: 0.8)
+    }
+
     @MainActor
     private func resize(_ window: XCUIElement, to size: CGSize) {
+        if window.frame.width < size.width {
+            moveToLeftEdge(window)
+        }
         let screen = NSScreen.main?.visibleFrame.size ?? size
         let target = CGSize(width: min(size.width, screen.width), height: min(size.height, screen.height))
         for _ in 0..<2 {

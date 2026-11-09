@@ -61,7 +61,8 @@ fi
 echo "== 提取无障碍树 =="
 for bundle in "$OUT_DIR"/xcresult*/; do
   [[ -d "$bundle" ]] || continue
-  result="$(find "$bundle" -maxdepth 1 -name '*.xcresult' | head -1)"
+  # 一次运行可能留下多个结果包，取最新的那个：取第一个会把上一次的旧树当成这次的。
+  result="$(find "$bundle" -maxdepth 1 -name '*.xcresult' | sort | tail -1)"
   [[ -n "$result" ]] || continue
   staging="$(mktemp -d)"
   if xcrun xcresulttool export attachments --path "$result" --output-path "$staging" >/dev/null 2>&1; then

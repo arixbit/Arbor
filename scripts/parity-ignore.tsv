@@ -1,0 +1,11 @@
+# 参考侧有、Arbor 不该复刻的入口。每行：<规范化后的名字>	<理由>
+# 名字按 ui-parity.py 的归一化规则：小写、去掉省略号和快捷键后缀。
+# 依据见 docs/audit-user-surface.py 的 out-of-scope 结论和 docs/ui-parity.md。
+search everywhere	IntelliJ 全局搜索，宿主能力，不属于 Git 工作台
+ide and project settings	IDE 设置入口，宿主能力
+main toolbar	JetBrains 主工具栏容器，Arbor 用自定义标题栏
+root pane	JetBrains 根面板容器，没有用户可见语义
+action toolbar	JetBrains 动作工具栏容器
+git branches	参考用 outline 暴露分支面板，Arbor 用 popover，交互模型不同
+text/html	JetBrains 富文本控件，无障碍树里的占位名
+type here to search	新 UI 的搜索框占位
