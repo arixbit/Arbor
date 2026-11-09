@@ -32,7 +32,7 @@ from pathlib import Path
 WEIGHTS = {
     "ArborUIUserFlowUITests": 557,
     "ArborUIVisualCaptureUITests": 401,
-    "ArborUISmokeUITests": 227,
+    "ArborUISmokeUITests": 253,
     "ArborUISmokeContractUITests": 50,
     "ArborUISmokeProjectTreeUITests": 53,
     "ArborUIConflictUITests": 18,

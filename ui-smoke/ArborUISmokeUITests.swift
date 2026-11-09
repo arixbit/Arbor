@@ -71,6 +71,54 @@ final class ArborUISmokeUITests: XCTestCase {
         session.recordScreenshot(named: "branches-popup-dismissed")
     }
 
+    /// 真实仓库里分支可能上百个。参考实现的菜单在这种规模下只能滚，Arbor 的弹层
+    /// 靠搜索——规模一大就得证明搜索真的把列表收窄了，而不是只把页面撑长。
+    @MainActor
+    func testBranchesPopoverStaysUsableWithManyBranches() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        // UI 测试进程是沙箱，跑不了 git，所以直接写 refs。
+        let head = try String(contentsOf: fixture.appendingPathComponent(".git/refs/heads/main"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // 用顶层分支名，避免弹层按目录分组把行藏到折叠的组里。
+        let refsRoot = fixture.appendingPathComponent(".git/refs/heads")
+        for index in 1...150 {
+            let name = String(format: "scale-branch-%03d", index)
+            try (head + "\n").write(
+                to: refsRoot.appendingPathComponent(name), atomically: true, encoding: .utf8
+            )
+        }
+
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+        XCTAssertTrue(session.openBranchesPopover(), "the branches popover did not open with 150 extra branches")
+
+        // 弹层的列表不是虚拟化的：150 个分支全部进无障碍树，只是大部分在可视区之外。
+        // 所以可以用「某条靠后的分支存在」来证明列表真的装下了 150 个，而不是只渲染前几行。
+        let farRow = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH %@", "scale-branch-021")).firstMatch
+        XCTAssertTrue(farRow.waitForExistence(timeout: 10),
+                      "the list did not contain all 150 branches")
+
+        let search = session.app.descendants(matching: .any)["branches-popover-search"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.click()
+        search.typeText("scale-branch-137")
+        XCTAssertEqual(search.value as? String, "scale-branch-137",
+                       "the search field did not receive the typed query")
+
+        // 搜索必须真的收窄列表，而不是只把匹配项滚到上面。
+        let match = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH %@", "scale-branch-137")).firstMatch
+        XCTAssertTrue(match.waitForExistence(timeout: 15),
+                      "searching a branch among 150 did not surface it")
+        XCTAssertTrue(farRow.arborWaitForNonExistence(timeout: 15),
+                      "a non-matching branch stayed in the list while searching")
+        session.recordScreenshot(named: "branches-popover-many")
+    }
+
     @MainActor
     func testSettingsControlsReact() throws {
         // Browse… opens a system panel and is skipped by policy, and Reset to
