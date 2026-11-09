@@ -120,6 +120,19 @@ final class ArborUIParityUITests: XCTestCase {
             try dump(session.window.debugDescription, named: "arbor-log")
             session.terminate()
         }
+
+        // Settings 是独立窗口，不在主窗口的子树里，所以单独导一份——它同样属于
+        // 用户能看见的界面，值得进快照基线。
+        do {
+            let session = ArborUISession(fixture: fixture)
+            session.launch()
+            XCTAssertTrue(session.openSettings(), "the application menu did not open a Settings window")
+            // 直接 dump 那个 window 元素只拿到嵌套的 window 行（XCUITest 对独立窗口
+            // 的子树叶给出的就是这样）。openSettings() 已经把观察根切到设置窗口，
+            // 用它产出的整棵树才是用户真正看见的内容。
+            try dump(session.screenState().signature, named: "arbor-settings")
+            session.terminate()
+        }
     }
 
     // MARK: - Reference

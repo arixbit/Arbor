@@ -59,6 +59,17 @@ accessibility label 不会因为换了运行时就不一样。所以先用控件
 
 报告：`build/parity/<surface>-diff.html`，含拖动对比、差异热图和区域清单（pt 坐标）。
 
+### 覆盖的界面
+
+| 界面 | 参考对账 | 快照基线 |
+| --- | --- | --- |
+| Commit | 需要 Rebased 停在 Commit 工具窗 | 是 |
+| Log | 需要 Rebased 停在 Log 工具窗 | 是 |
+| Settings | 需要 Rebased 打开同名设置页 | 是 |
+
+快照基线覆盖的界面比参考对账多，因为它不需要参考 App：每加一个界面，发版前的
+自动检查就多一块。新增界面只要在 `ArborUIParityUITests` 里多导一份树。
+
 ## 发版前：和上一次批准的界面比
 
 参考对比需要 Rebased 在场，只能本地跑；发版前那个「我打开看一眼」的工序靠它解决不了。
