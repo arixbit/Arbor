@@ -14,7 +14,6 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 
 | 缺口 | 出现界面 | 说明 |
 | --- | --- | --- |
-| Select Opened File in Changes View | commit, log | 参考：在项目树里点一下，就把那个文件在变更列表里选中。Arbor 的项目树和变更列表各自维护选择，缺一条把它们连起来的入口。 |
 | Open New Git Log Tab | commit, log | 参考：把 Log 再开一个独立标签，用来同时看两个过滤条件下的历史。Arbor 只有一个 Log 视图，需要多实例。 |
 
 ## 已判定：不复刻或已有等价入口
@@ -46,6 +45,7 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 - `commit` button `Revert Selected Changes` → `Arbor/App/ProjectCommands.swift`
 - `commit` button `Rollback…` → `Arbor/LogGraphView.swift`
 - `commit` textfield `Search` → `Arbor/FileReferenceComparisonView.swift`
+- `commit` button `Select Opened File in Changes View` → `Arbor/MainWindow/ContentView+ToolWindows.swift`
 - `commit` statictext `Select files to commit and specify commit message` → `Arbor/LogGraphView.swift`
 - `commit` button `Shelve Silently` → `Arbor/Panels/Panels+Commit.swift`
 - `commit` button `Show Diff` → `Arbor/LogGraphView.swift`
@@ -73,6 +73,7 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 - `log` button `Revert Selected Changes` → `Arbor/App/ProjectCommands.swift`
 - `log` button `Rollback…` → `Arbor/LogGraphView.swift`
 - `log` textfield `Search` → `Arbor/FileReferenceComparisonView.swift`
+- `log` button `Select Opened File in Changes View` → `Arbor/MainWindow/ContentView+ToolWindows.swift`
 - `log` statictext `Select files to commit and specify commit message` → `Arbor/LogGraphView.swift`
 - `log` button `Shelve Silently` → `Arbor/Panels/Panels+Commit.swift`
 - `log` button `Show Commit Options` → `Arbor/Panels/Panels+Commit.swift`

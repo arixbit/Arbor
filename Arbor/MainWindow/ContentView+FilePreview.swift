@@ -140,6 +140,36 @@ extension ContentView {
         )
     }
 
+    /// Rebased 的 Project 工具窗有个「把当前文件在 Changes 里选中」的入口：项目树和
+    /// 变更列表是两条独立的选择链，中间缺的就是把它们接起来的那一下。
+    /// 只在文件确实有变更时生效——否则会把一个未修改的文件塞进变更预览。
+    func selectProjectFileInChanges() {
+        guard let path = fileWorkspace.fileSelection ?? fileWorkspace.selection,
+              let relative = relativePathForChangesView(path),
+              repositoryStatus.entries.contains(where: { $0.path == relative })
+        else { return }
+        selectChangedFile(relative)
+    }
+
+    /// 没有变更的文件「在 Changes 里选中」无意义，按钮应当直接不可用。
+    var projectFileHasChanges: Bool {
+        guard let path = fileWorkspace.fileSelection ?? fileWorkspace.selection,
+              let relative = relativePathForChangesView(path) else { return false }
+        return repositoryStatus.entries.contains { $0.path == relative }
+    }
+
+    /// 项目树的路径可能是仓库相对路径，也可能带了根路径；变更列表只吃相对的。
+    func relativePathForChangesView(_ path: String) -> String? {
+        if let relative = normalizedRepositoryRelativePath(path) {
+            return relative
+        }
+        guard let root = repo?.workdir() else { return nil }
+        let rootURL = URL(fileURLWithPath: root).standardizedFileURL
+        let target = URL(fileURLWithPath: path).standardizedFileURL
+        guard target.path.hasPrefix(rootURL.path + "/") else { return nil }
+        return String(target.path.dropFirst(rootURL.path.count + 1))
+    }
+
     func selectChangedFile(_ path: String) {
         if repositoryStatus.entries.contains(where: {
             $0.path == path && ($0.staged == .conflicted || $0.unstaged == .conflicted)

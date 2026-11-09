@@ -2,5 +2,4 @@
 rollback	Revert
 update project	Update
 open new git log tab	New Log Tab
-select opened file in changes view	Select File in Changes
 select files to commit and specify commit message	Commit message

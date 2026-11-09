@@ -2,8 +2,8 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	325,16 10×10
-      button	Push	359,16 10×10
+      button	Update	324,16 10×10
+      button	Push	358,16 10×10
       button	main	392,14 51×16
       button	Search	1516,14 14×15
       menubutton	More Git Actions	1549,14 35×16
@@ -16,9 +16,10 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
       splitgroup	—	40,43 1562×942 [Disabled]
         group	—	40,43 582×942 [Disabled]
           group	Collapse panel	40,43 582×32
-            button	Project	52,52 510×15
-            button	New Folder	571,52 18×13
-            button	arrow.up.forward.app	596,53 12×12
+            button	Project	52,52 486×15
+            button	New Folder	548,52 18×13
+            button	arrow.up.forward.app	573,53 12×12
+            button	Select Opened File in Changes View	596,52 12×13 [Disabled]
           scrollview	—	40,75 582×910 [Disabled]
             outline	—	39,74 584×912
               outlinerow	—	40,75 582×24 [Disabled]

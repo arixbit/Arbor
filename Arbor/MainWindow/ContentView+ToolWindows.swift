@@ -513,6 +513,17 @@ extension ContentView {
                                     .buttonStyle(.plain)
                                     .help("Reveal Project Root in Finder")
                                 }
+                                Button(action: selectProjectFileInChanges) {
+                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                }
+                                .buttonStyle(.plain)
+                                // 没有 label 时无障碍树里只剩图标名，对账会把它算成缺控件，
+                                // 用户也只能靠悬停猜。参考实现叫这个动作
+                                // "Select Opened File in Changes View"。
+                                .help("Select Opened File in Changes View")
+                                .accessibilityLabel("Select Opened File in Changes View")
+                                .accessibilityIdentifier("select-opened-file-in-changes")
+                                .disabled(!projectFileHasChanges)
                             }
                         )
                     )
@@ -604,6 +615,17 @@ extension ContentView {
                                     .buttonStyle(.plain)
                                     .help("Reveal Project Root in Finder")
                                 }
+                                Button(action: selectProjectFileInChanges) {
+                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                }
+                                .buttonStyle(.plain)
+                                // 没有 label 时无障碍树里只剩图标名，对账会把它算成缺控件，
+                                // 用户也只能靠悬停猜。参考实现叫这个动作
+                                // "Select Opened File in Changes View"。
+                                .help("Select Opened File in Changes View")
+                                .accessibilityLabel("Select Opened File in Changes View")
+                                .accessibilityIdentifier("select-opened-file-in-changes")
+                                .disabled(!projectFileHasChanges)
                             }
                         )
                     )
