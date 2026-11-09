@@ -2,7 +2,7 @@
 
 ## V1 scope
 
-The V1 release line is `1.0.x`; the current patch release is `1.0.34`. The
+The V1 release line is `1.0.x`; the current patch release is `1.0.35`. The
 local release script builds the Rust engine,
 runs the Rust and Swift test suites, creates an arm64 macOS archive, packages
 an app DMG and ZIP, signs the ZIP for Sparkle, and writes `appcast.xml` and
@@ -11,7 +11,7 @@ UniFFI bindings before invoking Xcode, so the command also works from a clean
 clone.
 
 ```sh
-ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.34
+ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.35
 ```
 
 Unsigned artifacts are named `Arbor-VERSION-unsigned-arm64.dmg` and
@@ -55,6 +55,32 @@ the checked-in version is unchanged. These packages are for manual testing,
 not the public update channel. Existing public release artifacts are kept in
 their separate version directory. Public builds still require the matching
 Sparkle private key.
+
+## UI baseline before tagging
+
+The release script runs the unit suites, which cannot see a misplaced or renamed
+control. Check the UI against the committed baseline before tagging:
+
+```sh
+./scripts/ui-snapshot.sh
+```
+
+It exports the accessibility tree of the Commit, Log and Settings surfaces,
+normalises it and compares it with `ui-smoke/snapshots/`. A drift fails the
+command and lists the controls that changed. When the change is intended:
+
+```sh
+./scripts/ui-snapshot.sh --update
+```
+
+commit the new baseline, and say what changed in the release notes. The same
+check runs on every pull request (report-only for now), so a drift usually
+shows up long before a release.
+
+`./scripts/ui-parity.sh --reference` additionally compares the replica against
+the reference application, control by control. It needs that application
+running with the fixture project and only works on a developer machine; see
+`docs/ui-parity.md`.
 
 ## Sparkle updates
 

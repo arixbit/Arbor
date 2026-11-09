@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.35 - 2026-11-09
+
+The Project tool window can hand its selected file to the Changes view, and the
+commit panel's icon-only entries are now named.
+
+- **Select Opened File in Changes View** in the Project tool window selects the
+  file that is selected in the project tree inside the Changes list, and shows
+  its preview. It stays disabled for files without changes, so a clean file is
+  never pushed into the change preview.
+- The commit message history menu, the change list's view options and the
+  options menu beside Commit are labelled. They were icon-only before, which
+  made them invisible to assistive technology and to the visual parity harness.
+- The Log actions menu calls its new-tab action Open New Git Log Tab, matching
+  the reference workbench.
+
+Internally the repository gains a mechanical UI parity harness: the replica is
+compared control by control against the reference application, and the two main
+surfaces plus Settings are ratcheted against a committed baseline so a release
+can no longer drift unnoticed. See `docs/ui-parity.md`.
+
 ## 1.0.34 - 2026-11-02
 
 The Repository Diff toolbar now follows the reference viewer's flat, dense
