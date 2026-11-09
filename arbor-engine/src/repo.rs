@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::ops::{Deref, DerefMut};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use gix::bstr::{BStr, ByteSlice};
@@ -17527,9 +17528,17 @@ impl Repository {
                 message: "pull branch requires a worktree".into(),
             })?
             .to_path_buf();
+        // 名字必须唯一。之前只有 pid + 时间戳 + commit id，而这三个在并发下会撞：
+        // 同一进程里两个线程拉同一个分支（同一份 fixture、同一个 commit id）时，
+        // 只要时间戳落在同一个微秒（SystemTime 在本机的分辨率就是 1 µs），
+        // 两个 pull 就会指向同一个临时 worktree —— 于是 git 报 index.lock 已存在，
+        // 或者抱怨 worktree 里有不该存在的 untracked 文件。加一个进程内自增序号，
+        // 唯一性靠构造保证，不再靠时钟碰运气。
+        static PULL_TEMP_WORKTREE_SEQ: AtomicU64 = AtomicU64::new(0);
         let temp_worktree = std::env::temp_dir().join(format!(
-            "arbor-pull-{}-{}-{}",
+            "arbor-pull-{}-{}-{}-{}",
             std::process::id(),
+            PULL_TEMP_WORKTREE_SEQ.fetch_add(1, Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()

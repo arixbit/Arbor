@@ -82,44 +82,25 @@ the reference application, control by control. It needs that application
 running with the fixture project and only works on a developer machine; see
 `docs/ui-parity.md`.
 
-## Known flaky tests
+## 已修复：非当前分支 pull 的临时 worktree 撞名
 
-`arbor-engine` 的 `pull` 测试二进制里有两个用例会在**机器有其它负载时**偶发失败：
+`pull_non_current_branch_{rebases,merges}_into_selected_branch_without_checkout`
+曾经在整机有负载时偶发失败，约 12 次全量跑出现 1 次，报错是 `index.lock: File
+exists` 或「worktree 里有不该存在的 untracked 文件」。
 
-- `pull_non_current_branch_rebases_into_selected_branch_without_checkout`
-- `pull_non_current_branch_merges_into_selected_branch_without_checkout`
+根因：非当前分支的 pull 要开一个临时 worktree，名字是
+`arbor-pull-{pid}-{时间戳}-{commit}`。这三个都可能在并发下重复——pid 在同一进程里
+相同，两个用例共用同一份 fixture 因此 commit id 相同，而 `SystemTime` 在本机的
+分辨率是 1 µs，两个线程只要落在同一个微秒就会算出**同一个路径**。
 
-实测约 12 次全量跑出现 1 次，两个用例常同时失败；单独跑、`--test-threads=1`、
-以及在同一台机器空载时跑都不复现。失败时的报错有两种形态，都是引擎在临时 worktree
-里做非当前分支的 merge/rebase 时撞上的：
+修复：名字里加一个进程内自增序号，唯一性由构造保证，不再依赖时钟。
+修复后 pull 测试连跑 30 次、引擎全量连跑 5 次均无失败。
 
-```
-pull branch temporary worktree failed: fatal: Unable to create
-'.../.git/worktrees/arbor-pull-<pid>-<nanos>-<sha>/index.lock': File exists.
-```
-
-```
-pull branch 'feature' merge failed: ... The following untracked working tree files
-would be overwritten by merge: remote.txt
-```
-
-发布时如果 tag 构建卡在这里，先按用例名重跑确认：
-
-```sh
-cargo test --manifest-path arbor-engine/Cargo.toml --test pull non_current_branch
-```
-
-这不是"环境抽风"就完事的类型：它可能掩盖真实并发问题（引擎在同一份临时 worktree
-里跑多个 git 命令）。真正的原因还没定位。
-
-复现时带上埋点，就能看到临时 worktree 的路径和每条 git 命令的结果：
+复现/诊断时带上埋点可以看到临时 worktree 的路径和每条 git 命令的结果：
 
 ```sh
 ARBOR_PULL_TRACE=1 cargo test --manifest-path arbor-engine/Cargo.toml --test pull -- --nocapture
 ```
-
-输出会说明是 `worktree add` 就已经失败，还是 merge/rebase 那一步失败，以及当时的
-workdir、临时 worktree、local/tracking commit。没有埋点时失败现场只剩一句 git stderr。
 
 ## Sparkle updates
 
