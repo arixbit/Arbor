@@ -725,7 +725,9 @@ struct RebasedCommitWorkspace: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
-                .help("Stage view settings")
+                .help("View Options")
+                .accessibilityLabel("View Options")
+                .accessibilityIdentifier("changes-view-options")
                 compactButton("list.bullet.indent", help: "New Changelist", action: onCreateChangeList)
                 // GitStagePanel appends TreeActionsToolbarPanel to the stage
                 // toolbar. These are first-class toolbar actions in rebased,
@@ -869,6 +871,12 @@ struct RebasedCommitWorkspace: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
+                // 参考实现把这个入口叫 Commit Message History。没有 label 时自动化
+                // 只能看到 "clock"，对账时会被算成「Arbor 缺这个按钮」，用户也
+                // 只能靠猜。
+                .help("Commit Message History")
+                .accessibilityLabel("Commit Message History")
+                .accessibilityIdentifier("commit-message-history")
                 Spacer()
                 Text("\(stagedEntries.count) staged")
                     .font(.caption)
@@ -946,7 +954,9 @@ struct RebasedCommitWorkspace: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .accessibilityLabel("Commit Options")
+                .help("Show Commit Options")
+                .accessibilityLabel("Show Commit Options")
+                .accessibilityIdentifier("commit-options")
             }
             .controlSize(.regular)
             .padding(.horizontal, 12)

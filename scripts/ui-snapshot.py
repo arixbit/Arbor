@@ -39,9 +39,10 @@ HASH = re.compile(r"\b[0-9a-f]{7,40}\b")
 COUNT_NOISE = re.compile(r"\b\d+\s*(?:files?|个文件)\b")
 VOLATILE = re.compile(r"0x[0-9a-f]{6,}|\bpid: \d+\b")
 
-# 几何容差：文本宽度差几个字符、系统版本微调字号都会带来 2-3 pt 的平移，
-# 那不是「界面变了」。超过这个数才值得有人看一眼。
-GEOMETRY_TOLERANCE = 4.0
+# 几何容差。实测最大的系统性噪声是 6 pt：标题栏那个 fixture 名是随机 8 位十六进制，
+# 比例字体下宽度随字符变化，它右边的按钮整体跟着平移。真正的布局回归（多一个按钮、
+# 分栏变窄、控件被裁）至少是十几个pt起步，而且结构变化（名字/状态）本来就精确比对。
+GEOMETRY_TOLERANCE = 8.0
 
 VARIES = "<varies>"
 

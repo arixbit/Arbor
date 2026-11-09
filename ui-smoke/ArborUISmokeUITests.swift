@@ -395,7 +395,7 @@ final class ArborUISmokeContractUITests: XCTestCase {
             XCTAssertNotEqual(after, before, "clicking \(label) did not change its value")
         }
 
-        let options = session.window.descendants(matching: .any)["Commit Options"].firstMatch
+        let options = session.window.descendants(matching: .any)["Show Commit Options"].firstMatch
         options.click()
         let skipHooks = session.app.menuItems["Skip hooks"].firstMatch
         XCTAssertTrue(skipHooks.waitForExistence(timeout: 5))

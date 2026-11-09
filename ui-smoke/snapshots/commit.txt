@@ -26,7 +26,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
               button	Stage all changes	165,100 14×10
               button	Stage untracked without content	198,97 15×16
               button	Stash changes silently	234,98 16×16
-              menubutton	Filter	265,96 36×17
+              menubutton	View Options	265,96 36×17
               button	New Changelist	316,100 17×10
               button	Expand All	354,102 12×7
               button	Collapse All	388,102 12×7
@@ -54,7 +54,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
             group	—	40,369 582×140 [Disabled]
               checkbox	Amend	56,388 66×16
               statictext	—	130,389 60×13
-              menubutton	Clock	196,387 36×17
+              menubutton	Commit Message History	196,387 36×17
               statictext	—	565,389 41×13
               statictext	—	63,422 107×16
               scrollview	—	58,418 546×30 [Disabled]
@@ -62,7 +62,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
                 scrollbar	—	586,416 19×32 [Disabled]
               button	Commit	52,464 72×28 [Disabled]
               button	Commit and Push…	132,464 143×28 [Disabled]
-              menubutton	Commit Options	574,468 37×18
+              menubutton	Show Commit Options	574,468 37×18
           other	Resize Commit and Project panels	40,509 582×7
           group	Collapse panel	40,516 582×32
             button	Project	52,524 510×15

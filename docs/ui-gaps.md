@@ -9,28 +9,22 @@
 
 | 界面 | 角色 | 名字 |
 | --- | --- | --- |
-| commit | link | Always Add |
-| commit | button | Commit Message History |
 | commit | button | Enable Git Log Indexing |
 | commit | button | Open New Git Log Tab |
 | commit | button | Project: visual-fixture, menu |
 | commit | button | Rollback… |
 | commit | button | Select Opened File in Changes View |
 | commit | statictext | Select files to commit and specify commit message |
-| commit | button | Show Commit Options |
-| commit | link | View Files |
-| commit | button | View Options |
-| log | link | Always Add |
-| log | button | Commit Message History |
+| commit | button | Update Project... |
+| commit | button | main, menu |
 | log | button | Enable Git Log Indexing |
 | log | button | Open New Git Log Tab |
 | log | button | Project: visual-fixture, menu |
 | log | button | Rollback… |
 | log | button | Select Opened File in Changes View |
 | log | statictext | Select files to commit and specify commit message |
-| log | button | Show Commit Options |
-| log | link | View Files |
-| log | button | View Options |
+| log | button | Update Project... |
+| log | button | main, menu |
 
 ## 源码里有：叫法或入口位置不同
 
@@ -42,7 +36,6 @@
 | commit | Commit | `Arbor/PullDialogView.swift` |
 | commit | Commit Message | `Arbor/LogGraphView.swift` |
 | commit | Date: | `Arbor/LogGraphView.swift` |
-| commit | Don | `Arbor/PullDialogView.swift` |
 | commit | Expand All | `Arbor/LogGraphView.swift` |
 | commit | Git | `Arbor/AboutView.swift` |
 | commit | Graph Options | `Arbor/Workspace/Workspace+ContentView.Log.swift` |
@@ -57,6 +50,7 @@
 | commit | Show Diff | `Arbor/LogGraphView.swift` |
 | commit | Terminal | `Arbor/App/PersistedCommitRecovery.swift` |
 | commit | User: | `Arbor/BitbucketClient.swift` |
+| commit | View Options | `Arbor/Panels/Panels+Commit.swift` |
 | commit | last commit | `Arbor/ProjectFileTreeView.swift` |
 | log | Amend | `Arbor/Settings/DiagnosticsSettingsView.swift` |
 | log | Branch: | `Arbor/PullDialogView.swift` |
@@ -65,9 +59,9 @@
 | log | Commit | `Arbor/PullDialogView.swift` |
 | log | Commit | `Arbor/PullDialogView.swift` |
 | log | Commit Message | `Arbor/LogGraphView.swift` |
+| log | Commit Message History | `Arbor/Panels/Panels+Commit.swift` |
 | log | Commit and Push… | `Arbor/App/ProjectCommands.swift` |
 | log | Date: | `Arbor/LogGraphView.swift` |
-| log | Don | `Arbor/PullDialogView.swift` |
 | log | Expand All | `Arbor/LogGraphView.swift` |
 | log | Git | `Arbor/AboutView.swift` |
 | log | Graph Options | `Arbor/Workspace/Workspace+ContentView.Log.swift` |
@@ -77,10 +71,12 @@
 | log | Revert Selected Changes | `Arbor/App/ProjectCommands.swift` |
 | log | Search | `Arbor/FileReferenceComparisonView.swift` |
 | log | Shelve Silently | `Arbor/Panels/Panels+Commit.swift` |
+| log | Show Commit Options | `Arbor/Panels/Panels+Commit.swift` |
 | log | Show Diff | `Arbor/LogGraphView.swift` |
 | log | Stash | `Arbor/ResizableWorkspacePanels.swift` |
 | log | Terminal | `Arbor/App/PersistedCommitRecovery.swift` |
 | log | User: | `Arbor/BitbucketClient.swift` |
+| log | View Options | `Arbor/Panels/Panels+Commit.swift` |
 | log | last commit | `Arbor/ProjectFileTreeView.swift` |
 
 ## 附：无法通过源码检索判定的条目
@@ -88,24 +84,18 @@
 名字里带路径、文件名或动态内容，回查没有意义，需要人工看截图。
 
 - `commit` button `Project: visual-fixture, menu`
+- `commit` button `Update Project...`
+- `commit` button `main, menu`
 - `commit` button `Rollback…`
-- `commit` button `View Options`
 - `commit` button `Select Opened File in Changes View`
 - `commit` button `Open New Git Log Tab`
 - `commit` button `Enable Git Log Indexing`
-- `commit` button `Commit Message History`
 - `commit` statictext `Select files to commit and specify commit message`
-- `commit` button `Show Commit Options`
-- `commit` link `View Files`
-- `commit` link `Always Add`
 - `log` button `Project: visual-fixture, menu`
+- `log` button `Update Project...`
+- `log` button `main, menu`
 - `log` button `Rollback…`
-- `log` button `View Options`
 - `log` button `Select Opened File in Changes View`
 - `log` button `Open New Git Log Tab`
 - `log` button `Enable Git Log Indexing`
-- `log` button `Commit Message History`
 - `log` statictext `Select files to commit and specify commit message`
-- `log` button `Show Commit Options`
-- `log` link `View Files`
-- `log` link `Always Add`
