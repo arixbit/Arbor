@@ -82,6 +82,38 @@ the reference application, control by control. It needs that application
 running with the fixture project and only works on a developer machine; see
 `docs/ui-parity.md`.
 
+## Known flaky tests
+
+`arbor-engine` 的 `pull` 测试二进制里有两个用例会在**机器有其它负载时**偶发失败：
+
+- `pull_non_current_branch_rebases_into_selected_branch_without_checkout`
+- `pull_non_current_branch_merges_into_selected_branch_without_checkout`
+
+实测约 12 次全量跑出现 1 次，两个用例常同时失败；单独跑、`--test-threads=1`、
+以及在同一台机器空载时跑都不复现。失败时的报错有两种形态，都是引擎在临时 worktree
+里做非当前分支的 merge/rebase 时撞上的：
+
+```
+pull branch temporary worktree failed: fatal: Unable to create
+'.../.git/worktrees/arbor-pull-<pid>-<nanos>-<sha>/index.lock': File exists.
+```
+
+```
+pull branch 'feature' merge failed: ... The following untracked working tree files
+would be overwritten by merge: remote.txt
+```
+
+发布时如果 tag 构建卡在这里，先按用例名重跑确认：
+
+```sh
+cargo test --manifest-path arbor-engine/Cargo.toml --test pull non_current_branch
+```
+
+这不是"环境抽风"就完事的类型：它可能掩盖真实并发问题（引擎在同一份临时 worktree
+里跑多个 git 命令）。真正的原因还没定位，临时 worktree 的路径已经带上了
+pid + 单调时间戳 + commit id，所以路径冲突的可能性很小，更像是同一 worktree 上
+两个 git 进程在抢 index.lock。
+
 ## Sparkle updates
 
 The application embeds Sparkle 2.10.1. Project generation downloads the pinned
