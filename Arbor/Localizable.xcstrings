@@ -27102,6 +27102,66 @@
           }
         }
       }
+    },
+    "Check GitHub Releases online at most once a day; you can also check manually. Only the latest version number is read; no data is uploaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每天最多联网检查一次 GitHub Releases；也可以随时手动检查。检查只读取最新版本号，不上传任何数据。"
+          }
+        }
+      }
+    },
+    "Open New Git Log Tab" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开新的 Git 日志标签页"
+          }
+        }
+      }
+    },
+    "Select Opened File in Changes View" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在变更视图中选中当前文件"
+          }
+        }
+      }
+    },
+    "Show Commit Options" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示提交选项"
+          }
+        }
+      }
+    },
+    "View Options" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视图选项"
+          }
+        }
+      }
+    },
+    "Commit Message History" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交信息历史"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

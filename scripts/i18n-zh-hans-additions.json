@@ -119,7 +119,6 @@
   "The submodule is not initialized or cannot be opened.": "子模块未初始化或无法打开。",
   "Unable to load file history.": "无法加载文件历史。",
   "credential broker unavailable": "凭据代理不可用",
-
   "Update Project fetches and integrates upstream changes with a merge.": "Update Project 会 Fetch 并整合上游变更（merge）。",
   "Update Project fetches and replays local commits on top of upstream.": "Update Project 会 Fetch 并在上游之上重放本地提交（rebase）。",
   "This project policy is used by Pull, Update Project, Rebase, Merge, Reset, and smart checkout operations.": "此项目策略用于 Pull、Update Project、Rebase、Merge、Reset 和智能 checkout 操作。",
@@ -130,7 +129,6 @@
   "Show the current working tree on the left and the selected branch on the right.": "左侧显示当前工作区，右侧显示选中的分支。",
   "This project overrides whether Cherry-pick adds the suffix for commits already reachable from a protected remote branch.": "此项目覆盖 Cherry-pick 为受保护远程分支已包含的提交追加后缀的行为。",
   "This project inherits the application Cherry-pick suffix setting.": "此项目继承应用的 Cherry-pick 后缀设置。",
-
   "unknown": "未知",
   "%lld repositories selected": "已选择 %lld 个仓库",
   "A branch name is required.": "必须填写分支名称。",
@@ -164,7 +162,6 @@
   "git-lfs %@ · %lld LFS files · %lld tracking rules": "git-lfs %@ · %lld 个 LFS 文件 · %lld 条跟踪规则",
   "git-lfs is not installed": "未检测到 git-lfs",
   "Reading hooks directory…": "正在读取 hooks 目录…",
-
   "%@\n\n%@": "%@\n\n%@",
   "%@ (theirs)": "%@（theirs）",
   "%@ has %lld local commit(s) not contained in %@. Resetting it will discard those commits from the branch ref.": "%@ 有 %lld 个本地提交不在 %@ 中。重置会从分支引用中丢弃这些提交。",
@@ -980,5 +977,10 @@
   "Continue, Skip, or Abort the operation from the recovery actions.": "从恢复操作中选择继续、跳过或中止。",
   "RECENT": "最近",
   "TAGS": "标签",
-  "STASHES": "贮藏"
+  "STASHES": "贮藏",
+  "Open New Git Log Tab": "打开新的 Git 日志标签页",
+  "Select Opened File in Changes View": "在变更视图中选中当前文件",
+  "Show Commit Options": "显示提交选项",
+  "View Options": "视图选项",
+  "Commit Message History": "提交信息历史"
 }
