@@ -170,8 +170,8 @@ jobs:
       - name: Compare the UI against the committed snapshot
         # 和参考对账不同，这一步不需要 Rebased：它比的是「上一次批准的界面」，所以
         # 能进 CI。用刚才那份构建重跑一次导出，不另外开 job——省掉一次十分钟的 build。
-        # 目前是 --report（只报告不失败）：runner 的显示器决定窗口尺寸，窗口一变窄
-        # 所有坐标就跟着漂。等这里跑过几次、噪声水平看清了，再去掉 --report。
+        # 严格模式：同一块画布下的漂移直接失败。runner 的显示器更窄时窗口会被裁窄，
+        # 那种情况下 ui-snapshot.py 只报告不失败，所以不需要 --report。
         if: success() && inputs.only == ''
         env:
           SHARD: ${{ matrix.shard }}
@@ -179,7 +179,7 @@ jobs:
         run: |
           set -euo pipefail
           if python3 scripts/ui-smoke-shard.py "$SHARD" "$SHARDS" | grep -qx ArborUIParityUITests; then
-            ./scripts/ui-snapshot.sh --no-build --report
+            ./scripts/ui-snapshot.sh --no-build
           else
             echo "shard $SHARD does not run the parity dump"
           fi

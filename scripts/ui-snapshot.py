@@ -214,12 +214,14 @@ def main() -> int:
             print(f"{surface}: 与基线一致（{len(lines)} 个节点）")
             continue
 
-        drifted = drifted or not args.report
+        # 画布尺寸不同时只报告不失败：低分辨率 runner 上窗口会被裁窄，控件跟着重排，
+        # 那不是「界面坏了」，是比对环境不支持。同一块画布下的漂移才拦。
+        drifted = drifted or (not args.report and size_stable)
         print(f"\n{surface}: 与基线不一致"
               f"（结构 {len(structure_drift)} 行 · 几何 {len(geometry_drift)} 处）")
         if not size_stable:
             print(f"  注意：画布尺寸变了（{previous_header.strip('# ')} → {header.strip('# ')}），"
-                  f"只比结构，坐标差异不计入。")
+                  f"只比结构、不判失败。")
         for line in structure_drift[:60]:
             print(line)
         if len(structure_drift) > 60:

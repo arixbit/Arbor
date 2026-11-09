@@ -110,8 +110,10 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
 
 确认是本意后跑 `--update` 重写基线，并在提交信息里说明改了什么。
 
-CI 里已经接上（`.github/workflows/ui-smoke.yml`），现在是 `--report` 只报告不失败：
-runner 的窗口尺寸未知，先用几次真实输出看清噪声，再去掉 `--report` 变成卡口。
+CI 里已经接上（`.github/workflows/ui-smoke.yml`），是**严格**的：同一块画布下的漂移
+直接失败。runner 的显示器更窄时窗口会被裁窄、控件跟着重排，那种情况下脚本只比结构、
+只报告不失败——比对环境不支持的事不该拦人。实测：同画布改名 → 退出码 1，异画布改名
+→ 退出码 0。
 
 ## 缺口清单
 
