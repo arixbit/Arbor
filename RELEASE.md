@@ -96,6 +96,10 @@ exists` 或「worktree 里有不该存在的 untracked 文件」。
 修复：名字里加一个进程内自增序号，唯一性由构造保证，不再依赖时钟。
 修复后 pull 测试连跑 30 次、引擎全量连跑 5 次均无失败。
 
+顺带一个观察：CI 用 `cargo nextest`，每个用例独立进程，pid 天然不同——所以这个
+撞名**只在发布脚本这条路**上（`cargo test` 同进程多线程）才出现。CI 全绿不代表
+发布脚本能过，跑 `release.sh` 前值得先手工 `cargo test --all-targets` 一次。
+
 复现/诊断时带上埋点可以看到临时 worktree 的路径和每条 git 命令的结果：
 
 ```sh
