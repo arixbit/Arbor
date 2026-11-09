@@ -115,8 +115,16 @@ fi
 
 checksum_files=("$(basename "$dmg_path")" "$(basename "$zip_path")")
 if [[ "$local_build" != true ]]; then
-  "$repo_root/scripts/sign-update.sh" "$zip_path"
-  checksum_files+=(appcast.xml)
+  # 更新源（appcast）需要 Sparkle 的 EdDSA 私钥。这把密钥和苹果开发者账号无关，
+  # 是 Sparkle 自己的签名对：公钥写死在 App 里，私钥用来签更新包。
+  # 没有私钥只影响「自动更新」，不影响打包和安装，所以允许显式跳过：
+  # 产物仍是可发布的 unsigned 包，只是没有 appcast.xml。
+  if [[ "${ARBOR_SKIP_APPCAST:-0}" == "1" ]]; then
+    echo "skipped: no appcast.xml (ARBOR_SKIP_APPCAST=1); users install manually" >&2
+  else
+    "$repo_root/scripts/sign-update.sh" "$zip_path"
+    checksum_files+=(appcast.xml)
+  fi
 fi
 
 (
@@ -127,6 +135,8 @@ fi
 echo "Local release artifacts: $release_dir"
 if [[ "$local_build" == true ]]; then
   echo "STATUS: local-test (no update feed; do not publish to the release channel)"
+elif [[ "${ARBOR_SKIP_APPCAST:-0}" == "1" ]]; then
+  echo "STATUS: unsigned-public-no-feed (publishable; no auto-update appcast)"
 elif [[ "${ARBOR_UNSIGNED:-1}" == "1" ]]; then
   echo "STATUS: unsigned-public (not Apple-trusted; Gatekeeper approval may be required)"
 fi

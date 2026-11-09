@@ -19,6 +19,10 @@ commit panel's icon-only entries are now named.
   `index.lock` error or an "untracked files would be overwritten" abort. The
   temporary worktree name now carries a sequence number, so it cannot collide.
 
+Unsigned packages for this version are built and installable without an Apple
+developer account; only the Sparkle update feed needs a signing key, and a tag
+build on CI produces it.
+
 Internally the repository gains a mechanical UI parity harness: the replica is
 compared control by control against the reference application, and the two main
 surfaces plus Settings are ratcheted against a committed baseline so a release

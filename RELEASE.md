@@ -37,8 +37,24 @@ xcrun stapler validate /path/to/Arbor-VERSION-arm64.dmg
 
 The GitHub Actions workflow publishes unsigned arm64 artifacts when a `v*` tag
 is pushed. Apple signing certificates and notarization credentials are only
-needed for an optional Apple-trusted release. Sparkle's separate EdDSA signing
-key is required for every release, including unsigned builds.
+needed for an optional Apple-trusted release.
+
+Sparkle's EdDSA key is a **different thing from the Apple account**: it is a
+free keypair generated locally with Sparkle's `generate_keys`; its public half
+is committed to `Arbor/project.yml`, and its private half signs the update
+package so the app can verify an update it downloads. Without it the DMG and
+ZIP still build, sign with an ad-hoc identity and install normally — only
+`appcast.xml`, the update feed, cannot be produced. To build publishable
+artifacts on a machine without the key:
+
+```sh
+ARBOR_SKIP_TESTS=1 ARBOR_SKIP_APPCAST=1 ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.35
+```
+
+That names the artifacts `Arbor-VERSION-unsigned-arm64.*` and writes
+`SHA256SUMS`, but skips the feed. Users install manually from the DMG until a
+build with an `appcast.xml` is published. CI has the key as a repository secret,
+so a tag build produces the feed without any local setup.
 
 ## Local test packages
 
