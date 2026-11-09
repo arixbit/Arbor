@@ -94,6 +94,24 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
 CI 里已经接上（`.github/workflows/ui-smoke.yml`），现在是 `--report` 只报告不失败：
 runner 的窗口尺寸未知，先用几次真实输出看清噪声，再去掉 `--report` 变成卡口。
 
+## 缺口清单
+
+对账报出「参考有、Arbor 缺」之后，还要回答「这些是不是真的没做」。`scripts/ui-triage.py`
+把每个缺失的名字回查 Arbor 的源码和本地化表：
+
+- 源码里出现过 → 功能在做，只是叫法或入口位置不同，不是缺口（实测 68 条里 54 条属这类）
+- 一次都没出现 → 进 `docs/ui-gaps.md`，并且**必须在 `scripts/ui-gaps-baseline.txt` 里
+  给一次结论**：`to-build` / `design-difference` / `naming` / `out-of-scope`
+
+没有结论时脚本直接失败，所以清单不会越挂越长、也不会有人再一眼扫过去就跳过。
+这个模式和 `scripts/audit-user-surface.py` 的 baseline 是同一套：脚本拦住漏判，
+判断仍然是人给。
+
+```sh
+./scripts/ui-parity.sh --reference      # 重新对账
+python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md
+```
+
 ## 现有的界面基线
 
 `--reference` 要求 Rebased 已经在运行，并且已经在它里面打开了 visual-fixture 项目：

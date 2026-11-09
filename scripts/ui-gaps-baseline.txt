@@ -1,0 +1,16 @@
+# 对账报出的「参考有 · Arbor 缺」逐条结论。每行：<verdict>	<名字>	<说明>
+#
+# verdict：
+#   to-build            确认该补，排在开发清单里
+#   design-difference   两套实现的交互模型不同，不复刻（要在说明里写清为什么）
+#   naming              Arbor 已有等价入口，只是名字/位置不同
+#   out-of-scope        IDE 宿主能力，不属于 Git 工作台
+#
+# 名字按 ui-triage.py 的归一化规则（小写、去掉省略号和快捷键后缀）。
+# 新增的缺口没有结论时 ui-triage.py 会失败，逼着人给一次判断，而不是让它一直挂在报告里。
+
+to-build	select opened file in changes view	参考：在项目树里点一下，就把那个文件在变更列表里选中。Arbor 的项目树和变更列表各自维护选择，缺一条把它们连起来的入口。
+to-build	open new git log tab	参考：把 Log 再开一个独立标签，用来同时看两个过滤条件下的历史。Arbor 只有一个 Log 视图，需要多实例。
+design-difference	main, menu	Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。交互模型不同，docs/visual-baseline.md 记过。
+naming	project: visual-fixture, menu	Arbor 顶栏的项目控件也是 Menu（menubutton），只是 label 直接显示项目名，参考拼成「Project: 名字, menu」。
+out-of-scope	enable git log indexing	IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。

@@ -1,95 +1,85 @@
 # 界面对账得出的缺口清单
 
-由 `scripts/ui-triage.py` 从 `build/parity/*-controls.json` 生成，**不要手改**。
-重新生成：`./scripts/ui-parity.sh --reference && python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
+由 `scripts/ui-triage.py` 生成，**不要手改**；人给的结论在
+`scripts/ui-gaps-baseline.txt` 里。
 
-判定方法：把「参考有、Arbor 缺」的每个名字回查 Arbor 的源码和本地化表。源码里出现过的，说明功能在做、只是叫法或入口位置不同；一次都没出现的才是真缺。
+重新生成：`./scripts/ui-parity.sh --reference &&
+python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 
-## 疑似真缺
+判定方法：把「参考有、Arbor 缺」的每个名字回查 Arbor 的源码和本地化表。
+源码里有 → 功能在做、只是叫法或入口位置不同；没有 → 才进下面的清单，
+而且每一项都必须在 baseline 里给出结论，缺结论时脚本会失败。
 
-| 界面 | 角色 | 名字 |
+## 待补
+
+| 缺口 | 出现界面 | 说明 |
 | --- | --- | --- |
-| commit | button | Enable Git Log Indexing |
-| commit | button | Open New Git Log Tab |
-| commit | button | Project: visual-fixture, menu |
-| commit | button | Select Opened File in Changes View |
-| commit | button | main, menu |
-| log | button | Enable Git Log Indexing |
-| log | button | Open New Git Log Tab |
-| log | button | Project: visual-fixture, menu |
-| log | button | Select Opened File in Changes View |
-| log | button | main, menu |
+| Select Opened File in Changes View | commit, log | 参考：在项目树里点一下，就把那个文件在变更列表里选中。Arbor 的项目树和变更列表各自维护选择，缺一条把它们连起来的入口。 |
+| Open New Git Log Tab | commit, log | 参考：把 Log 再开一个独立标签，用来同时看两个过滤条件下的历史。Arbor 只有一个 Log 视图，需要多实例。 |
 
-## 源码里有：叫法或入口位置不同
+## 已判定：不复刻或已有等价入口
 
-| 界面 | 名字 | 出现在 |
-| --- | --- | --- |
-| commit | Branch: | `Arbor/PullDialogView.swift` |
-| commit | Cherry-Pick | `Arbor/LogGraphView.swift` |
-| commit | Collapse All | `Arbor/Panels/Panels+Core.swift` |
-| commit | Commit | `Arbor/PullDialogView.swift` |
-| commit | Commit Message | `Arbor/LogGraphView.swift` |
-| commit | Date: | `Arbor/LogGraphView.swift` |
-| commit | Expand All | `Arbor/LogGraphView.swift` |
-| commit | Git | `Arbor/AboutView.swift` |
-| commit | Graph Options | `Arbor/Workspace/Workspace+ContentView.Log.swift` |
-| commit | Hide | `Arbor/HostingProvider.swift` |
-| commit | Options | `Arbor/PullDialogView.swift` |
-| commit | Paths: | `Arbor/PullDialogView.swift` |
-| commit | Project | `Arbor/ArborApp.swift` |
-| commit | Refresh | `Arbor/FeedbackCenter.swift` |
-| commit | Revert Selected Changes | `Arbor/App/ProjectCommands.swift` |
-| commit | Rollback… | `Arbor/LogGraphView.swift` |
-| commit | Search | `Arbor/FileReferenceComparisonView.swift` |
-| commit | Select files to commit and specify commit message | `Arbor/LogGraphView.swift` |
-| commit | Shelve Silently | `Arbor/Panels/Panels+Commit.swift` |
-| commit | Show Diff | `Arbor/LogGraphView.swift` |
-| commit | Terminal | `Arbor/App/PersistedCommitRecovery.swift` |
-| commit | Update Project... | `Arbor/BitbucketClient.swift` |
-| commit | User: | `Arbor/BitbucketClient.swift` |
-| commit | View Options | `Arbor/Panels/Panels+Commit.swift` |
-| commit | last commit | `Arbor/ProjectFileTreeView.swift` |
-| log | Amend | `Arbor/Settings/DiagnosticsSettingsView.swift` |
-| log | Branch: | `Arbor/PullDialogView.swift` |
-| log | Cherry-Pick | `Arbor/LogGraphView.swift` |
-| log | Collapse All | `Arbor/Panels/Panels+Core.swift` |
-| log | Commit | `Arbor/PullDialogView.swift` |
-| log | Commit | `Arbor/PullDialogView.swift` |
-| log | Commit Message | `Arbor/LogGraphView.swift` |
-| log | Commit Message History | `Arbor/Panels/Panels+Commit.swift` |
-| log | Commit and Push… | `Arbor/App/ProjectCommands.swift` |
-| log | Date: | `Arbor/LogGraphView.swift` |
-| log | Expand All | `Arbor/LogGraphView.swift` |
-| log | Git | `Arbor/AboutView.swift` |
-| log | Graph Options | `Arbor/Workspace/Workspace+ContentView.Log.swift` |
-| log | Paths: | `Arbor/PullDialogView.swift` |
-| log | Project | `Arbor/ArborApp.swift` |
-| log | Refresh | `Arbor/FeedbackCenter.swift` |
-| log | Revert Selected Changes | `Arbor/App/ProjectCommands.swift` |
-| log | Rollback… | `Arbor/LogGraphView.swift` |
-| log | Search | `Arbor/FileReferenceComparisonView.swift` |
-| log | Select files to commit and specify commit message | `Arbor/LogGraphView.swift` |
-| log | Shelve Silently | `Arbor/Panels/Panels+Commit.swift` |
-| log | Show Commit Options | `Arbor/Panels/Panels+Commit.swift` |
-| log | Show Diff | `Arbor/LogGraphView.swift` |
-| log | Stash | `Arbor/ResizableWorkspacePanels.swift` |
-| log | Terminal | `Arbor/App/PersistedCommitRecovery.swift` |
-| log | Update Project... | `Arbor/BitbucketClient.swift` |
-| log | User: | `Arbor/BitbucketClient.swift` |
-| log | View Options | `Arbor/Panels/Panels+Commit.swift` |
-| log | last commit | `Arbor/ProjectFileTreeView.swift` |
+| 结论 | 缺口 | 界面 | 理由 |
+| --- | --- | --- | --- |
+| out-of-scope | Enable Git Log Indexing | commit, log | IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。 |
+| naming | Project: visual-fixture, menu | commit, log | Arbor 顶栏的项目控件也是 Menu（menubutton），只是 label 直接显示项目名，参考拼成「Project: 名字, menu」。 |
+| design-difference | main, menu | commit, log | Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。交互模型不同，docs/visual-baseline.md 记过。 |
 
-## 附：无法通过源码检索判定的条目
+## 附录：源码里有，只是叫法或入口位置不同
 
-名字里带路径、文件名或动态内容，回查没有意义，需要人工看截图。
+这些不是缺口。要压掉对账噪声，把它们写进 `scripts/parity-aliases.tsv`。
 
-- `commit` button `Project: visual-fixture, menu`
-- `commit` button `main, menu`
-- `commit` button `Select Opened File in Changes View`
-- `commit` button `Open New Git Log Tab`
-- `commit` button `Enable Git Log Indexing`
-- `log` button `Project: visual-fixture, menu`
-- `log` button `main, menu`
-- `log` button `Select Opened File in Changes View`
-- `log` button `Open New Git Log Tab`
-- `log` button `Enable Git Log Indexing`
+- `commit` menu `Branch:` → `Arbor/PullDialogView.swift`
+- `commit` button `Cherry-Pick` → `Arbor/LogGraphView.swift`
+- `commit` button `Collapse All` → `Arbor/Panels/Panels+Core.swift`
+- `commit` statictext `Commit` → `Arbor/PullDialogView.swift`
+- `commit` textview `Commit Message` → `Arbor/LogGraphView.swift`
+- `commit` menu `Date:` → `Arbor/LogGraphView.swift`
+- `commit` button `Expand All` → `Arbor/LogGraphView.swift`
+- `commit` button `Git` → `Arbor/AboutView.swift`
+- `commit` button `Graph Options` → `Arbor/Workspace/Workspace+ContentView.Log.swift`
+- `commit` button `Hide` → `Arbor/HostingProvider.swift`
+- `commit` button `Options` → `Arbor/PullDialogView.swift`
+- `commit` menu `Paths:` → `Arbor/PullDialogView.swift`
+- `commit` button `Project` → `Arbor/ArborApp.swift`
+- `commit` button `Refresh` → `Arbor/FeedbackCenter.swift`
+- `commit` button `Revert Selected Changes` → `Arbor/App/ProjectCommands.swift`
+- `commit` button `Rollback…` → `Arbor/LogGraphView.swift`
+- `commit` textfield `Search` → `Arbor/FileReferenceComparisonView.swift`
+- `commit` statictext `Select files to commit and specify commit message` → `Arbor/LogGraphView.swift`
+- `commit` button `Shelve Silently` → `Arbor/Panels/Panels+Commit.swift`
+- `commit` button `Show Diff` → `Arbor/LogGraphView.swift`
+- `commit` button `Terminal` → `Arbor/App/PersistedCommitRecovery.swift`
+- `commit` button `Update Project...` → `Arbor/BitbucketClient.swift`
+- `commit` menu `User:` → `Arbor/BitbucketClient.swift`
+- `commit` button `View Options` → `Arbor/Panels/Panels+Commit.swift`
+- `commit` link `last commit` → `Arbor/ProjectFileTreeView.swift`
+- `log` checkbox `Amend` → `Arbor/Settings/DiagnosticsSettingsView.swift`
+- `log` menu `Branch:` → `Arbor/PullDialogView.swift`
+- `log` button `Cherry-Pick` → `Arbor/LogGraphView.swift`
+- `log` button `Collapse All` → `Arbor/Panels/Panels+Core.swift`
+- `log` statictext `Commit` → `Arbor/PullDialogView.swift`
+- `log` button `Commit` → `Arbor/PullDialogView.swift`
+- `log` textview `Commit Message` → `Arbor/LogGraphView.swift`
+- `log` button `Commit Message History` → `Arbor/Panels/Panels+Commit.swift`
+- `log` button `Commit and Push…` → `Arbor/App/ProjectCommands.swift`
+- `log` menu `Date:` → `Arbor/LogGraphView.swift`
+- `log` button `Expand All` → `Arbor/LogGraphView.swift`
+- `log` button `Git` → `Arbor/AboutView.swift`
+- `log` button `Graph Options` → `Arbor/Workspace/Workspace+ContentView.Log.swift`
+- `log` menu `Paths:` → `Arbor/PullDialogView.swift`
+- `log` button `Project` → `Arbor/ArborApp.swift`
+- `log` button `Refresh` → `Arbor/FeedbackCenter.swift`
+- `log` button `Revert Selected Changes` → `Arbor/App/ProjectCommands.swift`
+- `log` button `Rollback…` → `Arbor/LogGraphView.swift`
+- `log` textfield `Search` → `Arbor/FileReferenceComparisonView.swift`
+- `log` statictext `Select files to commit and specify commit message` → `Arbor/LogGraphView.swift`
+- `log` button `Shelve Silently` → `Arbor/Panels/Panels+Commit.swift`
+- `log` button `Show Commit Options` → `Arbor/Panels/Panels+Commit.swift`
+- `log` button `Show Diff` → `Arbor/LogGraphView.swift`
+- `log` statictext `Stash` → `Arbor/ResizableWorkspacePanels.swift`
+- `log` button `Terminal` → `Arbor/App/PersistedCommitRecovery.swift`
+- `log` button `Update Project...` → `Arbor/BitbucketClient.swift`
+- `log` menu `User:` → `Arbor/BitbucketClient.swift`
+- `log` button `View Options` → `Arbor/Panels/Panels+Commit.swift`
+- `log` link `last commit` → `Arbor/ProjectFileTreeView.swift`
