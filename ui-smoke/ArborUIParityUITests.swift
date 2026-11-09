@@ -150,18 +150,20 @@ final class ArborUIParityUITests: XCTestCase {
         // Only what is actually on screen is dumped, filed under the surface its
         // title claims. Navigating the reference IDE from a test would mean blind
         // clicks in the user's editor, so the surface is observed, not forced.
-        let surface = surfaceTag(of: window, fallback: "log")
-        try dump(window.debugDescription, named: "rebased-\(surface)")
-        print("[parity] Rebased 当前界面：\(window.title)（记为 \(surface)）")
-
-        let commitButton = window.buttons["Commit"].firstMatch
-        if commitButton.exists && commitButton.isHittable {
-            commitButton.click()
+        // 参考 IDE 的窗口状态会跨运行保留（上一轮开着的工具窗这一轮还开着），
+        // 所以先观察再决定导出哪两个界面，而不是假设。
+        //
+        // 重开 Commit 工具窗需要一个可靠的按钮，而树里叫 "Commit" 的按钮既可能是
+        // 活动栏入口、也可能是提交动作本身——点错就在用户的仓库里提交了一次。
+        // 所以这里只用参考脚本里已经在用的那个隐藏按钮坐标（一个纯 UI 切换），
+        // 反向（开）不做。
+        let commitPanel = window.checkBoxes["Amend"].firstMatch
+        if commitPanel.waitForExistence(timeout: 3) {
+            try dump(window.debugDescription, named: "rebased-commit")
+            window.coordinate(withNormalizedOffset: CGVector(dx: 595.0 / 1642.0, dy: 59.0 / 1015.0)).click()
             Thread.sleep(forTimeInterval: 1.5)
-            let after = surfaceTag(of: window, fallback: surface)
-            if after != surface {
-                try dump(window.debugDescription, named: "rebased-\(after)")
-            }
         }
+        try dump(window.debugDescription, named: "rebased-log")
+        print("[parity] Rebased 当前界面：\(window.title)")
     }
 }

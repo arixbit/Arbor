@@ -62,7 +62,8 @@ EXCLUDED_ROLES = {
 }
 
 # 名字里这些尾巴是装饰或快捷键提示，跨 App 一定不一样。
-TRAILING_NOISE = re.compile(r"\s*(?:\.{2,}|…|\(\s*[⌘⌥⌃⇧A-Za-z0-9+↩␣]+\s*\))\s*$")
+# 参考把过滤控件叫成「Branch:」，Arbor 叫「Branch」；尾随冒号不是语义。
+TRAILING_NOISE = re.compile(r"\s*(?:\.{2,}|…|\(\s*[⌘⌥⌃⇧A-Za-z0-9+↩␣]+\s*\)|:)\s*$")
 
 
 @dataclass
