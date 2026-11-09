@@ -101,9 +101,12 @@ def parse_tree(path: Path) -> tuple[list[dict], tuple[float, float]]:
             "flags": tuple(sorted(set(FLAG_RE.findall(remainder)))),
         })
 
+    # popover/sheet 这类界面是从整棵树里剪出来的，不一定带 window 行；没有窗口就
+    # 以第一个节点为原点，坐标才是相对这块界面的，不会随它在屏幕上的位置漂移。
     window = next((node for node in nodes if node["role"] == "window"), None)
-    origin_x, origin_y = (window["x"], window["y"]) if window else (0.0, 0.0)
-    size = (window["w"], window["h"]) if window else (0.0, 0.0)
+    origin = window or (nodes[0] if nodes else None)
+    origin_x, origin_y = (origin["x"], origin["y"]) if origin else (0.0, 0.0)
+    size = (origin["w"], origin["h"]) if origin else (0.0, 0.0)
     for node in nodes:
         node["x"] -= origin_x
         node["y"] -= origin_y
