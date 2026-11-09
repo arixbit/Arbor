@@ -61,7 +61,7 @@ so a tag build produces the feed without any local setup.
 For a fresh checkout without the release signing key, run:
 
 ```sh
-./scripts/release.sh 1.0.28 --local
+./scripts/release.sh VERSION --local   # e.g. 1.0.36
 ```
 
 This runs the Rust and Swift suites and creates an ad-hoc-signed DMG and ZIP

@@ -139,7 +139,8 @@ by control against the reference workbench, which only exists on a developer
 machine. See [docs/ui-parity.md](docs/ui-parity.md) for what each layer can and
 cannot see, and [RELEASE.md](RELEASE.md) for the release-time checklist.
 
-For a local test DMG and ZIP, use `./scripts/release.sh 1.0.28 --local`. This
+For a local test DMG and ZIP, use `./scripts/release.sh VERSION --local`, for example
+`./scripts/release.sh 1.0.36 --local`. This
 runs both test suites and writes unsigned arm64 packages and checksums to
 `build/releases/1.0.28-local/`, without requiring signing credentials. Public
 releases omit `--local` and require the Sparkle update key described in
