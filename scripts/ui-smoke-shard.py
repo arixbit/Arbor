@@ -34,7 +34,7 @@ WEIGHTS = {
     "ArborUIVisualCaptureUITests": 401,
     "ArborUISmokeUITests": 227,
     "ArborUISmokeContractUITests": 50,
-    "ArborUISmokeProjectTreeUITests": 38,
+    "ArborUISmokeProjectTreeUITests": 53,
     "ArborUIConflictUITests": 18,
     "ArborUISmokeFeedbackUITests": 18,
     "ArborUIDiagnosticsUITests": 17,

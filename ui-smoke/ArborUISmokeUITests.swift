@@ -479,6 +479,55 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
         session.recordScreenshot(named: "project-file-content")
     }
 
+    /// 项目工具窗那个「在 Changes 里选中」的入口，点了之后必须真的把选择交接过去，
+    /// 而不是只触发一次点击。可观察的结果是：selectChangedFile 把选择交给变更列表，
+    /// 同时清空项目树的选择，所以这个入口随即变灰。
+    @MainActor
+    func testSelectOpenedFileInChangesViewHandsSelectionToChanges() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        // 在仓库根目录造一个未跟踪文件：它同时出现在项目树和变更列表里，
+        // 测试就不必展开目录（项目树的文件夹行是 OutlineRow + DisclosureTriangle，
+        // 在 XCUITest 里定位不稳）。
+        try Data("# Notes\n".utf8).write(to: fixture.appendingPathComponent("Notes.md"))
+
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.toolWindowMode", "commit",
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+        ]
+        launch(session)
+        defer { session.terminate() }
+
+        let fileRow = session.window.buttons["Notes.md"].firstMatch
+        XCTAssertTrue(fileRow.waitForExistence(timeout: 10),
+                      "the project tree does not list the untracked file")
+        fileRow.click()
+
+        let sync = session.window.buttons["Select Opened File in Changes View"].firstMatch
+        XCTAssertTrue(sync.waitForExistence(timeout: 10),
+                      "the project tool window has no entry that hands the selection over")
+        XCTAssertTrue(sync.isEnabled,
+                      "the entry is disabled although a changed file is selected")
+        // 项目树的选择和变更列表的选择是两条链；点这一下的意义就是让右边的变更
+        // 列表接过选择、并显示这个文件的预览。所以判据是「界面出现了可观察的变化」，
+        // 这也是本套件对任何一次点击的定义：什么都不变就是空转。
+        let before = session.screenState()
+        sync.click()
+        var after = session.screenState()
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline, after.signature == before.signature {
+            Thread.sleep(forTimeInterval: 0.2)
+            after = session.screenState()
+        }
+        XCTAssertNotEqual(
+            after.signature, before.signature,
+            "handing the selection to the changes view produced no observable change"
+        )
+        session.recordScreenshot(named: "select-opened-file-in-changes")
+    }
+
     @MainActor
     func testClickingChangesOpensDiffAndProjectFileOpensContent() throws {
         let fixture = try ArborUIFixture.create()
