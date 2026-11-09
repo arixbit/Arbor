@@ -9,6 +9,6 @@
 # 名字按 ui-triage.py 的归一化规则（小写、去掉省略号和快捷键后缀）。
 # 新增的缺口没有结论时 ui-triage.py 会失败，逼着人给一次判断，而不是让它一直挂在报告里。
 
-design-difference	main, menu	Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。交互模型不同，docs/visual-baseline.md 记过。
+design-difference	main, menu	Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。弹层里带搜索/对比/标签/贮藏/工作树，换成 Menu 装不下，所以保留 popover；已补 ⌄ 下拉提示和 accessibilityHint，让辅助技术知道它打开的是一个列表。
 naming	project: visual-fixture, menu	Arbor 顶栏的项目控件也是 Menu（menubutton），只是 label 直接显示项目名，参考拼成「Project: 名字, menu」。
 out-of-scope	enable git log indexing	IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。

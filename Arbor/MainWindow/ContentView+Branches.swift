@@ -87,11 +87,19 @@ extension ContentView {
                     .foregroundStyle(.blue)
                     .help("Remote has incoming commits not fetched locally")
                 }
+                // 参考实现的分支控件是「文字 + ⌄」，那个 ⌄ 是它能被识别成下拉的原因：
+                // 光看一个文字按钮，用户和辅助技术都不知道点开有东西。
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.borderless)
         .disabled(repo == nil)
         .help("Branches: checkout / pull / push / fetch / merge / rebase / stash")
+        // 弹出面板自带搜索、对比、标签、贮藏和工作树，换成 Menu 装不下，所以保留
+        // popover；但它必须明确告诉辅助技术这是「打开一个列表」，而不是普通按钮。
+        .accessibilityHint("Opens the branches list")
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(
