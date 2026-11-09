@@ -110,9 +110,16 @@ cargo test --manifest-path arbor-engine/Cargo.toml --test pull non_current_branc
 ```
 
 这不是"环境抽风"就完事的类型：它可能掩盖真实并发问题（引擎在同一份临时 worktree
-里跑多个 git 命令）。真正的原因还没定位，临时 worktree 的路径已经带上了
-pid + 单调时间戳 + commit id，所以路径冲突的可能性很小，更像是同一 worktree 上
-两个 git 进程在抢 index.lock。
+里跑多个 git 命令）。真正的原因还没定位。
+
+复现时带上埋点，就能看到临时 worktree 的路径和每条 git 命令的结果：
+
+```sh
+ARBOR_PULL_TRACE=1 cargo test --manifest-path arbor-engine/Cargo.toml --test pull -- --nocapture
+```
+
+输出会说明是 `worktree add` 就已经失败，还是 merge/rebase 那一步失败，以及当时的
+workdir、临时 worktree、local/tracking commit。没有埋点时失败现场只剩一句 git stderr。
 
 ## Sparkle updates
 

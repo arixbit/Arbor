@@ -17541,6 +17541,20 @@ impl Repository {
                 message: "pull branch temporary worktree already exists".into(),
             });
         }
+        // 非当前分支的 pull 要把目标分支放进一个临时 worktree 里 merge/rebase。
+        // 这一步在整机有负载时偶尔会撞上 index.lock（见 RELEASE.md 的已知抖动用例），
+        // 而没有埋点时失败现场只剩一句 git 的 stderr。设 ARBOR_PULL_TRACE=1 就会把
+        // 临时 worktree 的路径和每条 git 命令的结果打出来。
+        let trace_pull = std::env::var("ARBOR_PULL_TRACE").is_ok();
+        if trace_pull {
+            eprintln!(
+                "[pull-trace] workdir={} temp_worktree={} local_id={} tracking_id={}",
+                workdir.display(),
+                temp_worktree.display(),
+                local_id,
+                tracking_id
+            );
+        }
 
         let add = crate::gitprocess::git_command_for_working_dir(&workdir)
             .args([
@@ -17554,6 +17568,9 @@ impl Repository {
             .current_dir(&workdir)
             .output()
             .map_err(EngineError::from_gix)?;
+        if trace_pull {
+            eprintln!("[pull-trace] worktree add status={:?}", add.status);
+        }
         if !add.status.success() {
             return Err(EngineError::GitOperation {
                 message: format!(
@@ -17575,6 +17592,14 @@ impl Repository {
                 .output()
         }
         .map_err(EngineError::from_gix)?;
+        if trace_pull {
+            eprintln!(
+                "[pull-trace] {} status={:?} stderr={}",
+                if rebase { "rebase" } else { "merge" },
+                operation.status,
+                String::from_utf8_lossy(&operation.stderr).trim()
+            );
+        }
         if !operation.status.success() {
             let abort_command = if rebase { "rebase" } else { "merge" };
             let _ = crate::gitprocess::git_command_for_working_dir(&temp_worktree)
