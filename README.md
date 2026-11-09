@@ -122,6 +122,23 @@ signed build is required. If you configured the Team in Xcode, the launcher pres
 setting when regenerating the project; you can also pass it explicitly with
 `ARBOR_DEVELOPMENT_TEAM=<10-character-team-id>`.
 
+### UI checks
+
+Unit tests cannot see a button that moved, was renamed, or disappeared. Two
+commands cover that gap:
+
+```sh
+./scripts/ui-snapshot.sh                          # UI vs the committed baseline
+./scripts/ui-parity.sh --reference                # this app vs the reference app
+```
+
+`ui-snapshot.sh` exports the accessibility tree of the Commit, Log and Settings
+surfaces and compares it with `ui-smoke/snapshots/`; a drift fails the command.
+It runs on every pull request. `ui-parity.sh` goes further and compares control
+by control against the reference workbench, which only exists on a developer
+machine. See [docs/ui-parity.md](docs/ui-parity.md) for what each layer can and
+cannot see, and [RELEASE.md](RELEASE.md) for the release-time checklist.
+
 For a local test DMG and ZIP, use `./scripts/release.sh 1.0.28 --local`. This
 runs both test suites and writes unsigned arm64 packages and checksums to
 `build/releases/1.0.28-local/`, without requiring signing credentials. Public

@@ -14,6 +14,10 @@ commit panel's icon-only entries are now named.
   made them invisible to assistive technology and to the visual parity harness.
 - The Log actions menu calls its new-tab action Open New Git Log Tab, matching
   the reference workbench.
+- Pulling a non-current branch twice within a microsecond used to make the two
+  operations share one temporary worktree: the second one failed with an
+  `index.lock` error or an "untracked files would be overwritten" abort. The
+  temporary worktree name now carries a sequence number, so it cannot collide.
 
 Internally the repository gains a mechanical UI parity harness: the replica is
 compared control by control against the reference application, and the two main
