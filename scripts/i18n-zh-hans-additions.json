@@ -982,5 +982,10 @@
   "Select Opened File in Changes View": "在变更视图中选中当前文件",
   "Show Commit Options": "显示提交选项",
   "View Options": "视图选项",
-  "Commit Message History": "提交信息历史"
+  "Commit Message History": "提交信息历史",
+  "Show History for Revision": "查看该版本的历史",
+  "Revert Selected Changes": "还原选中的变更",
+  "Filter commits": "过滤提交",
+  "Apply the selected stash and keep it in the list": "应用选中的贮藏，并保留在列表中",
+  "Apply the selected stash and remove it from the list": "应用选中的贮藏，并从列表中移除"
 }

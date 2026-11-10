@@ -2,9 +2,9 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	325,16 10×10
-      button	Push	359,16 10×10
-      button	main	392,14 67×16
+      button	Update	323,16 10×10
+      button	Push	357,16 10×10
+      button	main	390,14 67×16
       button	Search	1516,14 14×15
       menubutton	More Git Actions	1549,14 35×16
       menubutton	Settings	1594,12 37×18
@@ -156,7 +156,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
                   scrollview	—	1322,52 280×16 [Disabled]
                     statictext	—	1334,52 57×16
                     statictext	—	1399,54 22×13
-                    button	clock.arrow.circlepath	1446,54 14×13 [Disabled]
+                    button	Show History for Revision	1446,54 14×13 [Disabled]
                     menubutton	Filter	1468,52 36×17
                     menubutton	More	1510,52 35×16
                   scrollview	—	1322,77 280×627 [Disabled]

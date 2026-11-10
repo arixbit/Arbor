@@ -11323,7 +11323,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "撤销选中的变更"
+            "value" : "还原选中的变更"
           }
         }
       }
@@ -27159,6 +27159,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提交信息历史"
+          }
+        }
+      }
+    },
+    "Filter commits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过滤提交"
+          }
+        }
+      }
+    },
+    "Apply the selected stash and keep it in the list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用选中的贮藏，并保留在列表中"
+          }
+        }
+      }
+    },
+    "Apply the selected stash and remove it from the list" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用选中的贮藏，并从列表中移除"
           }
         }
       }

@@ -65,6 +65,40 @@ final class ArborUISmokeUITests: XCTestCase {
             offenders, [],
             "interactive controls without a name: \(offenders.joined(separator: " | "))"
         )
+
+        // 第二种情况：有名字，但名字就是 SF Symbol 的标识符。界面上看到的是图标，
+        // 辅助技术念出来的是 "arrow up forward app" 这种机器名。
+        let symbolTokens = [
+            "arrow", "chevron", "ellipsis", "circle", "square", "rectangle",
+            "fill", "badge", "bubble", "tray", "clock", "doc.", "line.",
+        ]
+        var symbolLeaks: [String] = []
+        for surface in ["commit", "log"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: surface)
+            session.launch()
+            defer { session.terminate() }
+            for type in [XCUIElement.ElementType.button, .menuButton] {
+                for element in session.app.descendants(matching: type).allElementsBoundByIndex {
+                    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !label.contains(" "),
+                          label.contains("."),
+                          label == label.lowercased() else { continue }
+                    let lowered = label.lowercased()
+                    guard symbolTokens.contains(where: { lowered.contains($0) }) else { continue }
+                    let frame = element.frame
+                    symbolLeaks.append(String(
+                        format: "%@: %@ id=%@ at %.0f,%.0f",
+                        surface, label,
+                        element.identifier.isEmpty ? "none" : element.identifier,
+                        frame.minX, frame.minY
+                    ))
+                }
+            }
+        }
+        XCTAssertEqual(
+            symbolLeaks, [],
+            "controls labelled with their SF Symbol name: \(symbolLeaks.joined(separator: " | "))"
+        )
     }
 
     @MainActor

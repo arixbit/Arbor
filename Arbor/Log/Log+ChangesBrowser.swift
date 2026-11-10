@@ -568,6 +568,9 @@ struct LogChangesBrowserView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Show History for Revision")
+                // 没有 label 时无障碍树里只剩下图标名（clock.arrow.circlepath），
+                // 辅助技术念出来是机器名而不是「查看该提交的历史」。
+                .accessibilityLabel("Show History for Revision")
                 .disabled(selectedRecords.count != 1)
                 if canApplySelectedChanges {
                     Button {
