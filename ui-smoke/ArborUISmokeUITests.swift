@@ -154,6 +154,41 @@ final class ArborUISmokeUITests: XCTestCase {
         )
     }
 
+    /// 对话框里的控件也要有名字。对话框是模态的，单独一条测试；只打开不执行，
+    /// 扫完立刻 Escape 关掉。
+    @MainActor
+    func testDialogControlsAreNamed() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        let push = session.window.buttons["Push"].firstMatch
+        XCTAssertTrue(push.waitForExistence(timeout: 10), "the toolbar has no Push action")
+        push.click()
+        let sheet = session.app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "Push did not open a dialog")
+        Thread.sleep(forTimeInterval: 0.8)
+
+        var offenders: [String] = []
+        for type in [XCUIElement.ElementType.button, .menuButton, .checkBox, .textField, .popUpButton] {
+            for element in session.app.descendants(matching: type).allElementsBoundByIndex {
+                let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                let title = element.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard label.isEmpty, title.isEmpty else { continue }
+                if element.identifier.hasPrefix("_XCUI:") { continue }
+                if element.frame.height < 8 || element.frame.width < 8 { continue }
+                offenders.append("\(element.identifier.isEmpty ? "«no identifier»" : element.identifier)")
+            }
+        }
+        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+        XCTAssertEqual(
+            offenders, [],
+            "controls without a name in dialogs: \(offenders.joined(separator: " | "))"
+        )
+    }
+
     @MainActor
     func testProjectTreeControlsReact() throws {
         try sweepScreen(named: "project-tree", toolWindow: "log") { session in
