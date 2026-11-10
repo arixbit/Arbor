@@ -244,5 +244,36 @@ final class ArborUIParityUITests: XCTestCase {
             rebased.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
             print("[parity] Branches: 菜单项不存在，跳过")
         }
+
+        // Show Git Stash 不开新窗口：它在主窗口里加一块「Stash Tool Window」。
+        // 实测那块是可裁出来的，所以按它自己的边框裁剪导出。
+        rebased.menuBars.menuBarItems["Git"].firstMatch.click()
+        let stashItem = rebased.menuItems["Show Git Stash"].firstMatch
+        if stashItem.waitForExistence(timeout: 3) {
+            stashItem.click()
+            Thread.sleep(forTimeInterval: 1.5)
+            // 这块是 Group，标识为空、只有 label，所以要按 label 的谓词去找。
+            let tool = rebased.descendants(matching: .any)
+                .matching(NSPredicate(format: "label == %@", "Stash Tool Window")).firstMatch
+            if tool.waitForExistence(timeout: 5) {
+                let origin = window.frame.origin
+                let clip = CGRect(
+                    x: tool.frame.minX - origin.x,
+                    y: tool.frame.minY - origin.y,
+                    width: tool.frame.width,
+                    height: tool.frame.height
+                )
+                let header = String(
+                    format: "#CLIP %d,%d,%d,%d\n",
+                    Int(clip.minX), Int(clip.minY), Int(clip.width), Int(clip.height)
+                )
+                try dump(header + window.debugDescription, named: "rebased-stash")
+            } else {
+                print("[parity] Stash: 没找到 Stash Tool Window，跳过")
+            }
+        } else {
+            rebased.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+            print("[parity] Stash: 菜单项不存在，跳过")
+        }
     }
 }

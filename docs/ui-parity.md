@@ -186,6 +186,13 @@ open -a Rebased /tmp/visual-fixture        # 首次需要在 Rebased 里信任�
 `ui-parity.py` 只保留落在这块矩形里的节点。Arbor 侧的分支弹层现在能导出了
 （`arbor-branches`，37 个节点），和对面的参考窗口（33 个节点）比出 30% 的配对率。
 
+**Stash 的参考侧也打通了**：`Git → Show Git Stash` 不开新窗口，而是在主窗口里
+加一块 `Stash Tool Window`（Group，无标识、只有 label，所以得按 label 的谓词查）。
+实测这块可以按它自己的边框裁剪导出（`rebased-stash`，里面是 `Stashes` 大纲）。
+
+Arbor 侧的 `arbor-stash` 还没导：要在提交面板里切到 Stash 标签，再按它那块面板
+裁剪。这是同一个套路，剩下的只是找对面板的边界。
+
 快照基线**故意跳过分支弹层**（`ui-snapshot.sh --skip branches`）：它的无障碍树
 深度在两次导出间会变（浮层里的行由 SwiftUI 动态构建，层级不稳），拿它当基线只会
 随机红。参考对账不受影响。
