@@ -190,8 +190,20 @@ open -a Rebased /tmp/visual-fixture        # 首次需要在 Rebased 里信任�
 加一块 `Stash Tool Window`（Group，无标识、只有 label，所以得按 label 的谓词查）。
 实测这块可以按它自己的边框裁剪导出（`rebased-stash`，里面是 `Stashes` 大纲）。
 
-Arbor 侧的 `arbor-stash` 还没导：要在提交面板里切到 Stash 标签，再按它那块面板
-裁剪。这是同一个套路，剩下的只是找对面板的边界。
+Arbor 侧的 `arbor-stash` 也导出了（切到提交面板的 Stash 标签，按左侧列表的滚动区
+裁剪）。比对结果很浅，0% 配对，但暴露了一个真实差异：
+
+| 参考的 Stash 工具窗 | Arbor 的贮藏面板 |
+| --- | --- |
+| Stashes 大纲 + Changes 大纲 | 只有 `Stashes, 1` / `Shelves, 0` 两个分组标题 |
+| 工具栏 Show Diff / Group By / Expand All / Collapse All | 只有 `Filter` 菜单 |
+| Apply / Pop 常驻按钮（78×34）| 没有常驻按钮，动作在行的菜单里 |
+
+也就是说：参考把「应用 / 弹出」放在面板底部常驻，Arbor 把它藏进了每行的菜单。
+这是可用的差异，但**不是等价的操作成本**——参考两步，Arbor 需要先展开、再进菜单。
+
+另外导出范围本身也浅：Arbor 的 Stashes 分组默认收起时，裁剪区里只有标题行。展开
+状态属于用户偏好，测试不去替用户改。
 
 快照基线**故意跳过分支弹层**（`ui-snapshot.sh --skip branches`）：它的无障碍树
 深度在两次导出间会变（浮层里的行由 SwiftUI 动态构建，层级不稳），拿它当基线只会

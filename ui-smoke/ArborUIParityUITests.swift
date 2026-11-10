@@ -159,6 +159,35 @@ final class ArborUIParityUITests: XCTestCase {
             session.terminate()
         }
 
+        // 贮藏面板：切到提交面板的 Stash 标签，再按左侧那一列的滚动区裁剪。
+        do {
+            let session = ArborUISession(fixture: fixture)
+            session.extraLaunchArguments = layout + ["-arbor.toolWindowMode", "commit"]
+            session.launch()
+            let stashTab = session.window.buttons["Stash"].firstMatch
+            XCTAssertTrue(stashTab.waitForExistence(timeout: 10), "the commit panel has no Stash tab")
+            stashTab.click()
+            Thread.sleep(forTimeInterval: 1.0)
+            // 导出的范围是左侧列表的可视区；Stashes 分组收起时里面只有标题行，
+            // 展开状态由用户的偏好决定。这一点先如实记录，不在测试里替用户改状态。
+            let origin = session.window.frame.origin
+            let candidates = session.window.scrollViews.allElementsBoundByIndex.filter {
+                $0.frame.minX < origin.x + 700 && $0.frame.height > 150
+            }
+            let list = candidates.first
+            XCTAssertNotNil(list, "no left-column scroll view after switching to Stash")
+            if let list {
+                let clip = CGRect(
+                    x: list.frame.minX - origin.x,
+                    y: list.frame.minY - origin.y,
+                    width: list.frame.width,
+                    height: list.frame.height
+                )
+                try dumpClipped(session.window.debugDescription, clip: clip, named: "arbor-stash")
+            }
+            session.terminate()
+        }
+
         // Settings 是独立窗口，不在主窗口的子树里，所以单独导一份——它同样属于
         // 用户能看见的界面，值得进快照基线。
         do {
