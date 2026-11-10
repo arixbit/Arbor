@@ -25,6 +25,48 @@ final class ArborUISmokeUITests: XCTestCase {
         try sweepScreen(named: "log", toolWindow: "log")
     }
 
+    /// 每个可交互控件都应该有名字。没有 label/title 的按钮在无障碍树里只剩图标名，
+    /// 辅助技术读不出它是干什么的——之前 Commit Message History 这类入口就是这么
+    /// 被漏掉的（图标在、名字不在）。
+    @MainActor
+    func testEveryInteractiveControlIsNamed() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        var offenders: [String] = []
+        for surface in ["commit", "log"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: surface, screenshotSink: { self.add($0) })
+            session.launch()
+            defer { session.terminate() }
+
+            let types: [XCUIElement.ElementType] = [
+                .button, .menuButton, .checkBox, .textField, .popUpButton, .radioButton,
+            ]
+            for type in types {
+                for element in session.app.descendants(matching: type).allElementsBoundByIndex {
+                    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let title = element.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // macOS 上菜单按钮常常只有 title 没有 label，两者都算「有名字」。
+                    guard label.isEmpty, title.isEmpty else { continue }
+                    // 窗口按钮（关闭/最小化/全屏）和分隔条手柄由系统提供，没有名字是正常的。
+                    if element.identifier.hasPrefix("_XCUI:") { continue }
+                    if element.frame.height < 8 || element.frame.width < 8 { continue }
+                    let frame = element.frame
+                    offenders.append(String(
+                        format: "%@/%@ at %.0f,%.0f %.0fx%.0f",
+                        surface,
+                        element.identifier.isEmpty ? "«no identifier»" : element.identifier,
+                        frame.minX, frame.minY, frame.width, frame.height
+                    ))
+                }
+            }
+        }
+        XCTAssertEqual(
+            offenders, [],
+            "interactive controls without a name: \(offenders.joined(separator: " | "))"
+        )
+    }
+
     @MainActor
     func testProjectTreeControlsReact() throws {
         try sweepScreen(named: "project-tree", toolWindow: "log") { session in

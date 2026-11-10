@@ -130,6 +130,8 @@ var logPrimaryFilters: some View {
         logFilterField("Text or hash", text: $logList.messageFilter)
             .frame(minWidth: 100, maxWidth: .infinity)
             .accessibilityIdentifier("log-text-filter")
+            // 输入框只有 placeholder，VoiceOver 读不出它是什么用途的过滤器。
+            .accessibilityLabel("Filter commits")
             .onSubmit { scheduleLogRefresh() }
         logFilterChip(".*", help: "Regex", isOn: $logList.messageRegex)
         logFilterChip("Cc", help: "Match Case", isOn: $logList.messageMatchCase)
