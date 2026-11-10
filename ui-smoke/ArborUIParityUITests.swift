@@ -178,5 +178,33 @@ final class ArborUIParityUITests: XCTestCase {
         }
         try dump(window.debugDescription, named: "rebased-log")
         print("[parity] Rebased 当前界面：\(window.title)")
+
+        // Branches… 打开的是一个独立窗口（实测 375×353、无标题），不在主窗口的树里。
+        // 用「动作前后的窗口集合差集」把它找出来，再导它的子树——比点坐标安全，
+        // 也比导整棵树干净。
+        func windowSignatures() -> [String] {
+            rebased.windows.allElementsBoundByIndex.map {
+                "\($0.title)|\(Int($0.frame.minX)),\(Int($0.frame.minY)),"
+                    + "\(Int($0.frame.width))x\(Int($0.frame.height))"
+            }
+        }
+        let before = Set(windowSignatures())
+        rebased.menuBars.menuBarItems["Git"].firstMatch.click()
+        let branchesItem = rebased.menuItems["Branches…"].firstMatch
+        if branchesItem.waitForExistence(timeout: 3) {
+            branchesItem.click()
+            Thread.sleep(forTimeInterval: 1.5)
+            let after = windowSignatures()
+            if let index = after.firstIndex(where: { !before.contains($0) }) {
+                let popup = rebased.windows.element(boundBy: index)
+                try dump(popup.debugDescription, named: "rebased-branches")
+                rebased.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+            } else {
+                print("[parity] Branches: 没有出现新窗口，跳过")
+            }
+        } else {
+            rebased.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+            print("[parity] Branches: 菜单项不存在，跳过")
+        }
     }
 }
