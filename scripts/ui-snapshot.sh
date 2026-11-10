@@ -69,7 +69,9 @@ if ! ls "$OUT_DIR"/tree/arbor-*.txt >/dev/null 2>&1; then
   exit 2
 fi
 
-SNAPSHOT_ARGS=(--tree "$OUT_DIR/tree" --baseline "$BASELINE_DIR")
+# 分支弹层暂时不进基线：它的无障碍树深度在两次导出间会变（浮层里的行由 SwiftUI
+# 动态构建，层级不稳），拿它做基线只会随机红。参考对账那边仍然会导出它。
+SNAPSHOT_ARGS=(--tree "$OUT_DIR/tree" --baseline "$BASELINE_DIR" --skip branches)
 [[ "$UPDATE" == true ]] && SNAPSHOT_ARGS+=(--update)
 [[ "$REPORT" == true ]] && SNAPSHOT_ARGS+=(--report)
 python3 "$ROOT_DIR/scripts/ui-snapshot.py" "${SNAPSHOT_ARGS[@]}"

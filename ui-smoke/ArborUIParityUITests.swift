@@ -20,6 +20,17 @@ final class ArborUIParityUITests: XCTestCase {
         ArborUIFixture.repositoryRoot.appendingPathComponent("build/parity/tree", isDirectory: true)
     }
 
+    /// 带裁剪矩形的导出：窗口内的浮层（分支弹层这类）没有独立的无障碍子树，
+    /// 只能在整窗树里认出来。首行写 `#CLIP x,y,w,h`（窗口相对坐标），
+    /// `scripts/ui-parity.py` 会据此把浮层区域切出来。
+    private func dumpClipped(_ description: String, clip: CGRect, named name: String) throws {
+        let header = String(
+            format: "#CLIP %d,%d,%d,%d\n",
+            Int(clip.minX), Int(clip.minY), Int(clip.width), Int(clip.height)
+        )
+        try dump(header + description, named: name)
+    }
+
     private func dump(_ description: String, named name: String) throws {
         // The test runner is sandboxed, so the tree cannot be written straight into
         // the checkout. It travels as an attachment and `scripts/ui-parity.sh`
@@ -118,6 +129,33 @@ final class ArborUIParityUITests: XCTestCase {
             XCTAssertTrue(session.openProjectTree(), "the activity rail did not open the project tree")
             resize(session.window, to: Self.targetSize)
             try dump(session.window.debugDescription, named: "arbor-log")
+            session.terminate()
+        }
+
+        // 分支弹层是窗口内的浮层：没有独立子树，所以导整窗树 + 裁剪矩形。
+        do {
+            let session = ArborUISession(fixture: fixture)
+            session.extraLaunchArguments = layout
+            session.launch()
+            // 弹层有时在启动后第一次点击里没打开（仓库数据还在加载），重试几次；
+            // 不重试的话这条基线会随机变成「全部消失」，把快照闸门弄成假红。
+            var opened = false
+            for _ in 0..<3 where !opened {
+                opened = session.openBranchesPopover()
+                if !opened { Thread.sleep(forTimeInterval: 1.5) }
+            }
+            XCTAssertTrue(opened, "the branch chip did not open the branches popover")
+            let panel = session.app.descendants(matching: .any)["branches-popover-panel"].firstMatch
+            XCTAssertTrue(panel.waitForExistence(timeout: 10),
+                          "the branches popover has no container identity")
+            let origin = session.window.frame.origin
+            let clip = CGRect(
+                x: panel.frame.minX - origin.x,
+                y: panel.frame.minY - origin.y,
+                width: panel.frame.width,
+                height: panel.frame.height
+            )
+            try dumpClipped(session.window.debugDescription, clip: clip, named: "arbor-branches")
             session.terminate()
         }
 

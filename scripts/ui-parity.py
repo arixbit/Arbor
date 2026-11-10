@@ -160,11 +160,24 @@ def normalize(name: str) -> str:
     return re.sub(r"\s+", " ", text).casefold()
 
 
-def parse_tree(path: Path) -> list[Node]:
+CLIP_RE = re.compile(r"^#CLIP (\d+),(\d+),(\d+),(\d+)$")
+
+
+def parse_tree(path: Path) -> tuple[list[Node], tuple[float, float, float, float] | None]:
+    """读树；首行若有 `#CLIP x,y,w,h`，就只保留落在这块矩形里的节点。
+
+    窗口内的浮层（分支弹层这类）没有自己的无障碍子树，只能从整窗树里按矩形切出来。
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
     nodes: list[Node] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    clip: tuple[float, float, float, float] | None = None
+    for line in text.splitlines():
         # 导出里带分段标题和箭头前缀：`Element subtree:`、`→Application`、`↳Window`。
         stripped = line.strip().lstrip("→↳ ").strip()
+        match = CLIP_RE.match(stripped)
+        if match:
+            clip = tuple(float(group) for group in match.groups())  # type: ignore[assignment]
+            continue
         if stripped.startswith(("Attributes:", "Element subtree:")):
             # 段首的 Attributes 行只是根节点的副本，跳过避免重复计数。
             continue
@@ -206,7 +219,17 @@ def parse_tree(path: Path) -> list[Node]:
         for node in nodes:
             node.x -= dx
             node.y -= dy
-    return nodes
+
+    if clip is not None:
+        clip_x, clip_y, clip_w, clip_h = clip
+        nodes = [
+            node for node in nodes
+            if node.role != "window"
+            and node.x >= clip_x - 2 and node.y >= clip_y - 2
+            and node.x + node.w <= clip_x + clip_w + 2
+            and node.y + node.h <= clip_y + clip_h + 2
+        ]
+    return nodes, clip
 
 
 def canvas(nodes: list[Node]) -> tuple[float, float]:
@@ -561,8 +584,8 @@ def main() -> int:
             exit_code = 1
             continue
 
-        reference_nodes = parse_tree(reference_path)
-        replica_nodes = parse_tree(replica_path)
+        reference_nodes, reference_clip = parse_tree(reference_path)
+        replica_nodes, replica_clip = parse_tree(replica_path)
         pairing = pair(comparable(reference_nodes), comparable(replica_nodes))
         rows = build_rows(pairing, args.move_threshold)
 
@@ -587,11 +610,13 @@ def main() -> int:
 
         counts = {kind: sum(1 for row in rows if row.kind == kind) for kind in KINDS}
         coverage = len(pairing.matched) / max(len(comparable(reference_nodes)), 1) * 100
-        left_canvas, right_canvas = canvas(reference_nodes), canvas(replica_nodes)
+        # 裁剪导出没有 window 节点，画布尺寸就用裁剪矩形本身，否则会误报「画布不一样大」。
+        left_canvas = reference_clip[2:] if reference_clip else canvas(reference_nodes)
+        right_canvas = replica_clip[2:] if replica_clip else canvas(replica_nodes)
         if max(abs(left_canvas[0] - right_canvas[0]), abs(left_canvas[1] - right_canvas[1])) > 2:
             print(f"  注意：两侧画布不一样大（参考 {left_canvas[0]:.0f}×{left_canvas[1]:.0f} vs "
                   f"Arbor {right_canvas[0]:.0f}×{right_canvas[1]:.0f} pt）。"
-                  f"右侧的「位置不一致」要先排除这个原因：窗口被屏幕宽度限住了。")
+                  f"两者的「位置不一致」要先按尺寸差解释，别直接当成缺陷。")
         print(f"\n{surface}: 参考 {len(comparable(reference_nodes))} 个具名节点，"
               f"配对上 {len(pairing.matched)} 个（{coverage:.0f}%）")
         for kind, title in KINDS.items():

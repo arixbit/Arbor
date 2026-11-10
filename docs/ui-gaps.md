@@ -21,12 +21,26 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 | --- | --- | --- | --- |
 | out-of-scope | Enable Git Log Indexing | commit, log | IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。 |
 | naming | Project: visual-fixture, menu | commit, log | Arbor 顶栏的项目控件也是 Menu（menubutton），只是 label 直接显示项目名，参考拼成「Project: 名字, menu」。 |
-| design-difference | main, menu | commit, log | Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。交互模型不同，docs/visual-baseline.md 记过。 |
+| naming | beta | branches | 同上：参考的分支树把 "bugfix/beta" 拆成父目录和叶子两行。 |
+| naming | bugfix | branches | 参考把分支名按目录拆成两段显示（bugfix / beta），Arbor 显示完整分支名，比对时各自成一条。 |
+| design-difference | main, menu | commit, log | Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。弹层里带搜索/对比/标签/贮藏/工作树，换成 Menu 装不下，所以保留 popover；已补 ⌄ 下拉提示和 accessibilityHint，让辅助技术知道它打开的是一个列表。 |
 
 ## 附录：源码里有，只是叫法或入口位置不同
 
 这些不是缺口。要压掉对账噪声，把它们写进 `scripts/parity-aliases.tsv`。
 
+- `branches` statictext `Checkout Tag or Revision…` → `Arbor/Dialogs/Dialogs+BranchActions.swift`
+- `branches` statictext `Commit…` → `Arbor/LogGraphView.swift`
+- `branches` button `Fetch` → `Arbor/PullDialogView.swift`
+- `branches` statictext `Local` → `Arbor/AboutView.swift`
+- `branches` statictext `New Branch…` → `Arbor/LogGraphView.swift`
+- `branches` statictext `Recent` → `Arbor/ArborApp.swift`
+- `branches` textfield `Search` → `Arbor/FileReferenceComparisonView.swift`
+- `branches` button `Settings` → `Arbor/ArborApp.swift`
+- `branches` statictext `Tags` → `Arbor/LogGraphView.swift`
+- `branches` statictext `alpha` → `Arbor/GitHubOAuthFlow.swift`
+- `branches` statictext `feature` → `Arbor/Dialogs/Dialogs+Rebase.swift`
+- `branches` statictext `main` → `Arbor/AboutView.swift`
 - `commit` menu `Branch:` → `Arbor/PullDialogView.swift`
 - `commit` button `Cherry-Pick` → `Arbor/LogGraphView.swift`
 - `commit` button `Collapse All` → `Arbor/Panels/Panels+Core.swift`

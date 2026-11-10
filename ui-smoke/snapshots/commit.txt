@@ -2,13 +2,13 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	321,16 10×10
-      button	Push	355,16 10×10
-      button	main	388,14 67×16
+      button	Update	326,16 10×10
+      button	Push	360,16 10×10
+      button	main	394,14 67×16
       button	Search	1516,14 14×15
       menubutton	More Git Actions	1549,14 35×16
       menubutton	Settings	1594,12 37×18
-      button	Commit	3,47 34×34 [Selected]
+      button	Commit	3,47 34×34
       button	Move	12,108 17×14
       menubutton	More	2,139 35×16
       button	Log	12,906 16×16
@@ -122,7 +122,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
                     statictext	—	942,124 66×15
                     statictext	—	1014,124 97×16
                     statictext	—	1196,124 110×16
-                    button	Select commit <hash>	<varies> [Selected]
+                    button	Select commit <hash>	<varies>
                     statictext	—	684,150 110×16
                     image	Tag	916,152 12×12
                     statictext	—	932,150 76×15
@@ -185,7 +185,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
       statictext	—	86,996 33×13
       button	Operation Log	134,996 90×13
       statictext	—	238,996 51×13
-      image	Selected	319,997 10×10 [Selected]
+      image	Selected	319,997 10×10
       statictext	—	336,996 74×13
       statictext	—	884,996 686×13
       statictext	—	1584,996 44×13

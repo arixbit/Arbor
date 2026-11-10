@@ -46,6 +46,10 @@ GEOMETRY_TOLERANCE = 8.0
 
 VARIES = "<varies>"
 
+# 窗口内的浮层（分支弹层这类）没有独立的无障碍子树，导出时首行带一个裁剪矩形：
+# `#CLIP x,y,w,h`。只保留落在这块区域里的节点，基线才只包含浮层本身。
+CLIP_RE = re.compile(r"^#CLIP (\d+),(\d+),(\d+),(\d+)$")
+
 
 def normalize_name(name: str) -> tuple[str, bool]:
     """返回（规范化后的名字，这个名字里是否含「每次都变的内容」）。
@@ -71,8 +75,13 @@ def normalize_name(name: str) -> tuple[str, bool]:
 def parse_tree(path: Path) -> tuple[list[dict], tuple[float, float]]:
     """把 XCUITest 的树导出读成节点列表，坐标归一化到窗口原点。"""
     nodes: list[dict] = []
+    clip: tuple[float, float, float, float] | None = None
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         stripped = line.strip().lstrip("→↳ ").strip()
+        clip_match = CLIP_RE.match(stripped)
+        if clip_match:
+            clip = tuple(float(group) for group in clip_match.groups())  # type: ignore[assignment]
+            continue
         if stripped.startswith(("Attributes:", "Element subtree:")):
             continue
         frame = FRAME_RE.search(stripped)
@@ -98,7 +107,11 @@ def parse_tree(path: Path) -> tuple[list[dict], tuple[float, float]]:
             "name": name,
             "volatile": volatile,
             "x": x, "y": y, "w": w, "h": h,
-            "flags": tuple(sorted(set(FLAG_RE.findall(remainder)))),
+            # Selected 是焦点/选中态，取决于打开时机和点击顺序，不是布局的
+            # 一部分；放进基线会让闸门随机红（实测弹层里每行都在抖）。
+            "flags": tuple(
+                sorted(flag for flag in set(FLAG_RE.findall(remainder)) if flag != "Selected")
+            ),
         })
 
     # popover/sheet 这类界面是从整棵树里剪出来的，不一定带 window 行；没有窗口就
@@ -110,6 +123,19 @@ def parse_tree(path: Path) -> tuple[list[dict], tuple[float, float]]:
     for node in nodes:
         node["x"] -= origin_x
         node["y"] -= origin_y
+
+    if clip is not None:
+        clip_x, clip_y, clip_w, clip_h = clip
+        nodes = [
+            node for node in nodes
+            if node["role"] != "window"
+            and node["x"] >= clip_x - 2 and node["y"] >= clip_y - 2
+            and node["x"] + node["w"] <= clip_x + clip_w + 2
+            and node["y"] + node["h"] <= clip_y + clip_h + 2
+        ]
+        size = (clip_w, clip_h)
+
+    for node in nodes:
         node["box"] = VARIES if node["volatile"] else (
             f"{node['x']:.0f},{node['y']:.0f} {node['w']:.0f}×{node['h']:.0f}")
     return nodes, size
@@ -173,12 +199,19 @@ def main() -> int:
     parser.add_argument("--update", action="store_true", help="用当前界面重写基线")
     parser.add_argument("--tolerance", type=float, default=GEOMETRY_TOLERANCE,
                         help=f"几何差多少 pt 以上算漂移（默认 {GEOMETRY_TOLERANCE:.0f}）")
+    parser.add_argument("--skip", default="",
+                        help="逗号分隔的界面名，跳过不进基线（结构不稳定、还没法比的那些）")
     parser.add_argument("--report", action="store_true",
                         help="只报告不失败。CI 首跑用它观察噪声，稳定后再改成严格模式")
     args = parser.parse_args()
 
     tree_dir, baseline_dir = Path(args.tree), Path(args.baseline)
-    surfaces = sorted(path.name[len("arbor-"):-len(".txt")] for path in tree_dir.glob("arbor-*.txt"))
+    skip = {name.strip() for name in args.skip.split(",") if name.strip()}
+    surfaces = [
+        path.name[len("arbor-"):-len(".txt")]
+        for path in sorted(tree_dir.glob("arbor-*.txt"))
+        if path.name[len("arbor-"):-len(".txt")] not in skip
+    ]
     if not surfaces:
         print(f"{tree_dir} 里没有 arbor-*.txt，先跑 ./scripts/ui-snapshot.sh", file=sys.stderr)
         return 2

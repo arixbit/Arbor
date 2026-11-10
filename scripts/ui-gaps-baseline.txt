@@ -12,3 +12,5 @@
 design-difference	main, menu	Arbor 的顶栏分支控件是 popover（branches-popover），参考是菜单。弹层里带搜索/对比/标签/贮藏/工作树，换成 Menu 装不下，所以保留 popover；已补 ⌄ 下拉提示和 accessibilityHint，让辅助技术知道它打开的是一个列表。
 naming	project: visual-fixture, menu	Arbor 顶栏的项目控件也是 Menu（menubutton），只是 label 直接显示项目名，参考拼成「Project: 名字, menu」。
 out-of-scope	enable git log indexing	IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。
+naming	bugfix	参考把分支名按目录拆成两段显示（bugfix / beta），Arbor 显示完整分支名，比对时各自成一条。
+naming	beta	同上：参考的分支树把 "bugfix/beta" 拆成父目录和叶子两行。
