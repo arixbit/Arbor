@@ -674,6 +674,75 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// 深色模式从来没被验证过：所有基线截图都是浅色采集的。这条检查两件事——
+    /// 深色模式下窗口确实是暗的，而且和浅色模式明显不同。自定义绘制的地方
+    /// （分隔线、背景、列表行）最容易忽略外观变化，肉眼看不出、测试能看出。
+    @MainActor
+    func testDarkModeRendersDark() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        func meanLuma(appearance: String) throws -> Double {
+            let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+            var arguments = [
+                "-arbor.toolWindowExpanded", "YES",
+                "-arbor.projectPanelExpanded.v3", "YES",
+                "-arbor.toolWindowMode", "commit",
+            ]
+            arguments += ["-arbor.appearance", appearance]
+            session.extraLaunchArguments = arguments
+            session.launch()
+            defer { session.terminate() }
+            let image = session.window.screenshot().image
+            guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                throw XCTSkip("the screenshot has no bitmap")
+            }
+            return Self.averageLuminance(of: cgImage)
+        }
+
+        let light = try meanLuma(appearance: "light")
+        let dark = try meanLuma(appearance: "dark")
+
+        XCTAssertLessThan(dark, 90, "the dark appearance is not dark (mean luminance \(Int(dark)))")
+        XCTAssertGreaterThan(
+            light - dark, 60,
+            "dark and light render too similarly (\(Int(light)) vs \(Int(dark))): "
+                + "custom-drawn surfaces may be ignoring the appearance"
+        )
+    }
+
+    /// 每 8 个像素采一个点，足够判断整体明暗。
+    static func averageLuminance(of image: CGImage) -> Double {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = pixels.withUnsafeMutableBytes({ buffer in
+            CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        }) else { return 0 }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var total = 0.0
+        var count = 0.0
+        for y in stride(from: 0, to: height, by: 8) {
+            for x in stride(from: 0, to: width, by: 8) {
+                let offset = (y * width + x) * 4
+                let r = Double(pixels[offset])
+                let g = Double(pixels[offset + 1])
+                let b = Double(pixels[offset + 2])
+                total += 0.2126 * r + 0.7152 * g + 0.0722 * b
+                count += 1
+            }
+        }
+        return count > 0 ? total / count : 0
+    }
+
     @MainActor
     private func resize(_ window: XCUIElement, to requested: CGSize, label: String) {
         // Never ask for more than the display can host: macOS clamps silently.

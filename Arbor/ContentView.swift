@@ -127,6 +127,9 @@ struct ContentView: View {
     // The reference window shows the Project tool window below the Commit /
     // Stash tool window (see docs/visual-baseline.md), so it starts expanded.
     // The versioned key lets the new default reach existing installations.
+    // 外观覆盖：默认跟随系统。截图和视觉基线需要确定的浅色/深色，
+    // 传 -arbor.appearance light|dark 就能固定，不再依赖采集时的系统设置。
+    @AppStorage("arbor.appearance") var appearanceOverride = ""
     @AppStorage("arbor.projectPanelExpanded.v3") var projectPanelExpanded = true
     // With both tool windows expanded the Commit surface takes the upper half,
     // matching the reference split; the divider stays draggable.
@@ -295,8 +298,17 @@ struct ContentView: View {
         ))
     }
 
+    private var preferredAppearance: ColorScheme? {
+        switch appearanceOverride {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
+
     var body: some View {
         workspacePresentedView
+            .preferredColorScheme(preferredAppearance)
             .background {
                 ArborWindowCommandContextView(
                     action: vcsActionContext,

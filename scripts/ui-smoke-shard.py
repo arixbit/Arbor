@@ -31,7 +31,7 @@ from pathlib import Path
 # changes shape; a stale weight only costs a little balance, never coverage.
 WEIGHTS = {
     "ArborUIUserFlowUITests": 557,
-    "ArborUIVisualCaptureUITests": 401,
+    "ArborUIVisualCaptureUITests": 421,
     "ArborUISmokeUITests": 410,
     "ArborUISmokeContractUITests": 50,
     "ArborUISmokeProjectTreeUITests": 53,
