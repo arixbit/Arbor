@@ -14,3 +14,10 @@ naming	project: visual-fixture, menu	Arbor 顶栏的项目控件也是 Menu（me
 out-of-scope	enable git log indexing	IntelliJ 的日志索引是 IDE 侧能力，Arbor 用 git log 直接读。
 naming	bugfix	参考把分支名按目录拆成两段显示（bugfix / beta），Arbor 显示完整分支名，比对时各自成一条。
 naming	beta	同上：参考的分支树把 "bugfix/beta" 拆成父目录和叶子两行。
+naming	commit	参考把工具窗标签报成 statictext，Arbor 是 button；且标签在裁剪区之外（面板从标签下方开始）。
+naming	stash	同上：参考的 Stash 标签在面板外，Arbor 的标签是 button。
+naming	options	工具窗标题栏的 ⋮ 菜单，在裁剪区之外；Arbor 的工具窗标题栏结构不同。
+naming	hide	工具窗标题栏的隐藏按钮，同上。
+naming	stashes	参考是一个 outline 容器（label: 'Stashes'），Arbor 是可折叠的分组按钮 "Stashes, 1"，两者语义相同。
+design-difference	group by	参考按维度分组贮藏；Arbor 的贮藏列表是平的，没有可分组维度，不复刻。
+naming	changes	两边都有：参考是 outline，Arbor 是带文件行的分组（group + 文本行），名字相同、角色不同。

@@ -95,3 +95,8 @@ python3 scripts/ui-triage.py --write-doc docs/ui-gaps.md`
 - `log` menu `User:` → `Arbor/BitbucketClient.swift`
 - `log` button `View Options` → `Arbor/Panels/Panels+Commit.swift`
 - `log` link `last commit` → `Arbor/ProjectFileTreeView.swift`
+- `stash` statictext `Commit` → `Arbor/PullDialogView.swift`
+- `stash` button `Group By` → `Arbor/Panels/Panels+Commit.swift`
+- `stash` button `Hide` → `Arbor/HostingProvider.swift`
+- `stash` button `Options` → `Arbor/PullDialogView.swift`
+- `stash` statictext `Stash` → `Arbor/ResizableWorkspacePanels.swift`
