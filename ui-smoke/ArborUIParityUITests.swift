@@ -168,8 +168,15 @@ final class ArborUIParityUITests: XCTestCase {
             XCTAssertTrue(stashTab.waitForExistence(timeout: 10), "the commit panel has no Stash tab")
             stashTab.click()
             Thread.sleep(forTimeInterval: 1.0)
-            // 导出的范围是左侧列表的可视区；Stashes 分组收起时里面只有标题行，
-            // 展开状态由用户的偏好决定。这一点先如实记录，不在测试里替用户改状态。
+            // 展开 Stashes、选中那条 fixture 贮藏：行是 Button 了，可以直接点；
+            // 选中后会加载「Changes」清单，参考的 Stash 工具窗也是选中后才列文件。
+            // 分组默认是展开的，点标题反而会把它收起来。
+            let stashRow = session.window.buttons
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "stash-row-")).firstMatch
+            if stashRow.waitForExistence(timeout: 5) {
+                stashRow.click()
+                Thread.sleep(forTimeInterval: 1.5)
+            }
             let origin = session.window.frame.origin
             let panel = session.app.descendants(matching: .any)["stash-panel"].firstMatch
             XCTAssertTrue(panel.waitForExistence(timeout: 10), "the stash panel has no container identity")

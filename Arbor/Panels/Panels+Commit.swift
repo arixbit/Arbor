@@ -185,6 +185,9 @@ struct RebasedCommitWorkspace: View {
     @State var selectedDeletedShelfIDs: Set<String> = []
     @State var selectedDeletedShelfMemberIDs: Set<String> = []
     @State var selectedStashID: String?
+    /// 选中贮藏后它包含的文件（由引擎的 stash_files 给出，不在前端解析补丁）。
+    @State var stashChangeFiles: [String] = []
+    @State var stashChangeFilesOwner: String?
     @State var pendingUnshelve: ShelfUnshelveRequest?
     @State var pendingUnshelveShelves: ShelfBatchUnshelveRequest?
     @State var pendingUnshelveMemberGroups: ShelfMemberBatchUnshelveRequest?
@@ -1230,6 +1233,9 @@ struct RebasedCommitWorkspace: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 stashSection
+                if !stashChangeFiles.isEmpty {
+                    stashChangesSection
+                }
                 shelfSection
             }
             .padding(12)
@@ -1265,16 +1271,28 @@ struct RebasedCommitWorkspace: View {
             } else if stashesExpanded {
                 ForEach(stashes, id: \.id) { stash in
                     HStack(spacing: 7) {
-                        Image(systemName: "tray.full")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(stash.message.isEmpty ? "WIP" : stash.message)
-                                .lineLimit(1)
-                            Text(stash.shortId)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                        // 行本身必须是 Button：原来整行是 HStack + onTapGesture，
+                        // 无障碍树里没有可点的身份——辅助技术读不到、参考对账也点不到。
+                        Button {
+                            selectStashForPreview(stash)
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "tray.full")
+                                    .foregroundStyle(.orange)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(stash.message.isEmpty ? "WIP" : stash.message)
+                                        .lineLimit(1)
+                                    Text(stash.shortId)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 4)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer(minLength: 4)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("stash-row-\(stash.shortId)")
+                        .accessibilityLabel(stash.message.isEmpty ? "WIP \(stash.shortId)" : stash.message)
                         Menu {
                             Button("Apply (Keep)") { onApplyStash(stash.id, false) }
                             Button("Apply + Restore Index (Keep)") { onApplyStash(stash.id, true) }
@@ -1301,12 +1319,6 @@ struct RebasedCommitWorkspace: View {
                         in: RoundedRectangle(cornerRadius: 5)
                     )
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedStashID = stash.id
-                        if stashSplitPreviewEnabled {
-                            onStashDiffPreview(stash.id)
-                        }
-                    }
                 }
                 // 参考实现把「应用 / 弹出」做成面板底部常驻按钮：选中一行、点一下，
                 // 两步完成。Arbor 原来只把它们藏在每行的菜单里，同样一件事要先知道
@@ -1361,6 +1373,57 @@ struct RebasedCommitWorkspace: View {
     func popSelectedStash(restoreIndex: Bool) {
         guard let stash = selectedStashForActions else { return }
         onPopStash(stash.id, restoreIndex)
+    }
+
+    /// 选中一条贮藏：更新选择、按需打开预览，并把它的文件清单取回来。
+    ///
+    /// 文件清单由引擎给（`stash_files`），不在前端解析补丁文本——rename、binary
+    /// 和带空格的路径都会让解析出错。
+    func selectStashForPreview(_ stash: StashInfo) {
+        selectedStashID = stash.id
+        if stashSplitPreviewEnabled {
+            onStashDiffPreview(stash.id)
+        }
+        loadStashChangeFiles(stash)
+    }
+
+    func loadStashChangeFiles(_ stash: StashInfo) {
+        guard let repo, let index = stashIndex(forID: stash.id, in: stashes) else {
+            stashChangeFiles = []
+            stashChangeFilesOwner = nil
+            return
+        }
+        stashChangeFilesOwner = stash.id
+        Task.detached(priority: .userInitiated) {
+            let files = (try? repo.stashFiles(index: UInt32(index))) ?? []
+            await MainActor.run {
+                guard stashChangeFilesOwner == stash.id else { return }
+                stashChangeFiles = files
+            }
+        }
+    }
+
+    /// 参考的 Stash 工具窗在选中一条贮藏后会列出它包含的文件。Arbor 原来只有
+    /// 预览面板，用户得先打开 diff 才知道里面动了什么。
+    var stashChangesSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Changes")
+                .font(Design.Typography.interface(13, weight: .semibold))
+            ForEach(stashChangeFiles, id: \.self) { path in
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Text(path)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 22)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("stash-changes")
     }
 
     func toggleShelfExpansion(_ id: String) {

@@ -69,9 +69,10 @@ if ! ls "$OUT_DIR"/tree/arbor-*.txt >/dev/null 2>&1; then
   exit 2
 fi
 
-# 分支弹层暂时不进基线：它的无障碍树深度在两次导出间会变（浮层里的行由 SwiftUI
-# 动态构建，层级不稳），拿它做基线只会随机红。参考对账那边仍然会导出它。
-SNAPSHOT_ARGS=(--tree "$OUT_DIR/tree" --baseline "$BASELINE_DIR" --skip branches)
+# 分支弹层和贮藏面板暂时不进基线：前者是窗口内浮层（层级不稳），后者的内容要等
+# 异步加载的「Changes」清单，两次导出的节点数会差一截。拿它们做基线只会随机红。
+# 参考对账那边两者仍然会导出（它比的是名字和相对位置，对时序不敏感）。
+SNAPSHOT_ARGS=(--tree "$OUT_DIR/tree" --baseline "$BASELINE_DIR" --skip branches,stash)
 [[ "$UPDATE" == true ]] && SNAPSHOT_ARGS+=(--update)
 [[ "$REPORT" == true ]] && SNAPSHOT_ARGS+=(--report)
 python3 "$ROOT_DIR/scripts/ui-snapshot.py" "${SNAPSHOT_ARGS[@]}"
