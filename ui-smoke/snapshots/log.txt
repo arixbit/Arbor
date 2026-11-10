@@ -2,9 +2,9 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	326,16 10×10
-      button	Push	360,16 10×10
-      button	main	394,14 67×16
+      button	Update	325,16 10×10
+      button	Push	359,16 10×10
+      button	main	392,14 67×16
       button	Search	1516,14 14×15
       menubutton	More Git Actions	1549,14 35×16
       menubutton	Settings	1594,12 37×18
@@ -56,7 +56,7 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
               menubutton	More	708,53 35×16
               group	—	638,83 667×28
                 scrollview	—	638,83 607×28 [Disabled]
-                  textfield	Text or hash	647,88 163×18
+                  textfield	Filter commits	647,88 163×18
                   button	Regex	825,85 26×24
                   button	Match Case	857,85 26×24
                   menubutton	Branch	915,88 64×18
