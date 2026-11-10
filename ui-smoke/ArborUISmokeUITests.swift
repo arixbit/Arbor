@@ -95,19 +95,33 @@ final class ArborUISmokeUITests: XCTestCase {
         defer { session.terminate() }
         XCTAssertTrue(session.openBranchesPopover(), "the branches popover did not open with 150 extra branches")
 
-        // 这个弹层的列表不是虚拟化的：150 个分支全部进无障碍树，只是大部分在可视区
-        // 之外（坐标一直排到 4400 pt）。所以可以用「靠后的行在树里」证明列表装下了
-        // 全部 150 个，而不是只渲染了前几行。虚拟化是已知的技术债，见
-        // Dialogs+BranchesPopover.swift 里的说明。
-        let farRow = session.app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label ENDSWITH %@", "scale-branch-021")).firstMatch
-        XCTAssertTrue(farRow.waitForExistence(timeout: 10),
-                      "the list did not contain all 150 branches")
+        // 列表是 LazyVStack：只有可视区内的行会被实例化。用 VStack 时 150 个分支
+        // 会全部进无障碍树（坐标一直排到 4400 pt），打开弹层明显变慢，辅助技术也要
+        // 遍历整棵树。这里直接数树里的分支行来证明它确实是懒加载的。
+        let rendered = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "scale-branch-")).count
+        XCTAssertLessThan(
+            rendered, 150,
+            "\(rendered) branch rows were instantiated: the list is not lazy"
+        )
 
-        // 搜索框在本套件里无法可靠驱动：点击它有时会把窗口内浮层收起（浮层靠点击
-        // 外部关闭，点击像是落在了背景关闭手势上）。带 5 个分支时同样复现，所以
-        // 不是规模问题，也不是搜索逻辑的问题——是浮层的命中/关闭时机。这里只锁住
-        // 「150 个分支能完整装下」，搜索行为单独一轮查。
+        // 懒加载不等于能用：滚到底要能看到最后一个分支。
+        let list = session.app.descendants(matching: .any)["branch-reference-list"].firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let lastQuery = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH %@", "scale-branch-150"))
+        // 滚动方向在 XCUITest 里取决于内容坐标系，两个方向都试，够远就行。
+        for delta in [-300.0, 300.0] {
+            for _ in 0..<20 {
+                if lastQuery.firstMatch.exists { break }
+                list.scroll(byDeltaX: 0, deltaY: delta)
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+            if lastQuery.firstMatch.exists { break }
+        }
+        let lastRow = session.app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH %@", "scale-branch-150")).firstMatch
+        XCTAssertTrue(lastRow.exists, "scrolling to the end did not reach the last branch")
         session.recordScreenshot(named: "branches-popover-many")
     }
 
