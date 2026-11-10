@@ -304,3 +304,25 @@ fn stash_pop_conflict_keeps_stash_and_marks_worktree() {
     assert_eq!(repo.stash_list().unwrap().len(), 1);
     assert!(r.read("a.txt").contains("<<<<<<<"));
 }
+
+/// stash_files 要给出这条贮藏改动过的文件，包含未跟踪的、不含其它。
+#[test]
+fn stash_files_lists_changed_paths() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "tracked.txt", "v1", "init");
+
+    r.write("tracked.txt", "v2");
+    r.write("added.txt", "new file");
+    let repo = r.open();
+
+    repo.stash_save_including_untracked(Some("files".into()))
+        .unwrap();
+
+    let files = repo.stash_files(0).unwrap();
+    let mut sorted = files.clone();
+    sorted.sort();
+    assert_eq!(
+        sorted,
+        vec!["added.txt".to_string(), "tracked.txt".to_string()]
+    );
+}

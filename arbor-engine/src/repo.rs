@@ -14204,6 +14204,44 @@ impl Repository {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
+    /// 返回这条 stash 改动过的文件路径。
+    ///
+    /// 界面要列「这条贮藏里有哪些文件」。解析补丁文本能凑出来，但 rename、binary
+    /// 和带空格/引号的路径都会让它出错；直接问 git 更可靠，也不需要前端维护正则。
+    pub fn stash_files(&self, index: u32) -> Result<Vec<String>, EngineError> {
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "stash files requires a non-bare worktree".into(),
+        })?;
+        let stash = format!("stash@{{{index}}}");
+        let output = crate::gitprocess::git_command_for_working_dir(workdir)
+            .args([
+                "stash",
+                "show",
+                "--name-only",
+                "--include-untracked",
+                "--format=",
+                &stash,
+            ])
+            .current_dir(workdir)
+            .output()
+            .map_err(EngineError::from_gix)?;
+        if !output.status.success() {
+            return Err(EngineError::GitOperation {
+                message: format!(
+                    "git stash show --name-only failed: {}",
+                    command_output_message(&output)
+                ),
+            });
+        }
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
     /// 返回 stash 中单个文件的结构化 diff。
     ///
     /// Arbor 自己创建的 stash 把 untracked 文件放进工作树提交；系统 Git
