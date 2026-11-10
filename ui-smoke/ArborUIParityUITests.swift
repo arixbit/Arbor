@@ -171,17 +171,14 @@ final class ArborUIParityUITests: XCTestCase {
             // 导出的范围是左侧列表的可视区；Stashes 分组收起时里面只有标题行，
             // 展开状态由用户的偏好决定。这一点先如实记录，不在测试里替用户改状态。
             let origin = session.window.frame.origin
-            let candidates = session.window.scrollViews.allElementsBoundByIndex.filter {
-                $0.frame.minX < origin.x + 700 && $0.frame.height > 150
-            }
-            let list = candidates.first
-            XCTAssertNotNil(list, "no left-column scroll view after switching to Stash")
-            if let list {
+            let panel = session.app.descendants(matching: .any)["stash-panel"].firstMatch
+            XCTAssertTrue(panel.waitForExistence(timeout: 10), "the stash panel has no container identity")
+            if true {
                 let clip = CGRect(
-                    x: list.frame.minX - origin.x,
-                    y: list.frame.minY - origin.y,
-                    width: list.frame.width,
-                    height: list.frame.height
+                    x: panel.frame.minX - origin.x,
+                    y: panel.frame.minY - origin.y,
+                    width: panel.frame.width,
+                    height: panel.frame.height
                 )
                 try dumpClipped(session.window.debugDescription, clip: clip, named: "arbor-stash")
             }

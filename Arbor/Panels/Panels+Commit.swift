@@ -1180,7 +1180,53 @@ struct RebasedCommitWorkspace: View {
             ?? deletedShelves.first(where: { $0.name == name })?.id
     }
 
+    /// 参考的 Stash 工具窗顶部有一条常驻工具栏（Show Diff / Group By / Expand All /
+    /// Collapse All）。Arbor 原来只有分组标题，这些动作散在行菜单里或根本没有。
+    /// Group By 暂不做：Arbor 的贮藏列表是平的，没有可分组维度。
+    var stashToolbar: some View {
+        HStack(spacing: 6) {
+            compactButton("rectangle.on.rectangle", help: "Show Diff") {
+                guard let stash = selectedStashForActions else { return }
+                onStashDiffPreview(stash.id)
+            }
+            .disabled(selectedStashForActions == nil)
+            .accessibilityIdentifier("stash-show-diff")
+            compactButton("chevron.down", help: "Expand All", action: expandAllStashGroups)
+            compactButton("chevron.up", help: "Collapse All", action: collapseAllStashGroups)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(height: 32)
+    }
+
+    func expandAllStashGroups() {
+        stashesExpanded = true
+        shelvesExpanded = true
+        deletedShelvesExpanded = true
+        expandedShelfIDs = Set(shelves.map(\.id))
+    }
+
+    func collapseAllStashGroups() {
+        stashesExpanded = false
+        shelvesExpanded = false
+        deletedShelvesExpanded = false
+        expandedShelfIDs = []
+    }
+
     var stashList: some View {
+        VStack(spacing: 0) {
+            stashToolbar
+            Divider()
+            stashScrollList
+        }
+        // 容器标识：参考对账需要按整块面板裁剪（工具栏 + 列表），没有标识就只能
+        // 按列表的滚动区裁，工具栏会被切在外面。
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("stash-panel")
+    }
+
+    var stashScrollList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 stashSection
