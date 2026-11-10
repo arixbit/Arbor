@@ -240,6 +240,12 @@ struct RebasedBranchesPopover: View {
             .padding(.bottom, 6)
 
             ScrollView {
+                // 这里试过改用 LazyVStack 虚拟化（150 个分支全部实例化会让无障碍树
+                // 排到 4400 pt）。实测：换成 LazyVStack 后，筛选把列表收窄时弹层会被
+                // 关掉——这个弹层是画在窗口内的自定义浮层，会跟随内容尺寸重排，
+                // 尺寸骤变触发了关闭。虚拟化要和浮层的定位/关闭逻辑一起改，
+                // 单独一轮做。另外弹层里的搜索框在本套件下点击也会偶发关闭，
+                // 同一类命中问题。
                 VStack(alignment: .leading, spacing: 2) {
                     if !filteredOperationActionTargets.isEmpty {
                         Text("ONGOING OPERATIONS")
