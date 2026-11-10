@@ -64,6 +64,9 @@ EXCLUDED_ROLES = {
 # 名字里这些尾巴是装饰或快捷键提示，跨 App 一定不一样。
 # 参考把过滤控件叫成「Branch:」，Arbor 叫「Branch」；尾随冒号不是语义。
 TRAILING_NOISE = re.compile(r"\s*(?:\.{2,}|…|\(\s*[⌘⌥⌃⇧A-Za-z0-9+↩␣]+\s*\)|:)\s*$")
+# Arbor 的分支行会在名字后面挂同步徽标（"beta, ↑1 ↓0"），参考那边不挂。这不是
+# 名字差异，去掉才能把两边的同一个分支配上。
+SYNC_BADGE = re.compile(r"(?:,\s*)?(?:↑\d+|↓\d+|↑\?|↓\?)(?:\s*(?:↑\d+|↓\d+|↑\?|↓\?))*\s*$")
 
 
 @dataclass
@@ -151,8 +154,8 @@ def load_reference_tables(directory: Path) -> None:
 
 
 def normalize(name: str) -> str:
-    """跨 App 比较用：去掉省略号、快捷键提示、大小写与多余空白。"""
-    text = name.strip()
+    """跨 App 比较用：去掉省略号、快捷键提示、同步徽标、大小写与多余空白。"""
+    text = SYNC_BADGE.sub("", name.strip()).strip()
     previous = None
     while previous != text:
         previous = text
