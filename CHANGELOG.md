@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.36 - 2026-11-10
+
+The Stash panel now carries the same always-visible actions as the reference
+workbench, and the branch list stays usable at scale.
+
+- The Stash panel keeps **Apply** and **Pop** on the panel instead of hiding
+  them inside each row's menu: select a stash, click once. Both stay disabled
+  without a selection, so what can be done is visible rather than memorised.
+- A panel toolbar offers **Show Diff**, **Expand All** and **Collapse All**.
+  Selecting a stash also lists the files it contains under **Changes**, so the
+  contents are visible without opening a diff first.
+- The branch chip ends with a chevron and announces itself as a list, matching
+  how the reference exposes its branch widget.
+- The branch list only instantiates the rows in view, so a repository with
+  hundreds of branches opens as fast as one with ten.
+- The Project tool window gains **Select Opened File in Changes View**, which
+  hands the selected project file to the changes list. It stays disabled for
+  files without changes.
+- New interface strings added for this release carry Simplified Chinese
+  translations.
+
 ## 1.0.35 - 2026-11-09
 
 The Project tool window can hand its selected file to the Changes view, and the
