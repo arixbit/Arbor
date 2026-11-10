@@ -223,6 +223,8 @@ struct RebasedBranchesPopover: View {
             TextField("Search branches", text: $query)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("branches-popover-search")
+                // 只有 placeholder，VoiceOver 读不出这个输入框是干什么的。
+                .accessibilityLabel("Search branches")
                 .padding(.bottom, 8)
                 .onSubmit { activateSelectedBranch() }
                 .onKeyPress(.downArrow, action: handleDownKeyPress)

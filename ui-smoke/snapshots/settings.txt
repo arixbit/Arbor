@@ -5,13 +5,13 @@ window	Arbor Settings	0,0 492×450 [Disabled]
         statictext	Language	46,68 62×16
         group	—	36,94 420×74
           statictext	—	46,104 132×16
-          popupbutton	—	354,100 94×26
+          popupbutton	Application Language	354,100 94×26
           statictext	—	46,143 326×15
         statictext	Git Executable	46,198 92×16
         group	—	36,224 420×126 [Keyboard Focused]
           statictext	—	46,236 312×13
           statictext	—	46,273 134×16
-          textfield	—	196,268 164×26 [Keyboard Focused]
+          textfield	Path to Git executable	196,268 164×26 [Keyboard Focused]
           button	Browse…	367,272 79×24
           button	Test Git executable	46,316 128×24
           button	Save Git executable	182,316 122×24
@@ -33,13 +33,13 @@ window	Arbor Settings	0,0 492×450 [Disabled]
           switch	—	409,750 38×18
           statictext	—	46,788 392×26
           statictext	—	46,835 140×16
-          popupbutton	—	210,830 237×26
+          popupbutton	After Commit and Push	210,830 237×26
           statictext	—	46,875 310×13
           statictext	—	46,911 348×26
         statictext	Local Changes Preservation	46,977 176×16
         group	—	36,1002 420×122
           statictext	—	46,1013 134×16
-          popupbutton	—	366,1008 80×26
+          popupbutton	Save local changes as	366,1008 80×26
           statictext	—	46,1052 308×13
           statictext	—	46,1088 378×26
         statictext	History Rewrite	46,1154 98×16
@@ -55,14 +55,14 @@ window	Arbor Settings	0,0 492×450 [Disabled]
         statictext	Cherry-pick	46,1459 76×16
         group	—	36,1485 420×134
           statictext	—	46,1495 151×16
-          popupbutton	—	249,1490 198×26
+          popupbutton	When the result is empty	249,1490 198×26
           statictext	—	46,1533 176×16
           switch	—	409,1532 38×18
           statictext	—	46,1571 393×39
         statictext	Merge	46,1650 40×16
         group	—	36,1676 420×132
           statictext	—	46,1686 172×16
-          popupbutton	—	235,1681 212×26
+          popupbutton	After merging a local branch	235,1681 212×26
           statictext	—	46,1724 369×26
           statictext	—	46,1771 368×26
         statictext	Git History Editing	46,1837 116×16
@@ -80,7 +80,7 @@ window	Arbor Settings	0,0 492×450 [Disabled]
           switch	—	409,2172 38×18
           statictext	—	46,2210 398×52
           statictext	—	46,2283 129×16
-          popupbutton	—	251,2278 196×26
+          popupbutton	Historical file content	251,2278 196×26
           statictext	—	46,2321 370×39
         statictext	Git Commit Hooks	46,2400 114×16
         group	—	36,2426 420×96
@@ -90,7 +90,7 @@ window	Arbor Settings	0,0 492×450 [Disabled]
         statictext	Git Branch Names	46,2553 114×16
         group	—	36,2578 420×83
           statictext	—	46,2589 97×16
-          textfield	—	150,2588 297×18
+          textfield	Cleanup symbol	150,2588 297×18
           statictext	—	46,2626 390×26
         statictext	Git Clone	46,2692 58×16
         group	—	36,2718 420×96
@@ -100,9 +100,9 @@ window	Arbor Settings	0,0 492×450 [Disabled]
         statictext	External Git File Changes	46,2844 158×16
         group	—	36,2870 420×136
           statictext	—	46,2880 120×16
-          popupbutton	—	274,2876 172×26
+          popupbutton	New untracked files	274,2876 172×26
           statictext	—	46,2918 126×16
-          popupbutton	—	274,2914 172×26
+          popupbutton	Deleted tracked files	274,2914 172×26
           statictext	—	46,2957 380×39
         statictext	Git Authentication	46,3036 114×16
         group	—	36,3062 420×84
@@ -114,7 +114,7 @@ window	Arbor Settings	0,0 492×450 [Disabled]
           statictext	—	46,3211 294×16
           switch	—	409,3210 38×18
           statictext	—	46,3249 150×16
-          popupbutton	—	216,3244 232×26
+          popupbutton	Incoming changes check	216,3244 232×26
           statictext	—	46,3287 399×26
         statictext	Git Update Project	46,3353 116×16
         group	—	36,3379 420×112

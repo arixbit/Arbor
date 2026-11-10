@@ -107,6 +107,53 @@ final class ArborUISmokeUITests: XCTestCase {
         )
     }
 
+    /// 弹层和面板里的控件也要有名字。这两块是动态内容（打开后才存在），
+    /// 所以单独一条测试，失败时能一眼看出是哪一块。
+    @MainActor
+    func testPopoverAndPanelControlsAreNamed() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        var offenders: [String] = []
+
+        func sweep(_ surface: String, in app: XCUIApplication) {
+            for type in [XCUIElement.ElementType.button, .menuButton, .checkBox, .textField, .popUpButton] {
+                for element in app.descendants(matching: type).allElementsBoundByIndex {
+                    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let title = element.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard label.isEmpty, title.isEmpty else { continue }
+                    if element.identifier.hasPrefix("_XCUI:") { continue }
+                    if element.frame.height < 8 || element.frame.width < 8 { continue }
+                    offenders.append("\(surface)/\(element.identifier.isEmpty ? "«no identifier»" : element.identifier)")
+                }
+            }
+        }
+
+        do {
+            let session = ArborUISession(fixture: fixture)
+            session.launch()
+            defer { session.terminate() }
+            XCTAssertTrue(session.openBranchesPopover(), "the branches popover did not open")
+            sweep("branches", in: session.app)
+        }
+
+        do {
+            let session = ArborUISession(fixture: fixture, toolWindow: "commit")
+            session.launch()
+            defer { session.terminate() }
+            let stashTab = session.window.buttons["Stash"].firstMatch
+            XCTAssertTrue(stashTab.waitForExistence(timeout: 10), "the commit panel has no Stash tab")
+            stashTab.click()
+            Thread.sleep(forTimeInterval: 1.0)
+            sweep("stash", in: session.app)
+        }
+
+        XCTAssertEqual(
+            offenders, [],
+            "controls without a name in popovers/panels: \(offenders.joined(separator: " | "))"
+        )
+    }
+
     @MainActor
     func testProjectTreeControlsReact() throws {
         try sweepScreen(named: "project-tree", toolWindow: "log") { session in
