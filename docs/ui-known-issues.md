@@ -24,10 +24,16 @@ field.typeText("feature")   // 之后 field.exists == false
 | app 失去焦点触发了「弹层随窗口失活关闭」 | 输入前 `app.activate()`，弹层先确认仍在，输入后仍旧关闭 |
 | 点击穿透到底下的「点外部关闭」手势 | 把背景的 `onTapGesture` 去掉后，弹层连打开都做不到了（那个手势同时参与了打开时的布局稳定判定），无法用 A/B 定论 |
 
-**怀疑方向**：这个弹层是画在窗口内的自定义浮层，位置来自「内容尺寸 → offset」的
-反馈回路（`branchPopupOffset` 读 `branchPopupContentSize`）。输入让列表收窄 → 尺寸
-变化 → offset 重算 → 可能触发了关闭逻辑或者让浮层移出命中区。要定位需要给每处
-`showPopover = false` 加带标签的日志，跑一次复现即可。
+**带标签日志的结论**：给 `ContentView+Branches.swift` 里全部 48 处
+`showPopover = false` 换成 `closeBranchPopup("<行号>")`，在 `ARBOR_BRANCH_POPUP_TRACE=1`
+下复现一次，统一日志里**一条都没有触发**。所以不是关闭逻辑把人关掉的——是浮层
+自己不再渲染了。
+
+这一层挂在 `.overlayPreferenceValue(BranchPopupAnchorKey.self)` 上，而 `showPopover`
+始终是 true。输入让列表收窄后浮层消失，最可能是 overlay preference 的锚点在这条
+路径上失效/被重建，而不是有人调用关闭。下一步该查
+`ContentView+Layout.swift` 的 `overlayPreferenceValue` 与 chip 上那个
+`BranchPopupAnchorKey` 的 GeometryReader 在输入期间是否重新求值。
 
 **影响**：如果用户在真机上遇到同一行为，分支搜索等于不可用——这是当前最明显的
 「不如参考实现」的地方（参考的菜单搜索是可用的）。
