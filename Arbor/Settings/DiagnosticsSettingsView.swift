@@ -99,6 +99,7 @@ struct DiagnosticsSettingsView: View {
                         Text(LocalizedStringKey(mode.title)).tag(mode.rawValue)
                     }
                 }
+            .accessibilityLabel("Historical file content")
                 Text("Controls Revision Browser content: raw blobs, checkout filters, or the path's textconv driver. Filters is the IntelliJ-compatible default; external conversion remains an explicit safety setting for other attribute-aware operations.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -116,6 +117,7 @@ struct DiagnosticsSettingsView: View {
 
             Section("Git Branch Names") {
                 TextField("Cleanup symbol", text: $gitBranchCleanupSymbol)
+                .accessibilityLabel("Cleanup symbol")
                 Text("When typing a new branch or Push target, invalid Git ref characters are removed and spaces/control characters are replaced with this symbol. The default is '-'.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -137,11 +139,13 @@ struct DiagnosticsSettingsView: View {
                         Text(action.title).tag(action.rawValue)
                     }
                 }
+            .accessibilityLabel("New untracked files")
                 Picker("Deleted tracked files", selection: $gitVFSRemoveActionRaw) {
                     ForEach(GitVFSListenerAction.allCases) { action in
                         Text(action.title).tag(action.rawValue)
                     }
                 }
+            .accessibilityLabel("Deleted tracked files")
                 Text("These policies apply when another process creates or deletes files in a Git worktree. Reliable paired renames route both endpoints through the same Add/Remove policy; ambiguous renames remain refresh-only for safety.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -170,6 +174,7 @@ struct DiagnosticsSettingsView: View {
                         Text(strategy.title).tag(strategy)
                     }
                 }
+            .accessibilityLabel("Incoming changes check")
                 .disabled(!incomingOutgoingInfoEnabled)
                 Text("LS_REMOTE checks configured upstreams without changing local refs; Auto-fetch checks every Git root every 20 minutes by default.")
                     .font(.caption)

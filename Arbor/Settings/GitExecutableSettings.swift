@@ -66,6 +66,7 @@ struct GitExecutableSettingsSection: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 TextField("Path to Git executable", text: $path)
+                .accessibilityLabel("Path to Git executable")
                     .textFieldStyle(.roundedBorder)
                 Button("Browse…", action: chooseExecutable)
             }

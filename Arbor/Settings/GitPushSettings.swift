@@ -210,6 +210,7 @@ struct GitPushSettingsSection: View {
                     Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
+            .accessibilityLabel("After Commit and Push")
             .pickerStyle(.menu)
             if let choice = GitPushAfterCommitPreviewChoice(rawValue: pushAfterCommitPreview) {
                 Text(LocalizedStringKey(choice.detail))

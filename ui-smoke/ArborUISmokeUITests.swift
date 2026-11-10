@@ -34,13 +34,13 @@ final class ArborUISmokeUITests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
 
         var offenders: [String] = []
-        // 设置窗口先不纳入：它有 11 个无名字控件（大多是表单里的 Picker/TextField，
-        // 视觉上靠相邻文本，AX 里没有名字），逐个定位是另一件事，见
-        // docs/ui-known-issues.md。
-        for surface in ["commit", "log"] {
-            let session = ArborUISession(fixture: fixture, toolWindow: surface)
+        for surface in ["commit", "log", "settings"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: "commit")
             session.launch()
             defer { session.terminate() }
+            if surface == "settings" {
+                XCTAssertTrue(session.openSettings(), "the application menu did not open Settings")
+            }
 
             let types: [XCUIElement.ElementType] = [
                 .button, .menuButton, .checkBox, .textField, .popUpButton, .radioButton,
@@ -76,14 +76,14 @@ final class ArborUISmokeUITests: XCTestCase {
             "fill", "badge", "bubble", "tray", "clock", "doc.", "line.",
         ]
         var symbolLeaks: [String] = []
-        // 设置窗口先不纳入：它有 11 个无名字控件（大多是表单里的 Picker/TextField，
-        // 视觉上靠相邻文本，AX 里没有名字），逐个定位是另一件事，见
-        // docs/ui-known-issues.md。
-        for surface in ["commit", "log"] {
-            let session = ArborUISession(fixture: fixture, toolWindow: surface)
+        for surface in ["commit", "log", "settings"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: "commit")
             session.launch()
             defer { session.terminate() }
-            for type in [XCUIElement.ElementType.button, .menuButton] {
+            if surface == "settings" {
+                XCTAssertTrue(session.openSettings(), "the application menu did not open Settings")
+            }
+            for type in [XCUIElement.ElementType.button, .menuButton, .popUpButton] {
                 for element in session.app.descendants(matching: type).allElementsBoundByIndex {
                     let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !label.contains(" "),

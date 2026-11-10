@@ -101,6 +101,7 @@ struct AppLanguageSettingsSection: View {
                     Text(language.displayName).tag(language.rawValue)
                 }
             }
+            .accessibilityLabel("Application Language")
 
             Text("Choose the language Arbor uses for menus and interface.")
                 .font(.callout)

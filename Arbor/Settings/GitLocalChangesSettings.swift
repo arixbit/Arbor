@@ -133,6 +133,7 @@ struct GitLocalChangesSavePolicySettingsSection: View {
                     Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
+            .accessibilityLabel("Save local changes as")
             .pickerStyle(.menu)
             if let choice = GitLocalChangesSavePolicyChoice(rawValue: policy) {
                 Text(LocalizedStringKey(choice.detail))
@@ -214,6 +215,7 @@ struct GitCherryPickSettingsSection: View {
                     Text(LocalizedStringKey(choice.title)).tag(choice.rawValue)
                 }
             }
+            .accessibilityLabel("When the result is empty")
             .pickerStyle(.menu)
             Toggle("Add published-commit suffix", isOn: $appendPublishedSuffix)
             Text("Empty cherry-picks are skipped by default. When enabled, cherry-picks of commits already reachable from a protected remote branch append the standard Git origin trailer.")
@@ -234,6 +236,7 @@ struct GitMergeSettingsSection: View {
                     Text(LocalizedStringKey(option.title)).tag(option.rawValue)
                 }
             }
+            .accessibilityLabel("After merging a local branch")
             .pickerStyle(.menu)
             if let option = GitDeleteOnMergeOption(rawValue: deleteOnMerge) {
                 Text(LocalizedStringKey(option.detail))
