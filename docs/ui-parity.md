@@ -145,6 +145,28 @@ open -a Rebased /tmp/visual-fixture        # 首次需要在 Rebased 里信任�
 
 只跑 Arbor 侧（CI 里可用）就去掉 `--reference`。
 
+## 把参考对账扩到别的界面：卡在哪
+
+参考对账目前只覆盖 Commit 和 Log 两个工具窗，因为导出只抓主窗口的树，而那两个
+必须在场。想把 Branches / Stash 也纳入，先要解决「怎么让参考侧切界面」。
+
+**安全做法是走菜单，不是点坐标。** 实测这些菜单项都可以点，而且都是幂等的视图操作，
+不会改动仓库：
+
+| 目标 | 菜单路径 |
+| --- | --- |
+| 日志 | Git → Show Git Log |
+| 贮藏 | Git → Show Git Stash |
+| 分支 | Git → Branches… |
+| 工具窗 | View → Tool Windows → Commit / Git / Project / … |
+
+点坐标有真实风险：活动栏和面板里都可能有叫 `Commit` 的按钮，其中一个是提交动作本身。
+
+**实测的卡点**：菜单点下去之后，Branches 打开的是一个独立弹窗、Show Git Stash 打开
+的是另一个工具窗，**它们都不在主窗口的无障碍树里**——把主窗口的树再导一遍只会得到
+和 Log 几乎一样的 295 行（实测 diff 只有 34 行表格单元格的差别）。所以下一步要么
+改成导 `app.debugDescription`（整棵树），要么定位到那个弹窗元素单独导。
+
 ## 已知限制
 
 以下都是实测出来的，不是推测。
