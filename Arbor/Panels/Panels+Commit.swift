@@ -1262,6 +1262,26 @@ struct RebasedCommitWorkspace: View {
                         }
                     }
                 }
+                // 参考实现把「应用 / 弹出」做成面板底部常驻按钮：选中一行、点一下，
+                // 两步完成。Arbor 原来只把它们藏在每行的菜单里，同样一件事要先知道
+                // 菜单在哪。常驻按钮同时给出可见的状态（没选中时是灰的）。
+                HStack(spacing: 8) {
+                    Button("Apply") { applySelectedStash(restoreIndex: false) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(selectedStashForActions == nil)
+                        .help("Apply the selected stash and keep it in the list")
+                        .accessibilityIdentifier("stash-apply")
+                    Button("Pop") { popSelectedStash(restoreIndex: false) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(selectedStashForActions == nil)
+                        .help("Apply the selected stash and remove it from the list")
+                        .accessibilityIdentifier("stash-pop")
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 22)
+                .padding(.top, 2)
             }
         }
         .onChange(of: stashes.map(\.id), initial: false) { _, ids in
@@ -1279,6 +1299,22 @@ struct RebasedCommitWorkspace: View {
             self.selectedStashID = nil
             onDropStash(selectedStashID)
         }
+    }
+
+    /// 常驻按钮作用于当前选中的 stash；没选中就没有可作用的对象。
+    var selectedStashForActions: StashInfo? {
+        guard let selectedStashID else { return nil }
+        return stashes.first { $0.id == selectedStashID }
+    }
+
+    func applySelectedStash(restoreIndex: Bool) {
+        guard let stash = selectedStashForActions else { return }
+        onApplyStash(stash.id, restoreIndex)
+    }
+
+    func popSelectedStash(restoreIndex: Bool) {
+        guard let stash = selectedStashForActions else { return }
+        onPopStash(stash.id, restoreIndex)
     }
 
     func toggleShelfExpansion(_ id: String) {
