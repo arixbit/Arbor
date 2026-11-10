@@ -173,8 +173,17 @@ open -a Rebased /tmp/visual-fixture        # 首次需要在 Rebased 里信任�
 （`rebased-branches`，62 行，里面是 `Branches Tree` / `Commit…` / `New Branch…`），
 比点坐标安全，也比导整棵树干净。Show Git Stash 还需要先确认它把内容放在哪一层。
 
-**还差的**：Arbor 侧的对应界面（顶栏的分支弹层）要单独导出为 `arbor-branches`，
-才能开始比对。
+**Arbor 侧暂时导不出干净的子树**：给它加了一个稳定的容器标识
+（`branches-popover-panel`，`accessibilityElement(children: .contain)`），但
+`debugDescription` 里这个容器下面没有子节点——子控件被暴露在**窗口层级**上，
+不是嵌套在容器里。整棵树 483 行，按容器标识剪子树只能剪出 1 行。
+
+所以 Branches 这一对的形态是：参考是**独立窗口**（62 行，干净的子树），Arbor 是
+**窗口内浮层**（只能在整窗树里认出来）。要真比，需要给对账工具加一个「按矩形裁剪」
+的选项，把浮层区域从整窗树里切出来；那是工具的下一个功能，不是一天的补丁。
+
+结论：参考侧的切换能力和导出能力已经保留在代码里（`testDumpRebasedTrees` 里的
+窗口差集），Arbor 侧的导出等工具支持裁剪之后再做。
 
 ## 已知限制
 

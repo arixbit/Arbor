@@ -621,6 +621,10 @@ struct RebasedBranchesPopover: View {
         }
         .padding(12)
         .frame(width: popupSize.width, height: popupSize.height)
+        // 面板本身需要一个稳定标识：顶栏那个 1×1 的 presence marker 是叶子节点，
+        // 靠它剪子树剪不到内容。children: .contain 保留内部控件自己的标识。
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("branches-popover-panel")
         .overlay(alignment: .bottomTrailing) {
             BranchesPopupResizeHandle(
                 size: $popupSize,
