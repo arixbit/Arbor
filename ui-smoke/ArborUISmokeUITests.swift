@@ -34,8 +34,11 @@ final class ArborUISmokeUITests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
 
         var offenders: [String] = []
+        // 设置窗口先不纳入：它有 11 个无名字控件（大多是表单里的 Picker/TextField，
+        // 视觉上靠相邻文本，AX 里没有名字），逐个定位是另一件事，见
+        // docs/ui-known-issues.md。
         for surface in ["commit", "log"] {
-            let session = ArborUISession(fixture: fixture, toolWindow: surface, screenshotSink: { self.add($0) })
+            let session = ArborUISession(fixture: fixture, toolWindow: surface)
             session.launch()
             defer { session.terminate() }
 
@@ -73,6 +76,9 @@ final class ArborUISmokeUITests: XCTestCase {
             "fill", "badge", "bubble", "tray", "clock", "doc.", "line.",
         ]
         var symbolLeaks: [String] = []
+        // 设置窗口先不纳入：它有 11 个无名字控件（大多是表单里的 Picker/TextField，
+        // 视觉上靠相邻文本，AX 里没有名字），逐个定位是另一件事，见
+        // docs/ui-known-issues.md。
         for surface in ["commit", "log"] {
             let session = ArborUISession(fixture: fixture, toolWindow: surface)
             session.launch()
