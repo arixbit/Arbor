@@ -639,6 +639,8 @@ func handleArborVCSActionNotification(_ notification: Notification) {
         operationRecovery.viewMode = .worktrees
         toolWindowExpanded = true
         loadWorktrees()
+    case .showHostingHub:
+        hostingWorkspace.showHostingHub = true
     case .stageTracked:
         stageAll()
     case .stageAll:

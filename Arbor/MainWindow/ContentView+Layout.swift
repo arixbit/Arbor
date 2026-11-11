@@ -30,26 +30,8 @@ extension ContentView {
                 hasRepository: repo != nil,
                 isLoading: repositoryStatus.isLoading || feedbackCenter.isRunning,
                 onOpenProject: showOpenPanel,
-                onRefresh: refreshAll,
                 onUpdate: { doPull(nil, rebase: false) },
-                onCommit: {
-                    projectWorkspace.toolWindowMode = .commit
-                    toolWindowExpanded = true
-                },
                 onPush: { beginPushDialog() },
-                onFetch: { doFetch(nil) },
-                onHosting: { hostingWorkspace.showHostingHub = true },
-                isShallowRepository: repositoryStatus.isShallowRepository,
-                hasCurrentBranch: branchWorkspace.branches.contains { $0.isCurrent },
-                hasConflicts: repositoryStatus.entries.contains {
-                    $0.staged == .conflicted || $0.unstaged == .conflicted
-                },
-                onQuickAction: { action in
-                    NotificationCenter.default.post(
-                        name: .arborVCSAction,
-                        object: action.rawValue
-                    )
-                },
                 onSearch: {
                     projectWorkspace.searchQuery = ""
                     projectWorkspace.showSearchEverywhere = true

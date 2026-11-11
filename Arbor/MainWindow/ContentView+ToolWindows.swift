@@ -22,7 +22,12 @@ extension ContentView {
                 shelfChangeLists: activeShelfChangeLists,
                 showShelfRequestID: shelfWorkspace.tabRequestID,
                 onWorkspaceTabChange: { shelfWorkspace.isWorkspaceTabActive = $0 },
-                onHideToolWindow: { toolWindowExpanded = false },
+                onHideToolWindow: {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        projectPanelExpanded = true
+                        toolWindowExpanded = false
+                    }
+                },
                 shelfRootPath: activeShelfRootPath,
                 shelfRootOptions: availableShelfRoots,
                 selectedShelfRootPath: activeShelfRootPath ?? "",
@@ -501,29 +506,67 @@ extension ContentView {
                         onToggle: { projectPanelExpanded = false },
                         trailing: AnyView(
                             HStack(spacing: 8) {
-                                Button(action: showOpenPanel) {
-                                    Image(systemName: "folder.badge.plus")
+                                Button { showNewProjectEntry = true } label: {
+                                    Image(systemName: "plus")
                                 }
                                 .buttonStyle(.plain)
-                                .help("Open Project")
-                                if repo != nil {
-                                    Button(action: { if let repo { showInFinder(repo) } }) {
-                                        Image(systemName: "arrow.up.forward.app")
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Reveal Project Root in Finder")
+                                .help("New File or Directory…")
+                                .accessibilityLabel("New File or Directory…")
+                                .disabled(repo == nil)
+                                Button(action: revealOpenedProjectFile) {
+                                    Image(systemName: "scope")
                                 }
+                                .buttonStyle(.plain)
+                                .help("Select Opened File")
+                                .accessibilityLabel("Select Opened File")
+                                .disabled(openedProjectRelativePath() == nil)
+                                Button(action: expandSelectedProjectDirectory) {
+                                    Image(systemName: "chevron.down")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Expand Selected")
+                                .accessibilityLabel("Expand Selected")
+                                .disabled(!canExpandSelectedProjectDirectory)
+                                Button(action: collapseProjectTree) {
+                                    Image(systemName: "chevron.up")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Collapse All")
+                                .accessibilityLabel("Collapse All")
+                                .disabled(repo == nil)
                                 Button(action: selectProjectFileInChanges) {
                                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                                 }
                                 .buttonStyle(.plain)
-                                // 没有 label 时无障碍树里只剩图标名，对账会把它算成缺控件，
-                                // 用户也只能靠悬停猜。参考实现叫这个动作
-                                // "Select Opened File in Changes View"。
                                 .help("Select Opened File in Changes View")
                                 .accessibilityLabel("Select Opened File in Changes View")
                                 .accessibilityIdentifier("select-opened-file-in-changes")
                                 .disabled(!projectFileHasChanges)
+                                Menu {
+                                    Button("Open Project", action: showOpenPanel)
+                                    if repo != nil {
+                                        Button("Reveal Project Root in Finder") {
+                                            if let repo { showInFinder(repo) }
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                }
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
+                                .help("Options")
+                                .accessibilityLabel("Options")
+                                .accessibilityIdentifier("project-tool-window-options")
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.16)) {
+                                        projectPanelExpanded = false
+                                    }
+                                } label: {
+                                    Image(systemName: "minus")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Hide Project Tool Window")
+                                .accessibilityLabel("Hide Project Tool Window")
                             }
                         )
                     )
@@ -553,7 +596,9 @@ extension ContentView {
                         onResolveConflicts: openConflictFromStage,
                         resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                         onRevertResolved: revertResolvedPath,
-                        showHeader: false
+                        showHeader: false,
+                        expansionCommand: projectTreeExpansion,
+                        reloadToken: projectTreeReloadToken
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -603,29 +648,67 @@ extension ContentView {
                         },
                         trailing: AnyView(
                             HStack(spacing: 8) {
-                                Button(action: showOpenPanel) {
-                                    Image(systemName: "folder.badge.plus")
+                                Button { showNewProjectEntry = true } label: {
+                                    Image(systemName: "plus")
                                 }
                                 .buttonStyle(.plain)
-                                .help("Open Project")
-                                if repo != nil {
-                                    Button(action: { if let repo { showInFinder(repo) } }) {
-                                        Image(systemName: "arrow.up.forward.app")
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Reveal Project Root in Finder")
+                                .help("New File or Directory…")
+                                .accessibilityLabel("New File or Directory…")
+                                .disabled(repo == nil)
+                                Button(action: revealOpenedProjectFile) {
+                                    Image(systemName: "scope")
                                 }
+                                .buttonStyle(.plain)
+                                .help("Select Opened File")
+                                .accessibilityLabel("Select Opened File")
+                                .disabled(openedProjectRelativePath() == nil)
+                                Button(action: expandSelectedProjectDirectory) {
+                                    Image(systemName: "chevron.down")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Expand Selected")
+                                .accessibilityLabel("Expand Selected")
+                                .disabled(!canExpandSelectedProjectDirectory)
+                                Button(action: collapseProjectTree) {
+                                    Image(systemName: "chevron.up")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Collapse All")
+                                .accessibilityLabel("Collapse All")
+                                .disabled(repo == nil)
                                 Button(action: selectProjectFileInChanges) {
                                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                                 }
                                 .buttonStyle(.plain)
-                                // 没有 label 时无障碍树里只剩图标名，对账会把它算成缺控件，
-                                // 用户也只能靠悬停猜。参考实现叫这个动作
-                                // "Select Opened File in Changes View"。
                                 .help("Select Opened File in Changes View")
                                 .accessibilityLabel("Select Opened File in Changes View")
                                 .accessibilityIdentifier("select-opened-file-in-changes")
                                 .disabled(!projectFileHasChanges)
+                                Menu {
+                                    Button("Open Project", action: showOpenPanel)
+                                    if repo != nil {
+                                        Button("Reveal Project Root in Finder") {
+                                            if let repo { showInFinder(repo) }
+                                        }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                }
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
+                                .help("Options")
+                                .accessibilityLabel("Options")
+                                .accessibilityIdentifier("project-tool-window-options")
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.16)) {
+                                        projectPanelExpanded = false
+                                    }
+                                } label: {
+                                    Image(systemName: "minus")
+                                }
+                                .buttonStyle(.plain)
+                                .help("Hide Project Tool Window")
+                                .accessibilityLabel("Hide Project Tool Window")
                             }
                         )
                     )
@@ -656,7 +739,9 @@ extension ContentView {
                             onResolveConflicts: openConflictFromStage,
                             resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
                             onRevertResolved: revertResolvedPath,
-                            showHeader: false
+                            showHeader: false,
+                        expansionCommand: projectTreeExpansion,
+                        reloadToken: projectTreeReloadToken
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }

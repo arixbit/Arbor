@@ -505,4 +505,73 @@ extension CompareSelectionTests {
         )
         XCTAssertTrue(fileReferenceDirectoryChanges(changes, under: "").isEmpty)
     }
+
+    func testProjectEntryCreationStaysInsideTheSelectedDirectory() throws {
+        XCTAssertEqual(projectEntryParentDirectory(selection: "Sources/App.swift"), "Sources")
+        XCTAssertEqual(projectEntryParentDirectory(selection: "README.md"), "")
+        XCTAssertEqual(projectEntryParentDirectory(selection: "../outside"), "")
+        XCTAssertEqual(
+            projectEntryRelativePath(parentRelativePath: "Sources", name: " Notes.md "),
+            "Sources/Notes.md"
+        )
+        XCTAssertNil(projectEntryRelativePath(parentRelativePath: "Sources", name: "../Secrets.txt"))
+        XCTAssertNil(projectEntryRelativePath(parentRelativePath: "", name: "   "))
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("arbor-project-entry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try createProjectEntry(rootPath: root.path, relativePath: "Sources/Notes.md", kind: .file)
+        let created = root.appendingPathComponent("Sources/Notes.md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: created.path))
+        XCTAssertThrowsError(
+            try createProjectEntry(rootPath: root.path, relativePath: "Sources/Notes.md", kind: .file)
+        ) { error in
+            XCTAssertEqual(error as? ProjectEntryCreateError, .alreadyExists)
+        }
+        XCTAssertThrowsError(
+            try createProjectEntry(rootPath: root.path, relativePath: "/tmp/outside.txt", kind: .file)
+        ) { error in
+            XCTAssertEqual(error as? ProjectEntryCreateError, .invalidName)
+        }
+    }
+
+    func testProjectTreeExpansionOpensAncestorsAndCollapsesChildren() {
+        let reveal = ProjectTreeExpansionCommand(token: 1, kind: .reveal("Sources/App.swift"))
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "Sources", isRoot: false, command: reveal),
+            true
+        )
+        XCTAssertNil(
+            projectTreeDirectoryShouldExpand(directoryPath: "Docs", isRoot: false, command: reveal)
+        )
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "", isRoot: true, command: reveal),
+            true
+        )
+
+        let expand = ProjectTreeExpansionCommand(token: 2, kind: .expandSelected("Sources"))
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "Sources", isRoot: false, command: expand),
+            true
+        )
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "Sources/Feature", isRoot: false, command: expand),
+            true
+        )
+        XCTAssertNil(
+            projectTreeDirectoryShouldExpand(directoryPath: "Docs", isRoot: false, command: expand)
+        )
+
+        let collapse = ProjectTreeExpansionCommand(token: 3, kind: .collapseAll)
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "Sources", isRoot: false, command: collapse),
+            false
+        )
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "", isRoot: true, command: collapse),
+            true
+        )
+    }
 }

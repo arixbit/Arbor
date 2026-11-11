@@ -292,12 +292,23 @@ func loadAggregatedLog(reset: Bool) {
                           self.logRuntime.aggregateRootPaths == aggregateRootPaths,
                           self.logList.visibleRootPathsRaw == visibleRootPathsRaw,
                           self.logVisibleRootPathsPersistedRaw == visibleRootPathsPersistedRaw else { return }
+                    let previousSelection = self.logSelectionState.selection
+                    let previousSelections = self.logSelectionState.selectedIDs
                     self.logList.entries = cachedEntriesSnapshot
                     self.logRuntime.aggregateRepositories = cachedRepositoriesSnapshot
                     self.logRuntime.aggregateLoadedCounts = cachedCountsSnapshot
                     self.logRuntime.aggregatePageCursors = cachedCursorsSnapshot
-                    self.logSelectionState.selection = cachedEntriesSnapshot.first.map(self.logCommitIdentity)
-                    self.logSelectionState.selectedIDs = cachedEntriesSnapshot.first.map { [self.logCommitIdentity($0)] } ?? []
+                    let retained = cachedEntriesSnapshot.filter { commit in
+                        let identity = self.logCommitIdentity(commit)
+                        return previousSelections.contains(identity) || identity == previousSelection
+                    }
+                    if let first = retained.first {
+                        self.logSelectionState.selection = self.logCommitIdentity(first)
+                        self.logSelectionState.selectedIDs = Set(retained.map(self.logCommitIdentity))
+                    } else {
+                        self.logSelectionState.selection = nil
+                        self.logSelectionState.selectedIDs = []
+                    }
                     self.logList.hasMore = cachedHasMoreSnapshot
                     self.logList.isShowingCachedSnapshot = true
                 }
@@ -424,9 +435,6 @@ func loadAggregatedLog(reset: Bool) {
                 if let first = retained.first {
                     self.logSelectionState.selection = self.logCommitIdentity(first)
                     self.logSelectionState.selectedIDs = Set(retained.map(self.logCommitIdentity))
-                } else if let first = deduplicated.first {
-                    self.logSelectionState.selection = self.logCommitIdentity(first)
-                    self.logSelectionState.selectedIDs = [self.logCommitIdentity(first)]
                 } else {
                     self.logSelectionState.selection = nil
                     self.logSelectionState.selectedIDs = []

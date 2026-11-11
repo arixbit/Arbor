@@ -102,6 +102,8 @@ struct ProjectTreePane: View {
     let resolvedConflictPaths: [String]
     let onRevertResolved: (String) -> Void
     let showHeader: Bool
+    let expansionCommand: ProjectTreeExpansionCommand
+    let reloadToken: Int
 
     init(
         repo: Repository?,
@@ -124,7 +126,9 @@ struct ProjectTreePane: View {
         onResolveConflicts: @escaping (String) -> Void = { _ in },
         resolvedConflictPaths: [String] = [],
         onRevertResolved: @escaping (String) -> Void = { _ in },
-        showHeader: Bool = true
+        showHeader: Bool = true,
+        expansionCommand: ProjectTreeExpansionCommand = ProjectTreeExpansionCommand(),
+        reloadToken: Int = 0
     ) {
         self.repo = repo
         self.projectPath = projectPath
@@ -147,6 +151,8 @@ struct ProjectTreePane: View {
         self.resolvedConflictPaths = resolvedConflictPaths
         self.onRevertResolved = onRevertResolved
         self.showHeader = showHeader
+        self.expansionCommand = expansionCommand
+        self.reloadToken = reloadToken
     }
 
     var body: some View {
@@ -202,7 +208,9 @@ struct ProjectTreePane: View {
                         onDelete: onDelete,
                         onResolveConflicts: onResolveConflicts,
                         resolvedConflictPaths: resolvedConflictPaths,
-                        onRevertResolved: onRevertResolved
+                        onRevertResolved: onRevertResolved,
+                        expansionCommand: expansionCommand,
+                        reloadToken: reloadToken
                     )
         }
     }

@@ -345,6 +345,72 @@ final class ArborUISmokeUITests: XCTestCase {
 /// read from the accessibility tree.
 final class ArborUISmokeContractUITests: XCTestCase {
     @MainActor
+    func testCommitStructureAndRelocatedActions() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+        session.launch()
+        defer { session.terminate() }
+
+        XCTAssertTrue(session.window.buttons["Update"].firstMatch.isHittable)
+        XCTAssertTrue(session.window.buttons["Push"].firstMatch.isHittable)
+        XCTAssertFalse(session.window.descendants(matching: .any)["More Git Actions"].exists)
+        XCTAssertFalse(session.window.buttons["Partial stage"].exists)
+        XCTAssertFalse(session.window.buttons["Stage all changes"].exists)
+        XCTAssertFalse(session.window.buttons["New Changelist"].exists)
+        XCTAssertTrue(session.window.staticTexts["2 modified"].exists)
+
+        let preview = session.window.buttons["Show changes preview"].firstMatch
+        let tracked = session.window.buttons["Stage tracked changes"].firstMatch
+        let stash = session.window.buttons["Stash changes silently"].firstMatch
+        let options = session.window.descendants(matching: .any)["changes-view-options"].firstMatch
+        XCTAssertLessThan(preview.frame.minX, tracked.frame.minX)
+        XCTAssertLessThan(tracked.frame.minX, stash.frame.minX)
+        XCTAssertLessThan(stash.frame.minX, options.frame.minX)
+
+        session.window.buttons["Hide Commit Tool Window"].firstMatch.click()
+        let collapsed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in !tracked.isHittable },
+            object: tracked
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [collapsed], timeout: 5), .completed, "hiding Commit must collapse its toolbar")
+        session.window.buttons["slider.horizontal.3"].firstMatch.click()
+        let restored = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in tracked.isHittable },
+            object: tracked
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
+
+        session.window.descendants(matching: .any)["commit-tool-window-options"].firstMatch.click()
+        let stageAll = session.app.menuItems["Stage all changes"].firstMatch
+        XCTAssertTrue(stageAll.waitForExistence(timeout: 5))
+        XCTAssertTrue(session.app.menuItems["New Changelist"].firstMatch.exists)
+        stageAll.click()
+        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
+        let changes = session.window.checkBoxes["Stage group: Changes"].firstMatch
+        let allStaged = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in String(describing: changes.value ?? "") == "1" },
+            object: changes
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [allStaged], timeout: 10), .completed)
+        changes.click()
+        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 10))
+        XCTAssertFalse(session.window.buttons["Commit All"].exists)
+        session.window.textViews.firstMatch.click()
+        session.window.textViews.firstMatch.typeText("Relocated commit action")
+        session.window.descendants(matching: .any)["commit-options"].firstMatch.click()
+        let commitAll = session.app.menuItems["Commit All"].firstMatch
+        XCTAssertTrue(commitAll.waitForExistence(timeout: 5))
+        XCTAssertTrue(commitAll.isEnabled)
+        commitAll.click()
+        let sheet = session.app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "Commit All must still ask before staging tracked changes")
+        let cancel = sheet.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.click()
+    }
+
+    @MainActor
     func testChangesGroupingPreservesStagingAndPartialState() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
@@ -372,7 +438,7 @@ final class ArborUISmokeContractUITests: XCTestCase {
 
         app.click()
         waitForValue("1", app)
-        XCTAssertTrue(session.window.staticTexts["2 staged"].waitForExistence(timeout: 5))
+        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 5))
         let path = fixture.appendingPathComponent("src/App.swift")
         var content = try String(contentsOf: path, encoding: .utf8)
         content += "\n// a new worktree edit after staging\n"
@@ -386,18 +452,22 @@ final class ArborUISmokeContractUITests: XCTestCase {
         XCTAssertTrue(unstage.waitForExistence(timeout: 5))
         unstage.click()
         waitForValue("0", app)
-        XCTAssertTrue(session.window.staticTexts["1 staged"].waitForExistence(timeout: 5))
+        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 5))
 
         session.window.buttons["Unversioned Files"].firstMatch.click()
         let untracked = session.window.checkBoxes["Stage src/Untracked.swift"].firstMatch
         XCTAssertTrue(untracked.waitForExistence(timeout: 5))
         session.window.checkBoxes["Stage group: Unversioned Files"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["2 staged"].waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
+        waitForValue("1", engine)
         XCTAssertTrue(session.window.checkBoxes["Stage src/Untracked.swift"].exists)
         session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["3 staged"].waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
+        waitForValue("1", app)
         session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["0 staged"].waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 10))
+        waitForValue("0", app)
+        waitForValue("0", engine)
     }
 
     /// The reference opens a change's diff as a `Repository Diff: <file>`
@@ -879,46 +949,22 @@ final class ArborUISmokeFocusUITests: XCTestCase {
     }
 }
 
-/// A Git operation that cannot run must say why, not fail silently.
+/// Main-menu actions expose their availability before an operation starts.
 final class ArborUISmokeFeedbackUITests: XCTestCase {
     @MainActor
-    func testFetchWithoutRemoteExplainsWhy() throws {
+    func testFetchWithoutRemoteIsDisabled() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
-
         let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
         session.launch()
         defer { session.terminate() }
 
-        let before = session.screenState()
-        session.window.descendants(matching: .any)["More Git Actions"].firstMatch.click()
-        session.app.menuItems["Fetch"].firstMatch.click()
-
-        let deadline = Date().addingTimeInterval(15)
-        var after = session.screenState()
-        while Date() < deadline, after == before {
-            Thread.sleep(forTimeInterval: 0.3)
-            after = session.screenState()
-        }
-        XCTAssertNotEqual(after, before, "Fetch on a repository without remotes changed nothing")
-
-        let feedback = session.app.staticTexts.allElementsBoundByIndex
-            .map { $0.label.isEmpty ? String(describing: $0.value ?? "") : $0.label }
-            .filter { !$0.isEmpty }
-        let explains = feedback.contains { text in
-            let lower = text.lowercased()
-            return lower.contains("remote") || lower.contains("fetch") || lower.contains("failed")
-        }
-        if !explains {
-            session.recordScreenshot(named: "fetch-without-remote")
-            print("=== TREE AFTER FETCH ===")
-            print(session.app.debugDescription)
-            print("=== END TREE ===")
-        }
-        XCTAssertTrue(
-            explains,
-            "Fetch without a remote left no explanation on screen; visible text: \(feedback.prefix(20))"
-        )
+        session.app.menuBars.menuBarItems["VCS"].click()
+        session.app.menuItems["Git"].firstMatch.click()
+        let fetch = session.app.menuItems["Fetch"].firstMatch
+        XCTAssertTrue(fetch.waitForExistence(timeout: 5))
+        XCTAssertFalse(fetch.isEnabled, "Fetch needs a configured remote")
+        session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
     }
 }
 

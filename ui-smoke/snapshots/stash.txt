@@ -1,8 +1,9 @@
 # Arbor UI snapshot · stash · 290×374 pt
-group	—	40,135 290×374
+group	—	40,134 290×374
 button	Show Diff	53,135 16×14
-button	Expand All	84,138 12×6
-button	Collapse All	112,138 12×6
+menubutton	Group By	77,134 42×16
+button	Expand All	130,138 12×6
+button	Collapse All	158,138 12×6
 scrollview	—	40,158 290×350 [Disabled]
 button	Stashes, 1	53,170 78×16
 button	On main: Fixture stash	57,196 216×30

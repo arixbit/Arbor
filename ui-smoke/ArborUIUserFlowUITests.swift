@@ -220,8 +220,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try write(original.replacingOccurrences(of: "line 2\n", with: "selected change\n")
             .replacingOccurrences(of: "line 22\n", with: "leave for later\n"), to: "notes.txt")
         launch()
-        let partial = session.window.buttons["Partial stage"].firstMatch
-        click(partial)
+        let change = session.window.checkBoxes["Stage notes.txt"].firstMatch
+        XCTAssertTrue(change.waitForExistence(timeout: 10))
+        change.rightClick()
+        click(session.app.menuItems["Partial stage"].firstMatch)
         let selected = session.app.sheets.firstMatch.staticTexts["selected change"].firstMatch
         click(selected)
         session.recordScreenshot(named: "partial-line-selected")

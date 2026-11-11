@@ -987,5 +987,17 @@
   "Revert Selected Changes": "还原选中的变更",
   "Filter commits": "过滤提交",
   "Apply the selected stash and keep it in the list": "应用选中的贮藏，并保留在列表中",
-  "Apply the selected stash and remove it from the list": "应用选中的贮藏，并从列表中移除"
+  "Apply the selected stash and remove it from the list": "应用选中的贮藏，并从列表中移除",
+  "Directory": "目录",
+  "Enter a name.": "请输入名称。",
+  "Expand Selected": "展开选中项",
+  "New File or Directory…": "新建文件或目录…",
+  "Select Opened File": "定位打开的文件",
+  "That name is already used.": "该名称已存在。",
+  "The name must stay inside the project.": "名称必须位于项目内。",
+  "Group By": "分组",
+  "Collapse All": "全部折叠",
+  "Expand All": "全部展开",
+  "Hide Project Tool Window": "隐藏项目工具窗口",
+  "Terminal": "终端"
 }

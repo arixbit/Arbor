@@ -392,6 +392,15 @@ struct LogChangesBrowserView: View {
         setFilter(activeFilter)
     }
 
+    var collapsibleChangeNodeIDs: [String] {
+        changeTree.flatMap(collapsibleIDs)
+    }
+
+    func collapsibleIDs(_ node: LogChangeNode) -> [String] {
+        guard !node.children.isEmpty else { return [] }
+        return [node.id] + node.children.flatMap(collapsibleIDs)
+    }
+
     var changeTree: [LogChangeNode] {
         let rows = self.rows
         let key = LogChangeTreeCache.Key(
@@ -558,19 +567,14 @@ struct LogChangesBrowserView: View {
                 Spacer()
                 Button {
                     guard let selectedRecord, selectedRecords.count == 1 else { return }
-                    onShowFileHistoryForRevision(
-                        selectedRecord.commit,
-                        selectedRecord.change.path
-                    )
+                    openStandaloneDiff(selectedRecord)
                 } label: {
-                    Image(systemName: "clock.arrow.circlepath")
+                    Image(systemName: "doc.text.magnifyingglass")
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
-                .help("Show History for Revision")
-                // 没有 label 时无障碍树里只剩下图标名（clock.arrow.circlepath），
-                // 辅助技术念出来是机器名而不是「查看该提交的历史」。
-                .accessibilityLabel("Show History for Revision")
+                .help("Show Diff")
+                .accessibilityLabel("Show Diff")
                 .disabled(selectedRecords.count != 1)
                 if canApplySelectedChanges {
                     Button {
@@ -581,31 +585,8 @@ struct LogChangesBrowserView: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help("Revert Selected Changes")
+                    .accessibilityLabel("Revert Selected Changes")
                 }
-                Menu {
-                    Text("Hide Files")
-                        .font(.caption)
-                    Toggle(
-                        LogChangesFilter.movedWithoutChanges.title,
-                        isOn: filterBinding(for: .movedWithoutChanges)
-                    )
-                    Toggle(
-                        LogChangesFilter.nonImportant.title,
-                        isOn: filterBinding(for: .nonImportant)
-                    )
-                    if activeFilter != nil {
-                        Divider()
-                        Button("Clear Filter") { setFilter(nil) }
-                    }
-                } label: {
-                    Image(systemName: activeFilter == nil
-                          ? "line.3.horizontal.decrease.circle"
-                          : "line.3.horizontal.decrease.circle.fill")
-                }
-                .menuStyle(.borderlessButton)
-                .foregroundStyle(activeFilter == nil ? .secondary : Design.Colors.accent)
-                .help("Filter By")
-                .disabled(records.isEmpty || isLoading)
                 if canEditSelectedChanges, let commit = commits.first {
                     Text("\(selectedRecords.count) selected")
                         .font(.caption2)
@@ -625,6 +606,20 @@ struct LogChangesBrowserView: View {
                     .help("Rewrite the selected files in this commit")
                 }
                 Menu {
+                    Text("Hide Files")
+                        .font(.caption)
+                    Toggle(
+                        LogChangesFilter.movedWithoutChanges.title,
+                        isOn: filterBinding(for: .movedWithoutChanges)
+                    )
+                    Toggle(
+                        LogChangesFilter.nonImportant.title,
+                        isOn: filterBinding(for: .nonImportant)
+                    )
+                    if activeFilter != nil {
+                        Button("Clear Filter") { setFilter(nil) }
+                    }
+                    Divider()
                     Toggle("Group by Directory", isOn: $groupByDirectory)
                     Toggle("Show Changes from Parents", isOn: $showsChangesFromParents)
                     if hasAffectedPathFilter {
@@ -748,6 +743,29 @@ struct LogChangesBrowserView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
+                .help("View Options")
+                .accessibilityLabel("View Options")
+                .accessibilityIdentifier("changes-browser-view-options")
+                Button {
+                    collapsedChangeNodes = []
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Expand All")
+                .accessibilityLabel("Expand All")
+                .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.isEmpty)
+                Button {
+                    collapsedChangeNodes = Set(collapsibleChangeNodeIDs)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Collapse All")
+                .accessibilityLabel("Collapse All")
+                .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.count == collapsibleChangeNodeIDs.count)
             }
             .padding(.horizontal, 12)
             }
@@ -772,7 +790,7 @@ struct LogChangesBrowserView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if rows.isEmpty && filteredOutRecords.isEmpty && pendingFilterRecords.isEmpty {
                 Text(commits.isEmpty
-                     ? "选择一个提交查看 Changes"
+                     ? "Select a commit to view Changes"
                      : (showsOnlyAffectedChanges && hasAffectedPathFilter
                         ? "No changes affect the selected path"
                         : (activeFilter == nil ? "No changed files" : "No files remain after filtering")))

@@ -308,11 +308,18 @@ func loadLog(reset: Bool = true) {
                     guard generation == self.logList.generation,
                           self.externalLogTabIsAlive(tabID),
                           self.isActiveLogRepository(repo) else { return }
+                    let previousSelection = self.logSelectionState.selection
+                    let previousSelections = self.logSelectionState.selectedIDs
                     self.logList.entries = restoredGraph.commits
                     self.logList.pageCursor = restoredGraph.cursor
                     self.logList.hasMore = restoredGraph.hasMore
-                    self.logSelectionState.selection = restoredGraph.commits.first?.id
-                    self.logSelectionState.selectedIDs = restoredGraph.commits.first.map { [$0.id] } ?? []
+                    let retained = retainedLogSelection(
+                        previousSelection: previousSelection,
+                        previousSelections: previousSelections,
+                        in: restoredGraph.commits
+                    )
+                    self.logSelectionState.selection = retained.selection
+                    self.logSelectionState.selectedIDs = retained.selectedIDs
                     self.logList.isShowingCachedSnapshot = true
                 }
             } else if reset,
@@ -390,30 +397,15 @@ func loadLog(reset: Bool = true) {
                     restoredEntries.append(contentsOf: log.filter { !restoredIDs.contains($0.id) })
                     self.logList.entries = restoredEntries
                     self.logList.isShowingCachedSnapshot = false
-                    // Keep the current row when a refresh still contains it;
-                    // otherwise select the first visible revision. Refresh
-                    // changes the model, not the user's context.
-                    let retainedSelections = restoredEntries.filter { commit in
-                        previousSelections.contains { selectedID in
-                            commit.id == selectedID
-                                || commit.id.hasPrefix(selectedID)
-                                || selectedID.hasPrefix(commit.id)
-                        }
-                    }
-                    if !retainedSelections.isEmpty {
-                        self.logSelectionState.selectedIDs = Set(retainedSelections.map(\.id))
-                        self.logSelectionState.selection = retainedSelections.first(where: { $0.id == previousSelection })?.id
-                            ?? retainedSelections.first?.id
-                    } else if let selectedID = matchingLogCommitID(
-                        requestedID: previousSelection,
+                    // Keep an explicit row when a refresh still contains it.
+                    // Do not fill the inspector with the first visible commit.
+                    let retained = retainedLogSelection(
+                        previousSelection: previousSelection,
+                        previousSelections: previousSelections,
                         in: restoredEntries
-                    ) {
-                        self.logSelectionState.selection = selectedID
-                        self.logSelectionState.selectedIDs = [selectedID]
-                    } else {
-                        self.logSelectionState.selection = restoredEntries.first?.id
-                        self.logSelectionState.selectedIDs = restoredEntries.first.map { Set([$0.id]) } ?? []
-                    }
+                    )
+                    self.logSelectionState.selection = retained.selection
+                    self.logSelectionState.selectedIDs = retained.selectedIDs
                     self.logList.pageCursor = log.last?.id ?? restoredGraph?.cursor
                 } else {
                     let oldIds = Set(self.logList.entries.map(\.id))

@@ -63,6 +63,8 @@ struct ProjectCommands: Commands {
                         .disabled(!actionEnabled(.showGitRoots))
                     Button("Git Console") { postVCS(.showGitConsole) }
                         .disabled(!actionEnabled(.showGitConsole))
+                    Button("Pull Requests & Reviews") { postVCS(.showHostingHub) }
+                        .disabled(!actionEnabled(.showHostingHub))
                 }
                 Button("Refresh Git State") { postVCS(.refresh) }
                     .disabled(!actionEnabled(.refresh))
@@ -99,6 +101,11 @@ struct ProjectCommands: Commands {
                     .disabled(!actionEnabled(.pull))
                 Divider()
                 Menu("Local Changes") {
+                    Button("Stage changes") { postVCS(.stageTracked) }
+                        .disabled(!actionEnabled(.stageTracked))
+                    Button("Stage all changes") { postVCS(.stageAll) }
+                        .disabled(!actionEnabled(.stageAll))
+                    Divider()
                     Button("Shelve…") { postVCS(.shelve) }
                         .disabled(!actionEnabled(.shelve))
                     Button("Show Shelf") { postVCS(.showShelf) }
@@ -192,6 +199,8 @@ struct ProjectCommands: Commands {
                     .disabled(!actionEnabled(.newTag))
                 Button("Worktrees…") { postVCS(.worktrees) }
                     .disabled(!actionEnabled(.worktrees))
+                Button("Copy Current Branch Name") { postVCS(.copyCurrentBranchName) }
+                    .disabled(!actionEnabled(.copyCurrentBranchName))
                 Button("Branches…") { postVCS(.branches) }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                     .disabled(!actionEnabled(.branches))

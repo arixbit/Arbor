@@ -47,6 +47,47 @@ extension CompareSelectionTests {
         XCTAssertTrue(GitStashViewSettings.splitPreview(from: defaults))
     }
 
+    func testStashGroupByDirectoryDefaultsOnAndStaysPerProject() {
+        let suiteName = "Arbor.StashGroupByDirectory.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertTrue(GitStashViewSettings.groupByDirectory(for: "/repo/a", defaults: defaults))
+        XCTAssertTrue(GitStashViewSettings.groupByDirectory(for: nil, defaults: defaults))
+
+        GitStashViewSettings.saveGroupByDirectory(false, for: "/repo/a", defaults: defaults)
+        XCTAssertFalse(GitStashViewSettings.groupByDirectory(for: "/repo/a", defaults: defaults))
+        XCTAssertTrue(GitStashViewSettings.groupByDirectory(for: "/repo/b", defaults: defaults))
+    }
+
+    func testStashChangeRowsCollapseADirectoryWithoutHidingTheFolder() {
+        let paths = ["README.md", "Sources/App.swift", "Sources/Nested/Z.swift"]
+        let open = visibleStashChangeRows(
+            paths: paths,
+            groupByDirectory: true,
+            collapsedFolders: []
+        )
+        XCTAssertEqual(
+            open.map(\.path),
+            ["README.md", "Sources", "Sources/App.swift", "Sources/Nested", "Sources/Nested/Z.swift"]
+        )
+
+        let closed = visibleStashChangeRows(
+            paths: paths,
+            groupByDirectory: true,
+            collapsedFolders: ["Sources"]
+        )
+        XCTAssertEqual(closed.map(\.path), ["README.md", "Sources"])
+
+        let flat = visibleStashChangeRows(
+            paths: paths,
+            groupByDirectory: false,
+            collapsedFolders: ["Sources"]
+        )
+        XCTAssertEqual(flat.map(\.path).sorted(), paths.sorted())
+        XCTAssertTrue(flat.allSatisfy { !$0.isFolder })
+    }
+
     func testPullLocalChangesPreservationCodableKeepsExactShelfOrStashIdentity() throws {
         let shelf = PullLocalChangesPreservation(
             shelfName: "Arbor: pull 123",

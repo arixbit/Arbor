@@ -207,6 +207,7 @@ enum ArborVCSAction: String, CaseIterable, Hashable {
     case showOperations
     case showGitRoots
     case showGitConsole
+    case showHostingHub
     case gitLfs
     case gitHooks
     case refresh
@@ -326,7 +327,7 @@ func isArborVCSActionEnabled(
     case .fileHistory:
         return context.hasRepository
             && context.selectedFileAction?.isDirectory == false
-    case .quickActions:
+    case .quickActions, .showHostingHub:
         return context.hasRepository
     }
 }

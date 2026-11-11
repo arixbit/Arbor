@@ -188,6 +188,8 @@ struct RebasedCommitWorkspace: View {
     /// 选中贮藏后它包含的文件（由引擎的 stash_files 给出，不在前端解析补丁）。
     @State var stashChangeFiles: [String] = []
     @State var stashChangeFilesOwner: String?
+    @State var stashGroupByDirectory = GitStashViewSettings.defaultGroupByDirectory
+    @State var collapsedStashFolders: Set<String> = []
     @State var pendingUnshelve: ShelfUnshelveRequest?
     @State var pendingUnshelveShelves: ShelfBatchUnshelveRequest?
     @State var pendingUnshelveMemberGroups: ShelfMemberBatchUnshelveRequest?
@@ -244,6 +246,10 @@ struct RebasedCommitWorkspace: View {
         Set((conflictedEntries + unstagedEntries + untrackedEntries + stagedEntries).map(\.path)).count
     }
 
+    var modifiedCount: Int {
+        Set((conflictedEntries + unstagedEntries + stagedEntries).map(\.path)).count
+    }
+
     var ignoredEntries: [FileEntry] {
         entries.filter { $0.unstaged == .ignored }
     }
@@ -291,6 +297,10 @@ struct RebasedCommitWorkspace: View {
                 ShelfViewSettings.saveShowRecycled(value, for: projectPath)
             }
         )
+    }
+
+    func loadStashViewSettings() {
+        stashGroupByDirectory = GitStashViewSettings.groupByDirectory(for: projectPath)
     }
 
     func loadShelfViewSettings() {
@@ -361,6 +371,12 @@ struct RebasedCommitWorkspace: View {
                 Menu {
                     Button("Hide Tool Window", action: onHideToolWindow)
                     Divider()
+                    Button("Stage all changes", action: onStageEverything)
+                        .disabled(operationState != nil || visibleChangedCount == 0)
+                    Button("Stage untracked without content", action: onStageWithoutContentAll)
+                        .disabled(operationState != nil || untrackedEntries.isEmpty)
+                    Button("New Changelist", action: onCreateChangeList)
+                    Divider()
                     Button("Refresh") { onRefresh() }
                     Button("Stash…") { onStash() }
                     Button("Shelve…") { onShelve() }
@@ -384,6 +400,10 @@ struct RebasedCommitWorkspace: View {
                 }
                 .menuStyle(.borderlessButton)
                 .foregroundStyle(.secondary)
+                .help("Options")
+                .accessibilityLabel("Options")
+                .accessibilityIdentifier("commit-tool-window-options")
+                compactButton("minus", help: "Hide Commit Tool Window", action: onHideToolWindow)
             }
             .padding(.horizontal, 16)
             .frame(height: 40)
@@ -413,6 +433,7 @@ struct RebasedCommitWorkspace: View {
         .foregroundStyle(.primary)
         .onAppear {
             loadShelfViewSettings()
+            loadStashViewSettings()
             loadGitStageViewSettings()
             applyShowShelfRequest(showShelfRequestID)
             onWorkspaceTabChange(tab == .stash)
@@ -422,8 +443,12 @@ struct RebasedCommitWorkspace: View {
         }
         .onChange(of: projectPath) { _, _ in
             loadShelfViewSettings()
+            loadStashViewSettings()
             loadGitStageViewSettings()
             contextSelectedPaths.removeAll()
+        }
+        .onChange(of: stashGroupByDirectory) { _, value in
+            GitStashViewSettings.saveGroupByDirectory(value, for: projectPath)
         }
         .onChange(of: repositoryWorkdir) { _, _ in
             contextSelectedPaths.removeAll()
@@ -697,10 +722,6 @@ struct RebasedCommitWorkspace: View {
                 compactButton("arrow.clockwise", help: "Refresh", action: onRefresh)
                 compactButton("arrow.right", help: "Stage tracked changes", action: onStageAll)
                     .disabled(operationState != nil || !hasTrackedUnstagedChanges)
-                compactButton("arrow.right.to.line", help: "Stage all changes", action: onStageEverything)
-                    .disabled(operationState != nil || visibleChangedCount == 0)
-                compactButton("doc.badge.plus", help: "Stage untracked without content", action: onStageWithoutContentAll)
-                    .disabled(operationState != nil || untrackedEntries.isEmpty)
                 if !resolvedConflictPaths.isEmpty {
                     Menu {
                         ForEach(resolvedConflictPaths, id: \.self) { path in
@@ -731,12 +752,9 @@ struct RebasedCommitWorkspace: View {
                 .help("View Options")
                 .accessibilityLabel("View Options")
                 .accessibilityIdentifier("changes-view-options")
-                compactButton("list.bullet.indent", help: "New Changelist", action: onCreateChangeList)
-                // GitStagePanel appends TreeActionsToolbarPanel to the stage
-                // toolbar. These are first-class toolbar actions in rebased,
-                // not settings-menu-only commands: they must work while the
-                // tree has focus and remain discoverable beside the other
-                // stage actions.
+                Spacer()
+                // The running reference app keeps tree expansion at the end
+                // of this row, separate from the Git.Stage.Toolbar actions.
                 compactButton("chevron.down", help: "Expand All", action: {
                     treeExpansionTarget = true
                     treeExpansionCommand += 1
@@ -747,7 +765,6 @@ struct RebasedCommitWorkspace: View {
                     treeExpansionCommand += 1
                 })
                 .disabled(!changeTreeExpansion.canCollapse)
-                Spacer()
                 if isShowingCachedStatusSnapshot {
                     ProgressView()
                         .controlSize(.small)
@@ -881,7 +898,7 @@ struct RebasedCommitWorkspace: View {
                 .accessibilityLabel("Commit Message History")
                 .accessibilityIdentifier("commit-message-history")
                 Spacer()
-                Text("\(stagedEntries.count) staged")
+                Text("\(modifiedCount) modified")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -919,18 +936,6 @@ struct RebasedCommitWorkspace: View {
                             || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || (operationState != nil && (!canAmendPausedRebase || !amendMode))
                     )
-                if !amendMode && !hasStaged && hasCommitAllEligibleChanges {
-                    Button("Commit All") {
-                        showCommitAllConfirmation = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(operationState != nil || repo == nil || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                if autoSquashCommitKind != nil {
-                    Button("Commit and Rebase", action: onCommitAndRebase)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
                 Button("Commit and Push…", action: onCommitAndPush)
                     .buttonStyle(RebasedActionButtonStyle())
                     .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -941,6 +946,16 @@ struct RebasedCommitWorkspace: View {
                         .foregroundStyle(.secondary)
                 }
                 Menu {
+                    if !amendMode && !hasStaged && hasCommitAllEligibleChanges {
+                        Button("Commit All") {
+                            showCommitAllConfirmation = true
+                        }
+                        .disabled(operationState != nil || repo == nil || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    if autoSquashCommitKind != nil {
+                        Button("Commit and Rebase", action: onCommitAndRebase)
+                            .disabled(operationState != nil || repo == nil || amendMode || !hasStaged || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                     Button("Template") { onTemplate() }
                     Button("Before Commit Checks") { onBeforeCommitSettings() }
                     Divider()
@@ -1183,9 +1198,8 @@ struct RebasedCommitWorkspace: View {
             ?? deletedShelves.first(where: { $0.name == name })?.id
     }
 
-    /// 参考的 Stash 工具窗顶部有一条常驻工具栏（Show Diff / Group By / Expand All /
-    /// Collapse All）。Arbor 原来只有分组标题，这些动作散在行菜单里或根本没有。
-    /// Group By 暂不做：Arbor 的贮藏列表是平的，没有可分组维度。
+    /// 参考的 Stash 工具窗顶部是 Show Diff / Group By / Expand All / Collapse All。
+    /// 贮藏条目本身是平的；Group By 作用在选中贮藏后的文件清单上，按目录折叠。
     var stashToolbar: some View {
         HStack(spacing: 6) {
             compactButton("rectangle.on.rectangle", help: "Show Diff") {
@@ -1194,6 +1208,18 @@ struct RebasedCommitWorkspace: View {
             }
             .disabled(selectedStashForActions == nil)
             .accessibilityIdentifier("stash-show-diff")
+            Menu {
+                Toggle("Group by Directory", isOn: $stashGroupByDirectory)
+            } label: {
+                Image(systemName: "rectangle.3.group")
+                    .font(Design.Typography.interface(13, weight: .medium))
+                    .frame(width: 22, height: 22)
+            }
+            .menuStyle(.borderlessButton)
+            .foregroundStyle(.secondary)
+            .help("Group By")
+            .accessibilityLabel("Group By")
+            .accessibilityIdentifier("stash-group-by")
             compactButton("chevron.down", help: "Expand All", action: expandAllStashGroups)
             compactButton("chevron.up", help: "Collapse All", action: collapseAllStashGroups)
             Spacer(minLength: 0)
@@ -1208,6 +1234,7 @@ struct RebasedCommitWorkspace: View {
         shelvesExpanded = true
         deletedShelvesExpanded = true
         expandedShelfIDs = Set(shelves.map(\.id))
+        collapsedStashFolders = []
     }
 
     func collapseAllStashGroups() {
@@ -1215,6 +1242,15 @@ struct RebasedCommitWorkspace: View {
         shelvesExpanded = false
         deletedShelvesExpanded = false
         expandedShelfIDs = []
+        collapsedStashFolders = Set(
+            visibleStashChangeRows(
+                paths: stashChangeFiles,
+                groupByDirectory: true,
+                collapsedFolders: []
+            )
+            .filter(\.isFolder)
+            .map(\.path)
+        )
     }
 
     var stashList: some View {
@@ -1403,27 +1439,69 @@ struct RebasedCommitWorkspace: View {
         }
     }
 
-    /// 参考的 Stash 工具窗在选中一条贮藏后会列出它包含的文件。Arbor 原来只有
-    /// 预览面板，用户得先打开 diff 才知道里面动了什么。
+    /// 参考的 Stash 工具窗在选中一条贮藏后会列出它包含的文件。目录分组复用
+    /// Shelf 的路径树，不在前端解析补丁文本。
     var stashChangesSection: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let rows = visibleStashChangeRows(
+            paths: stashChangeFiles,
+            groupByDirectory: stashGroupByDirectory,
+            collapsedFolders: collapsedStashFolders
+        )
+        return VStack(alignment: .leading, spacing: 3) {
             Text("Changes")
                 .font(Design.Typography.interface(13, weight: .semibold))
-            ForEach(stashChangeFiles, id: \.self) { path in
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Text(path)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, 22)
+            ForEach(rows) { row in
+                stashChangeRow(row)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("stash-changes")
+    }
+
+    func toggleStashFolder(_ path: String) {
+        if collapsedStashFolders.contains(path) {
+            collapsedStashFolders.remove(path)
+        } else {
+            collapsedStashFolders.insert(path)
+        }
+    }
+
+    @ViewBuilder
+    func stashChangeRow(_ row: ShelfTreeRow) -> some View {
+        if row.isFolder {
+            Button {
+                toggleStashFolder(row.path)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: collapsedStashFolders.contains(row.path) ? "chevron.right" : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                    Image(systemName: "folder")
+                        .font(.system(size: 10))
+                    Text(row.name)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.leading, 8 + CGFloat(row.depth * 14))
+            .accessibilityLabel(row.name)
+            .accessibilityIdentifier("stash-change-folder-\(row.path)")
+        } else {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text(row.name)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 22 + CGFloat(row.depth * 14))
+            .accessibilityIdentifier("stash-change-file-\(row.path)")
+        }
     }
 
     func toggleShelfExpansion(_ id: String) {

@@ -322,4 +322,36 @@ extension ContentView {
             current: fileWorkspace.version
         )
     }
+
+    func openedProjectRelativePath() -> String? {
+        guard let path = fileWorkspace.fileSelection ?? fileWorkspace.selection else { return nil }
+        if let relative = normalizedRepositoryRelativePath(path) {
+            return relative
+        }
+        return relativePathForChangesView(path)
+    }
+
+    var canExpandSelectedProjectDirectory: Bool {
+        !projectEntryParentDirectory(selection: openedProjectRelativePath()).isEmpty
+    }
+
+    func revealOpenedProjectFile() {
+        guard let relative = openedProjectRelativePath() else { return }
+        projectTreeExpansion.token += 1
+        projectTreeExpansion.kind = .reveal(relative)
+    }
+
+    func expandSelectedProjectDirectory() {
+        let parent = projectEntryParentDirectory(selection: openedProjectRelativePath())
+        guard !parent.isEmpty else { return }
+        projectTreeExpansion.token += 1
+        projectTreeExpansion.kind = .expandSelected(parent)
+    }
+
+    func collapseProjectTree() {
+        projectTreeExpansion.token += 1
+        projectTreeExpansion.kind = .collapseAll
+    }
+
+
 }

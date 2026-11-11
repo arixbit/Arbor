@@ -131,6 +131,9 @@ struct ContentView: View {
     // 传 -arbor.appearance light|dark 就能固定，不再依赖采集时的系统设置。
     @AppStorage("arbor.appearance") var appearanceOverride = ""
     @AppStorage("arbor.projectPanelExpanded.v3") var projectPanelExpanded = true
+    @State var projectTreeExpansion = ProjectTreeExpansionCommand()
+    @State var projectTreeReloadToken = 0
+    @State var showNewProjectEntry = false
     // With both tool windows expanded the Commit surface takes the upper half,
     // matching the reference split; the divider stays draggable.
     @AppStorage("arbor.toolWindowHeight.v3") var toolWindowHeight: Double = 466

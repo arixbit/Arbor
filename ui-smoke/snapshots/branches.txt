@@ -1,38 +1,51 @@
 # Arbor UI snapshot · branches · 326×510 pt
-group	—	397,58 326×510
-image	Divide	398,62 12×12
-statictext	—	420,58 68×19
-button	Refresh	667,61 12×14
-menubutton	Edit	687,60 37×16
-textfield	Search branches	396,86 328×26
-image	Info	402,126 14×14
-statictext	—	422,120 230×26
-scrollview	—	397,152 326×380 [Disabled]
-statictext	—	403,154 46×13
-button	Commit Changes…	406,172 138×16
-button	New Branch…	407,196 104×16
-button	Checkout Tag or Revision…	407,220 188×16
-statictext	—	403,242 42×13
-button	main	406,260 49×16
-button	bugfix	404,286 50×13
-button	beta	420,304 47×16
-button	feature	404,328 54×13
-button	alpha	420,346 53×16
-statictext	—	403,370 94×13
-button	bugfix	404,388 50×13
-button	beta, ↑1 ↓0	417,408 261×16
-menubutton	More	683,408 35×16
-button	feature	404,434 54×13
-button	alpha, ↑1 ↓0	417,452 261×16
-menubutton	More	683,452 35×16
-button	main	403,478 275×16 [Disabled]
-menubutton	More	683,478 35×16
-statictext	—	403,510 102×13
-statictext	—	405,534 142×13
-scrollbar	—	705,150 19×382
-valueindicator	—	714,154 6×267 [Disabled]
-incrementarrow	—	706,152 0×0 [Disabled]
-decrementarrow	—	706,152 0×0 [Disabled]
-button	—	714,422 6×106 [Disabled]
-button	—	714,154 6×0 [Disabled]
-menubutton	Actions	396,548 81×22
+group	—	402,58 326×510
+image	Divide	404,62 12×12
+statictext	—	426,58 68×19
+button	Refresh	672,61 12×14
+menubutton	Edit	692,60 37×16
+textfield	Search branches	401,86 328×26
+image	Info	407,126 14×14
+statictext	—	426,120 230×26
+scrollview	—	402,152 326×380 [Disabled]
+statictext	—	408,154 46×13
+button	Commit Changes…	411,172 138×16
+button	New Branch…	412,196 104×16
+button	Checkout Tag or Revision…	412,220 188×16
+statictext	—	408,242 42×13
+button	main	411,260 49×16
+button	bugfix	409,286 50×13
+button	beta	425,304 47×16
+button	feature	409,328 54×13
+button	alpha	425,346 53×16
+statictext	—	408,370 94×13
+button	bugfix	409,388 50×13
+button	beta, ↑1 ↓0	422,408 261×16
+menubutton	More	688,408 35×16
+button	feature	409,434 54×13
+button	alpha, ↑1 ↓0	422,452 261×16
+menubutton	More	688,452 35×16
+button	main	408,478 275×16 [Disabled]
+menubutton	More	688,478 35×16
+statictext	—	408,510 102×13
+statictext	—	410,534 142×13
+scrollbar	—	710,150 19×382
+valueindicator	—	719,154 6×267 [Disabled]
+incrementarrow	—	711,152 0×0 [Disabled]
+decrementarrow	—	711,152 0×0 [Disabled]
+button	—	719,422 6×106 [Disabled]
+button	—	719,154 6×0 [Disabled]
+menubutton	Actions	401,548 81×22
+button	Hide Commit Tool Window	590,62 11×2
+button	Expand All	554,102 12×6
+button	Collapse All	590,102 12×6
+statictext	—	554,389 52×13
+scrollbar	—	586,416 19×32 [Disabled]
+menubutton	Show Commit Options	574,468 37×18
+button	New File or Directory…	439,526 11×11
+button	Select Opened File	460,524 16×16 [Disabled]
+button	Expand Selected	488,529 12×6 [Disabled]
+button	Collapse All	510,529 12×6
+button	Select Opened File in Changes View	532,526 13×14 [Disabled]
+menubutton	Options	554,524 35×16
+button	Hide Project Tool Window	598,532 11×2

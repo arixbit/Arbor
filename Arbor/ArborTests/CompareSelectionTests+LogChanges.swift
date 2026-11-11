@@ -592,4 +592,25 @@ extension CompareSelectionTests {
             ["Sources/New.swift", "Sources/Old.swift"]
         )
     }
+
+    func testLogDetailsSplitterUsesTheRebasedSevenTenthsDefault() {
+        let position = logDetailsSplitterPosition(
+            totalHeight: 942,
+            proportion: 0.7,
+            minimumTop: 180,
+            minimumBottom: 120,
+            dividerThickness: 1
+        )
+        XCTAssertEqual(position, 659.4, accuracy: 0.001)
+        XCTAssertEqual(942 - 1 - position, 281.6, accuracy: 0.001)
+
+        let crushed = logDetailsSplitterPosition(
+            totalHeight: 200,
+            proportion: 0.7,
+            minimumTop: 180,
+            minimumBottom: 120,
+            dividerThickness: 1
+        )
+        XCTAssertEqual(crushed, 79, accuracy: 0.001)
+    }
 }

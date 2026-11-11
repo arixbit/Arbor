@@ -119,3 +119,29 @@ func matchingLogCommitID(
         $0.id.hasPrefix(requestedID) || requestedID.hasPrefix($0.id)
     })?.id
 }
+
+/// Keep an explicit Log selection when the reloaded rows still contain it.
+/// Opening or refreshing the Log does not invent a selection: the Changes
+/// and details panes stay empty until the user picks a row.
+func retainedLogSelection(
+    previousSelection: String?,
+    previousSelections: Set<String>,
+    in commits: [CommitInfo]
+) -> (selection: String?, selectedIDs: Set<String>) {
+    let retained = commits.filter { commit in
+        previousSelections.contains { selectedID in
+            commit.id == selectedID
+                || commit.id.hasPrefix(selectedID)
+                || selectedID.hasPrefix(commit.id)
+        }
+    }
+    if !retained.isEmpty {
+        let selection = retained.first(where: { $0.id == previousSelection })?.id
+            ?? retained.first?.id
+        return (selection, Set(retained.map(\.id)))
+    }
+    if let selectedID = matchingLogCommitID(requestedID: previousSelection, in: commits) {
+        return (selectedID, [selectedID])
+    }
+    return (nil, [])
+}

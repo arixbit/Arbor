@@ -151,19 +151,59 @@ var logCommandFilterBar: some View {
 
 
 @ViewBuilder
+var logBranchesLeading: some View {
+    if logBranchesVisible {
+        logBranchesPanelView
+    } else {
+        logBranchesStrip
+    }
+    Divider()
+}
+
+/// Collapsed form of the Log branches panel. The full panel stays a saved
+/// choice; this strip is how that panel is opened again.
+var logBranchesStrip: some View {
+    Button {
+        logBranchesVisible = true
+    } label: {
+        ZStack {
+            Text("Branches")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .frame(width: 22)
+    .frame(maxHeight: .infinity)
+    .background(Design.Colors.surface.opacity(0.55))
+    .help("Show Branches")
+    .accessibilityIdentifier("log-branches-strip")
+    .accessibilityLabel("Branches")
+}
+
+@ViewBuilder
 var logGraphHistoryContent: some View {
     let isCommand = logList.viewMode == .command
     let isFileHistory = logSelectionState.tabs.first { $0.id == currentLogTabID }?.historyPath != nil
     let entries = isCommand ? logRuntime.commandEntries : logList.entries
     let isLoading = isCommand ? logRuntime.isLoadingCommand : logList.isLoading
     if isLoading && entries.isEmpty {
-        ProgressView("Loading history…")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        HStack(spacing: 0) {
+            if !isCommand {
+                logBranchesLeading
+            }
+            ProgressView("Loading history…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else if entries.isEmpty {
         HStack(spacing: 0) {
-            if logBranchesVisible && !isCommand {
-                logBranchesPanelView
-                Divider()
+            if !isCommand {
+                logBranchesLeading
             }
             VStack(spacing: 10) {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
@@ -183,9 +223,8 @@ var logGraphHistoryContent: some View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
         HStack(spacing: 0) {
-            if logBranchesVisible && !isCommand {
-                logBranchesPanelView
-                Divider()
+            if !isCommand {
+                logBranchesLeading
             }
             LogGraphView(
                 commits: entries,

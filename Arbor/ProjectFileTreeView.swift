@@ -31,6 +31,113 @@ func normalizedRepositoryRelativePath(_ path: String) -> String? {
     return components.joined(separator: "/")
 }
 
+
+enum ProjectEntryKind: Equatable {
+    case file
+    case directory
+}
+
+enum ProjectEntryCreateError: Equatable, Error {
+    case invalidName
+    case alreadyExists
+    case failed
+}
+
+func projectEntryParentDirectory(selection: String?) -> String {
+    guard let selection, let relative = normalizedRepositoryRelativePath(selection) else {
+        return ""
+    }
+    guard let slash = relative.lastIndex(of: "/") else { return "" }
+    return String(relative[..<slash])
+}
+
+func projectEntryRelativePath(parentRelativePath: String, name: String) -> String? {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedName.isEmpty else { return nil }
+    let parent = parentRelativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+    let combined = parent.isEmpty ? trimmedName : parent + "/" + trimmedName
+    return normalizedRepositoryRelativePath(combined)
+}
+
+func projectEntryDestination(rootPath: String, relativePath: String) -> URL? {
+    guard let relative = normalizedRepositoryRelativePath(relativePath) else { return nil }
+    let root = URL(fileURLWithPath: rootPath).standardizedFileURL
+    let destination = root.appendingPathComponent(relative).standardizedFileURL
+    let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+    guard destination.path.hasPrefix(prefix) else { return nil }
+    return destination
+}
+
+func createProjectEntry(
+    rootPath: String,
+    relativePath: String,
+    kind: ProjectEntryKind,
+    fileManager: FileManager = .default
+) throws {
+    guard let destination = projectEntryDestination(rootPath: rootPath, relativePath: relativePath) else {
+        throw ProjectEntryCreateError.invalidName
+    }
+    if fileManager.fileExists(atPath: destination.path) {
+        throw ProjectEntryCreateError.alreadyExists
+    }
+    switch kind {
+    case .directory:
+        do {
+            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        } catch {
+            throw ProjectEntryCreateError.failed
+        }
+    case .file:
+        let parent = destination.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: parent.path) {
+            do {
+                try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+            } catch {
+                throw ProjectEntryCreateError.failed
+            }
+        }
+        guard fileManager.createFile(atPath: destination.path, contents: Data()) else {
+            throw ProjectEntryCreateError.failed
+        }
+    }
+}
+
+enum ProjectTreeExpansionKind: Equatable {
+    case collapseAll
+    case reveal(String)
+    case expandSelected(String)
+}
+
+struct ProjectTreeExpansionCommand: Equatable {
+    var token = 0
+    var kind: ProjectTreeExpansionKind = .collapseAll
+}
+
+func projectTreeDirectoryShouldExpand(
+    directoryPath: String,
+    isRoot: Bool,
+    command: ProjectTreeExpansionCommand
+) -> Bool? {
+    switch command.kind {
+    case .collapseAll:
+        return isRoot ? true : false
+    case .reveal(let target):
+        if isRoot { return true }
+        if target == directoryPath || target.hasPrefix(directoryPath + "/") {
+            return true
+        }
+        return nil
+    case .expandSelected(let target):
+        if isRoot { return true }
+        let opensAncestor = target == directoryPath || target.hasPrefix(directoryPath + "/")
+        let opensDescendant = directoryPath.hasPrefix(target + "/")
+        if opensAncestor || opensDescendant {
+            return true
+        }
+        return nil
+    }
+}
+
 /// `Show File History` is a file action in IntelliJ's Git file-action group;
 /// directories keep the separate directory comparison action.  Normalize at
 /// this boundary so a context-menu callback can never open history for an
@@ -299,11 +406,15 @@ struct ProjectFileTreeView: View {
     var onResolveConflicts: (String) -> Void = { _ in }
     var resolvedConflictPaths: [String] = []
     var onRevertResolved: (String) -> Void = { _ in }
+    var expansionCommand = ProjectTreeExpansionCommand()
+    var reloadToken = 0
     @State private var rootEntries: [DirEntry] = []
     @State private var error: String?
     @State private var loading = false
     @State private var statusCache = ProjectFileTreeStatusCache()
     @State private var rootExpanded = true
+    @State private var loadGeneration = 0
+    @State private var treeContentGeneration = 0
 
     private var statusIndex: ProjectFileTreeStatusIndex {
         statusCache.index(for: entries.hashValue) { ProjectFileTreeStatusIndex(entries: entries) }
@@ -328,6 +439,7 @@ struct ProjectFileTreeView: View {
                     .padding(Design.Spacing.lg)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
+                    ScrollViewReader { proxy in
                     List(selection: $selection) {
                         DisclosureGroup(isExpanded: $rootExpanded) {
                             ForEach(rootEntries, id: \.path) { entry in
@@ -350,7 +462,10 @@ struct ProjectFileTreeView: View {
                                     onDelete: onDelete,
                                     onResolveConflicts: onResolveConflicts,
                                     resolvedConflictPaths: resolvedConflictPaths,
-                                    onRevertResolved: onRevertResolved
+                                    onRevertResolved: onRevertResolved,
+                                    expansionCommand: expansionCommand,
+                                    reloadToken: reloadToken,
+                                    onContentChanged: { treeContentGeneration += 1 }
                                 )
                                 .listRowSeparator(.hidden)
                             }
@@ -377,6 +492,13 @@ struct ProjectFileTreeView: View {
                     .scrollContentBackground(.hidden)
                     .background(Design.Colors.surface)
                     .environment(\.defaultMinListRowHeight, 24)
+                    .onChange(of: expansionCommand.token) { _, _ in
+                        scrollRevealedFile(using: proxy)
+                    }
+                    .onChange(of: treeContentGeneration) { _, _ in
+                        scrollRevealedFile(using: proxy)
+                    }
+                    }
                 }
             } else {
                 Text("Open a project to show its file tree")
@@ -393,21 +515,43 @@ struct ProjectFileTreeView: View {
             rootExpanded = true
             if let repo { loadRoot(repo) }
         }
+        .onChange(of: expansionCommand) { _, command in
+            if let next = projectTreeDirectoryShouldExpand(
+                directoryPath: "",
+                isRoot: true,
+                command: command
+            ) {
+                rootExpanded = next
+            }
+        }
+        .onChange(of: reloadToken) { _, _ in
+            rootEntries = []
+            rootExpanded = true
+            if let repo { loadRoot(repo) }
+        }
+    }
+
+    private func scrollRevealedFile(using proxy: ScrollViewProxy) {
+        guard case .reveal(let path) = expansionCommand.kind else { return }
+        proxy.scrollTo(path, anchor: .center)
     }
 
     private func loadRoot(_ repo: Repository) {
-        guard !loading else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
         loading = true
         error = nil
         Task.detached(priority: .userInitiated) {
             do {
                 let entries = try repo.listDir(relative: "")
                 await MainActor.run {
+                    guard generation == self.loadGeneration else { return }
                     rootEntries = entries
                     loading = false
                 }
             } catch {
                 await MainActor.run {
+                    guard generation == self.loadGeneration else { return }
                     self.error = "\(error)"
                     loading = false
                 }
@@ -436,6 +580,9 @@ private struct FileTreeNodeView: View {
     let onResolveConflicts: (String) -> Void
     let resolvedConflictPaths: [String]
     let onRevertResolved: (String) -> Void
+    var expansionCommand = ProjectTreeExpansionCommand()
+    var reloadToken = 0
+    var onContentChanged: () -> Void = {}
     @State private var children: [DirEntry] = []
     @State private var expanded = false
     @State private var loaded = false
@@ -475,7 +622,10 @@ private struct FileTreeNodeView: View {
                             onDelete: onDelete,
                             onResolveConflicts: onResolveConflicts,
                             resolvedConflictPaths: resolvedConflictPaths,
-                            onRevertResolved: onRevertResolved
+                            onRevertResolved: onRevertResolved,
+                            expansionCommand: expansionCommand,
+                            reloadToken: reloadToken,
+                            onContentChanged: onContentChanged
                         )
                         .listRowSeparator(.hidden)
                     }
@@ -484,8 +634,19 @@ private struct FileTreeNodeView: View {
                 treeLabel(systemImage: expanded ? "folder.fill" : "folder", name: entry.name, isDirectory: true)
             }
             .listRowSeparator(.hidden)
+            .id(entry.path)
+            .onAppear { applyExpansion(expansionCommand) }
             .onChange(of: expanded) { _, isExpanded in
                 if isExpanded && !loaded { loadChildren() }
+            }
+            .onChange(of: expansionCommand) { _, command in
+                applyExpansion(command)
+            }
+            .onChange(of: reloadToken) { _, _ in
+                children = []
+                loaded = false
+                error = nil
+                if expanded { loadChildren() }
             }
         } else {
             Button {
@@ -495,8 +656,23 @@ private struct FileTreeNodeView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .id(entry.path)
             .listRowSeparator(.hidden)
             .listRowBackground(selection == entry.path ? Design.Colors.selection : .clear)
+        }
+    }
+
+    private func applyExpansion(_ command: ProjectTreeExpansionCommand) {
+        guard entry.isDir else { return }
+        guard let next = projectTreeDirectoryShouldExpand(
+            directoryPath: entry.path,
+            isRoot: false,
+            command: command
+        ) else { return }
+        if expanded != next {
+            expanded = next
+        } else if next && !loaded && !loading {
+            loadChildren()
         }
     }
 
@@ -512,6 +688,10 @@ private struct FileTreeNodeView: View {
                 .opacity(name.hasPrefix(".") ? 0.62 : 1)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if !isDirectory, let kind {
+                StatusBadge(kind: kind)
+                    .accessibilityLabel("Git status: \(ChangeBadge.label(kind))")
+            }
         }
         .contextMenu {
             Button("Copy Relative Path") {
@@ -660,6 +840,7 @@ private struct FileTreeNodeView: View {
                     children = entries
                     loaded = true
                     loading = false
+                    onContentChanged()
                 }
             } catch {
                 await MainActor.run {
@@ -842,5 +1023,75 @@ func repositoryFileSymbol(for path: String) -> String {
     case "txt", "log": return "text.alignleft"
     case "png", "jpg", "jpeg", "gif", "webp": return "photo"
     default: return "doc"
+    }
+}
+
+struct NewProjectEntrySheet: View {
+    let rootPath: String
+    let parentRelativePath: String
+    let onCreated: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var kind = ProjectEntryKind.file
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("New File or Directory…")
+                .font(.headline)
+            if !parentRelativePath.isEmpty {
+                Text(parentRelativePath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            TextField("Name", text: $name)
+            Picker("", selection: $kind) {
+                Text("File").tag(ProjectEntryKind.file)
+                Text("Directory").tag(ProjectEntryKind.directory)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Create") { create() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 380)
+    }
+
+    private func create() {
+        guard let relative = projectEntryRelativePath(
+            parentRelativePath: parentRelativePath,
+            name: name
+        ) else {
+            errorMessage = "Enter a name."
+            return
+        }
+        do {
+            try createProjectEntry(rootPath: rootPath, relativePath: relative, kind: kind)
+            onCreated()
+            dismiss()
+        } catch let error as ProjectEntryCreateError {
+            switch error {
+            case .invalidName:
+                errorMessage = "Enter a name."
+            case .alreadyExists:
+                errorMessage = "That name is already used."
+            case .failed:
+                errorMessage = "The name must stay inside the project."
+            }
+        } catch {
+            errorMessage = "The name must stay inside the project."
+        }
     }
 }

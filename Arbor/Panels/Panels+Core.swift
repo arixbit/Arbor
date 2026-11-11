@@ -57,7 +57,10 @@ struct RebasedActivityRail: View {
 
             Menu {
                 Button("Commit") { onSelect(.commit) }
-                Button("Log") { onSelect(.log) }
+                Button("Project") { onOpenProject() }
+                Button("Git") { onSelect(.log) }
+                Button("Terminal") { onSelect(.operations) }
+                Divider()
                 Button("Operation Log") { onSelect(.operations) }
             } label: {
                 Image(systemName: "ellipsis")
@@ -69,8 +72,8 @@ struct RebasedActivityRail: View {
             .help("More tool windows")
 
             Spacer()
-            railButton("clock", mode: .log, help: "Log")
-            railButton("list.bullet.rectangle", mode: .operations, help: "Operation Log")
+            railButton("terminal", mode: .operations, help: "Terminal")
+            railButton("arrow.triangle.branch", mode: .log, help: "Git")
         }
         .padding(.top, 4)
         .padding(.bottom, 12)
@@ -352,16 +355,8 @@ struct RebasedTopBar<BranchMenu: View>: View {
     let hasRepository: Bool
     let isLoading: Bool
     let onOpenProject: () -> Void
-    let onRefresh: () -> Void
     let onUpdate: () -> Void
-    let onCommit: () -> Void
     let onPush: () -> Void
-    let onFetch: () -> Void
-    let onHosting: () -> Void
-    let isShallowRepository: Bool
-    let hasCurrentBranch: Bool
-    let hasConflicts: Bool
-    let onQuickAction: (ArborVCSAction) -> Void
     let onSearch: () -> Void
     let recentProjects: [String]
     let onOpenRecent: (String) -> Void
@@ -382,16 +377,8 @@ struct RebasedTopBar<BranchMenu: View>: View {
         hasRepository: Bool,
         isLoading: Bool,
         onOpenProject: @escaping () -> Void,
-        onRefresh: @escaping () -> Void,
         onUpdate: @escaping () -> Void,
-        onCommit: @escaping () -> Void,
         onPush: @escaping () -> Void,
-        onFetch: @escaping () -> Void,
-        onHosting: @escaping () -> Void = {},
-        isShallowRepository: Bool = false,
-        hasCurrentBranch: Bool = false,
-        hasConflicts: Bool = false,
-        onQuickAction: @escaping (ArborVCSAction) -> Void = { _ in },
         onSearch: @escaping () -> Void,
         recentProjects: [String] = [],
         onOpenRecent: @escaping (String) -> Void = { _ in },
@@ -411,16 +398,8 @@ struct RebasedTopBar<BranchMenu: View>: View {
         self.hasRepository = hasRepository
         self.isLoading = isLoading
         self.onOpenProject = onOpenProject
-        self.onRefresh = onRefresh
         self.onUpdate = onUpdate
-        self.onCommit = onCommit
         self.onPush = onPush
-        self.onFetch = onFetch
-        self.onHosting = onHosting
-        self.isShallowRepository = isShallowRepository
-        self.hasCurrentBranch = hasCurrentBranch
-        self.hasConflicts = hasConflicts
-        self.onQuickAction = onQuickAction
         self.onSearch = onSearch
         self.recentProjects = recentProjects
         self.onOpenRecent = onOpenRecent
@@ -491,48 +470,6 @@ struct RebasedTopBar<BranchMenu: View>: View {
             .foregroundStyle(.secondary)
             .accessibilityLabel("Search")
             .help("Search")
-
-            Menu {
-                Button("Commit", action: onCommit)
-                Button("Fetch", action: onFetch)
-                Button("Refresh", action: onRefresh)
-                Divider()
-                Button("Quick Git Actions…") { onQuickAction(.quickActions) }
-                Divider()
-                Button("Show Log") { onQuickAction(.showLog) }
-                Button("Operation Log") { onQuickAction(.showOperations) }
-                Button("Pull Requests & Reviews") { onHosting() }
-                Button("Git Roots") { onQuickAction(.showGitRoots) }
-                Button("Git Console") { onQuickAction(.showGitConsole) }
-                Divider()
-                Button("Branches…") { onQuickAction(.branches) }
-                Button("Push…") { onQuickAction(.push) }
-                Divider()
-                Button("Stash…") { onQuickAction(.stash) }
-                Button("Unstash Changes…") { onQuickAction(.unstash) }
-                Button("Worktrees") { onQuickAction(.worktrees) }
-                Divider()
-                Button("Stage changes") { onQuickAction(.stageTracked) }
-                Button("Stage all changes") { onQuickAction(.stageAll) }
-                Button("Copy Current Branch Name") {
-                    onQuickAction(.copyCurrentBranchName)
-                }
-                .disabled(!hasCurrentBranch)
-                Divider()
-                Button("Resolve Conflicts") { onQuickAction(.resolveConflicts) }
-                    .disabled(!hasConflicts)
-                if isShallowRepository {
-                    Divider()
-                    Button("Fetch Full History…") { onQuickAction(.fetchUnshallow) }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .frame(width: 28, height: 28)
-            }
-            .menuStyle(.borderlessButton)
-            .disabled(!hasRepository || isLoading)
-            .accessibilityLabel("More Git Actions")
-            .help("More Git Actions")
 
             Menu {
                 AppLanguageMenu()
@@ -998,13 +935,6 @@ struct RebasedChangeGroup: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Button(action: { onPartial(entry.path) }) {
-                Image(systemName: "ellipsis")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Partial stage")
-            .accessibilityLabel("Partial stage")
         }
         .padding(.leading, CGFloat(depth) * 14 + 4)
         .frame(minHeight: 24)
@@ -1065,6 +995,7 @@ struct RebasedChangeGroup: View {
                 } label: {
                     Label("Show Diff", systemImage: "doc.text.magnifyingglass")
                 }
+                Button("Partial stage") { onPartial(entry.path) }
                 let presence = stagingPresence[entry.path]
                 let versionActions = stagingVersionActions(for: entry, presence: presence)
                 if versionActions.contains(.local) {

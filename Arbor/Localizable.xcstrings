@@ -590,6 +590,16 @@
         }
       }
     },
+    "Hide Project Tool Window" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏项目工具窗口"
+          }
+        }
+      }
+    },
     "Hide Tool Window" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6386,6 +6396,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按目录分组"
+          }
+        }
+      }
+    },
+    "Group By" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分组"
           }
         }
       }
@@ -14200,6 +14220,16 @@
         }
       }
     },
+    "Terminal" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
+        }
+      }
+    },
     "Text" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19253,6 +19283,16 @@
         }
       }
     },
+    "Collapse All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部折叠"
+          }
+        }
+      }
+    },
     "Collapse All Graph" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19779,6 +19819,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到此文件夹前，现有 Shelf 文件会被复制并校验。Git Shelf refs 仍保存在仓库中。"
+          }
+        }
+      }
+    },
+    "Expand All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部展开"
           }
         }
       }
@@ -27189,6 +27239,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "应用选中的贮藏，并从列表中移除"
+          }
+        }
+      }
+    },
+    "Directory" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目录"
+          }
+        }
+      }
+    },
+    "Enter a name." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入名称。"
+          }
+        }
+      }
+    },
+    "Expand Selected" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开选中项"
+          }
+        }
+      }
+    },
+    "New File or Directory…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件或目录…"
+          }
+        }
+      }
+    },
+    "Select Opened File" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定位打开的文件"
+          }
+        }
+      }
+    },
+    "That name is already used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该名称已存在。"
+          }
+        }
+      }
+    },
+    "The name must stay inside the project." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称必须位于项目内。"
           }
         }
       }

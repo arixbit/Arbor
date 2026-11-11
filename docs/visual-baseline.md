@@ -10,8 +10,11 @@ repository (`scripts/make-ui-fixture.sh`) with the window dragged to exactly
 | Commit | `docs/images/baseline/arbor-commit.png` | `docs/images/baseline/rebased-commit.png` |
 | Log | `docs/images/baseline/arbor-log.png` | `docs/images/baseline/rebased-log.png` |
 
-Status: the Commit layout difference (C1/C2), left column width, and Log filter
-bar overflow (L1) are fixed; the remaining rows are open.
+Status: C1/C2, C2b–C2d, C3–C5, and L1/L2 are already aligned. The
+structure pass also moves secondary Commit actions into menus, adds a direct
+Hide control, fixes the modified counter, and adds Project file status badges.
+See [the structure checklist](development/main-window-structure-alignment.md)
+for current evidence and remaining work; screenshots below predate this pass.
 
 Recapture with:
 
@@ -42,27 +45,27 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 | --- | --- | --- | --- |
 | ~~C1~~ | ~~Window use~~ | Fixed: the Log editor fills the centre in Commit mode | The same area carries the Log and the project tree |
 | ~~C2~~ | ~~Left column content~~ | Fixed: Commit/Stash tabs with the Project tree below them, expanded by default | Commit/Stash tabs, then the Project tree below them |
-| C2b | Tool-window title | An extra `Commit` row above the Commit/Stash tabs | No such row; the tab strip is the title |
+| ~~C2b~~ | Tool-window title | Fixed: Commit/Stash tabs own the title row | No extra title row |
 | ~~C2c~~ | ~~Left column width~~ | Fixed: 628 pt — 52 pt rail + 564 pt panel + 12 pt divider, measured from the accessibility tree, matching the reference exactly | 628 pt |
-| C2d | Left column split | Commit 626 pt / Project 441 pt | Commit 510 pt / Project 505 pt |
-| C3 | Change list header | Changelist row `● Default 5` | `Changes 2 files` with a select-all checkbox |
-| C4 | Ignored files | `Ignored Files 2 files` expanded by default, taking two rows among real changes | Not shown |
-| C5 | Untracked files | Listed inside `Unstaged Files` | Separate collapsed `Unversioned Files 5 files` group with a tri-state checkbox |
-| C6 | Commit footer | `Template`, `Skip hooks`, `Commit`, `Commit and …` | `Commit`, `Commit and Push…`, options behind the gear |
-| C7 | Change counters | none | `2 modified` beside the Amend row |
+| ~~C2d~~ | Left column split | Fixed: default Commit height 466 pt; captured Project area 469 pt | Approximately equal halves |
+| ~~C3~~ | Change list header | Fixed: `Changes N files`, select-all checkbox, no separate single Default title | `Changes 2 files` with select-all |
+| ~~C4~~ | Ignored files | Fixed: hidden by default; opt in through View Options | Not shown |
+| ~~C5~~ | Untracked files | Fixed: separate collapsed Unversioned Files group with tri-state checkbox | The same structure |
+| C6 | Commit footer | Commit / Commit and Push…; conditional actions and options behind the gear | Commit / Commit and Push…, options behind the gear |
+| C7 | Change counters | N modified: distinct tracked changed paths, independent of staging | `2 modified` beside the Amend row |
 | C8 | Row status | coloured square badge `M`/`U`/`I` | coloured letter, no badge |
-| C9 | Tree icons | text only | file-type icons and a `M+` status chip |
+| C9 | Tree icons | Existing file-type icons, now with StatusBadge on changed files | file-type icons and a status chip |
 
 ## Log screen
 
 | # | Difference | Arbor | Rebased |
 | --- | --- | --- | --- |
 | ~~L1~~ | ~~Filter bar~~ | Fixed: flexible text field, Regex/Match Case chips, bounded Paths/Branch menus, and an author/date popover. Follow and Refresh remain visible while filters scroll in narrower columns | One row that fits: text field, `Cc`, `Branch ⌄`, `User ⌄`, `Date ⌄`, `Paths ⌄` |
-| L2 | Log columns | Commit message + ref badges | Commit, Author, Date, ref badges |
+| ~~L2~~ | Log columns | Fixed: Commit, Author and Date columns | Commit, Author, Date, ref badges |
 | L3 | Graph | 2 px blue line, 8 pt filled nodes | 1 px line, hollow nodes |
-| L4 | Right pane | Commit detail is auto-populated for the selected row, and the Changes panel with the Side-by-side/Unified toggle sits below it | Both right panes stay at their empty states until the user selects a commit |
-| L5 | Project tree | text rows, no status decoration | file-type icons and `M+`/`M` chips |
-| L6 | Toolbar | Update, Commit, Push, Fetch, More Git Actions, Refresh, Language, Search | two icons, notifications |
+| L4 | Right pane | Changes above commit details; initial selection behavior under review | Both right panes stay empty until explicit selection |
+| L5 | Project tree | Existing file-type icons, now with StatusBadge on changed files | file-type icons and status chips |
+| L6 | Toolbar | Project → Update / Push → branch; Search / Settings on the right; extra Git actions moved to the main menu | Runtime AX confirms Update Project… / Push… between project and branch, not Back / Forward |
 | L7 | Status bar | branch, ahead/behind, Git, Operation Log, change count, project state, path, HEAD | `PsiDirectory:…` / `PsiBinaryFile:Log` |
 | L8 | Notification | none | “IDE project settings can be added to Git” banner |
 
@@ -75,12 +78,10 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
    fields use compact controls; right-hand actions stay visible. UI tests
    verify 1642, 1540, 1440, 1200, and 980 pt windows, long branch/path names,
    horizontal scrolling, and applying/clearing author and path filters.
-3. **C4 — ignored files are on by default.** They occupy the change list next
-   to real work; the reference does not show them at all.
-4. **L2 — the Log has no Author/Date columns**, so identities and timestamps
-   are only visible after selecting a commit.
-5. **C9/L5 — the project tree lacks file-type icons and status chips.**
-6. **L6 — Arbor carries more permanent toolbar chrome** than the reference.
+3. **Activity rail / Project header** — align tool-window entry points and actions.
+4. **Changes/details split ratio** — confirm the fresh-config divider before changing the default.
+5. **Changes toolbar / inspector split** — verify action meanings and fresh layout at runtime.
+6. **Stash grouping / file outline** — supply structured file data before changing the list.
 
 ## Method notes
 

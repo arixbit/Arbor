@@ -100,12 +100,12 @@ enum ArborUISweepPolicy {
     /// sweep: after one is clicked every other control on the old surface is
     /// stale, and a stale SwiftUI control still reports itself as hittable.
     static let navigationIdentifiers: Set<String> = [
-        "folder", "clock", "list.bullet.rectangle",
+        "folder", "clock", "list.bullet.rectangle", "terminal", "arrow.triangle.branch",
     ]
 
     static let navigationLabels: Set<String> = [
         "Project", "Log", "Operation Log", "Operation History",
-        "Commit", "Stash", "Changes",
+        "Commit", "Stash", "Changes", "Git", "Terminal",
     ]
 
     /// Labels whose click is expected to end the process, mutate the host, or

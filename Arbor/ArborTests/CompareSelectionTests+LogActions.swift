@@ -352,6 +352,34 @@ extension CompareSelectionTests {
         XCTAssertNil(matchingLogCommitID(requestedID: "   ", in: [visibleParent, branchHead]))
     }
 
+    func testRetainedLogSelectionStaysEmptyWithoutAnExplicitRow() {
+        let first = logCommit(id: "first-commit")
+        let second = logCommit(id: "second-commit")
+        let empty = retainedLogSelection(
+            previousSelection: nil,
+            previousSelections: [],
+            in: [first, second]
+        )
+        XCTAssertNil(empty.selection)
+        XCTAssertTrue(empty.selectedIDs.isEmpty)
+
+        let kept = retainedLogSelection(
+            previousSelection: second.id,
+            previousSelections: [second.id],
+            in: [first, second]
+        )
+        XCTAssertEqual(kept.selection, second.id)
+        XCTAssertEqual(kept.selectedIDs, [second.id])
+
+        let missing = retainedLogSelection(
+            previousSelection: "gone",
+            previousSelections: ["gone"],
+            in: [first, second]
+        )
+        XCTAssertNil(missing.selection)
+        XCTAssertTrue(missing.selectedIDs.isEmpty)
+    }
+
     func testLogCommandMergeKeepsEqualObjectIDsRootQualified() {
         var firstRoot = logCommit(id: "same", repositoryPath: "/workspace/one")
         firstRoot.time = 10

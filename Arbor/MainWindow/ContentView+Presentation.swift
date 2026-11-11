@@ -5,6 +5,20 @@ extension ContentView {
 
     var workspacePresentedView: some View {
         workspaceLifecycleView
+        .sheet(isPresented: $showNewProjectEntry) {
+            if let root = repo?.workdir() {
+                NewProjectEntrySheet(
+                    rootPath: root,
+                    parentRelativePath: projectEntryParentDirectory(
+                        selection: openedProjectRelativePath()
+                    ),
+                    onCreated: {
+                        projectTreeReloadToken += 1
+                        refreshAll(showFeedback: false)
+                    }
+                )
+            }
+        }
         // 后半段修饰符链（拆分以降低单表达式类型检查复杂度）
         .overlay(alignment: .trailing) {
             conflictResolverOverlays
