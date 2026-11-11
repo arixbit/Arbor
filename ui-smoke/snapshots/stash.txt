@@ -1,0 +1,18 @@
+# Arbor UI snapshot · stash · 290×374 pt
+group	—	40,135 290×374
+button	Show Diff	53,135 16×14
+button	Expand All	84,138 12×6
+button	Collapse All	112,138 12×6
+scrollview	—	40,158 290×350 [Disabled]
+button	Stashes, 1	53,170 78×16
+button	On main: Fixture stash	57,196 216×30
+menubutton	More	280,202 35×16
+button	Apply	74,236 50×20
+button	Pop	132,236 40×20
+group	—	52,270 110×34
+statictext	—	52,270 56×16
+image	Plain Text Document	75,292 8×10
+statictext	—	90,290 71×15
+button	Shelves, 0	54,318 74×16
+menubutton	Filter	284,318 36×17
+statictext	—	74,340 53×13

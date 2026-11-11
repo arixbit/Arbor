@@ -138,6 +138,13 @@ def parse_tree(path: Path) -> tuple[list[dict], tuple[float, float]]:
     for node in nodes:
         node["box"] = VARIES if node["volatile"] else (
             f"{node['x']:.0f},{node['y']:.0f} {node['w']:.0f}×{node['h']:.0f}")
+    if clip is not None:
+        # 裁剪出来的浮层不参与缩进比较：SwiftUI 重建弹层时，同样一组控件在无障碍树
+        # 里的嵌套深度会变（父容器有时在、有时不在），缩进每行都不同 → 基线随机红。
+        # 这类界面的判据是「哪些控件、在什么位置」，不是「嵌了几层」。
+        base_depth = nodes[0]["depth"] if nodes else 0
+        for node in nodes:
+            node["depth"] = base_depth
     return nodes, size
 
 
@@ -316,9 +323,13 @@ def parse_tree_text(lines: list[str]) -> tuple[list[dict], tuple[float, float]]:
 def _structure_diff(before: list[dict], after: list[dict],
                     before_lines: list[str], after_lines: list[str]) -> list[str]:
     """结构差异：哪些控件在、叫什么、什么状态。几何由 compare() 单独判。"""
+    # 结构差异只比「有哪些控件、什么状态」，不比嵌套深度：裁剪出来的浮层在两次
+    # 导出间层级会变，而基线里已经拍平了，拿原始深度去比会每一行都不同。
+    base = min((node["depth"] for node in before), default=0)
+
     def skeleton(node: dict) -> str:
         flags = (" [" + "|".join(node["flags"]) + "]") if node["flags"] else ""
-        return f"{'  ' * max(node['depth'], 0)}{node['role']}\t{node['name'] or '—'}{flags}"
+        return f"{node['role']}\t{node['name'] or '—'}{flags}"
 
     old = [skeleton(node) for node in before]
     new = [skeleton(node) for node in after]

@@ -192,6 +192,20 @@ final class ArborUIParityUITests: XCTestCase {
             session.terminate()
         }
 
+        // 深色外观单独导一份：颜色不在无障碍树里，但深色下自定义绘制的控件
+        // （分隔线、描边、选中态）可能整块消失或退化成纯色，位置和名字会跟着变。
+        for surface in ["commit", "log"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: surface)
+            session.extraLaunchArguments = layout + [
+                "-arbor.appearance", "dark",
+                "-arbor.toolWindowMode", surface,
+            ]
+            session.launch()
+            resize(session.window, to: Self.targetSize)
+            try dump(session.window.debugDescription, named: "arbor-\(surface)-dark")
+            session.terminate()
+        }
+
         // Settings 是独立窗口，不在主窗口的子树里，所以单独导一份——它同样属于
         // 用户能看见的界面，值得进快照基线。
         do {
