@@ -122,8 +122,11 @@ hex 字面值（全仓仅 `Monitoring/RepositoryExternalVCSSnapshots.swift` 4 �
 
 ## 五、待定
 
-- **字体**：令牌表写的是系统字体（SF Pro），代码里 `Design.Typography.interface()` 用
-  自带 Inter 字体（48 处引用）。两者互斥，第二期开工前必须定一条。
+- ~~**字体**~~（已定）：按令牌表统一到系统字体 SF Pro。`Design.Typography.interface()`
+  改为 `.system(size:weight:)`，默认字号取令牌的正文 13.5；Inter 的 otf 仍留在包里
+  但不再被引用。Diff 的代码字体按令牌表保持现状（`Typography.code` 未动）。
+  验证：三个快照基线不变（几何差异小于 1pt），行高与过滤条布局的既有测试全过，
+  视觉基线图已按新字体重拍。
 - **分支图配色**：原计划要求「未选中中性灰阶、选中行节点用窗口底色描点」，而现状
   `Design.Colors.graphPalette` 是紫青多色分配。这是行为可见的改动，需要单独确认，
   不混在换肤里顺手改。

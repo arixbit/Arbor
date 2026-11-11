@@ -20,6 +20,9 @@ workbench, and the branch list stays usable at scale.
   files without changes.
 - New interface strings added for this release carry Simplified Chinese
   translations.
+- The interface font follows the design tokens: the bundled Inter face is
+  replaced by the system font (SF Pro) at the token body size. The diff viewer's
+  code face is unchanged.
 
 ## 1.0.35 - 2026-11-09
 

@@ -94,8 +94,16 @@ enum Design {
             return commitDateFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
         }
 
-        static func interface(_ size: CGFloat = 13, weight: Font.Weight = .regular) -> Font {
-            .custom(weight == .semibold || weight == .bold ? "Inter-SemiBold" : "Inter-Regular", size: size).weight(weight)
+        /// 界面字体：系统字体（SF Pro），字号默认取设计令牌的正文值。
+        ///
+        /// 之前用的是随包的 Inter。`docs/restyle-b.md` 的令牌表写的是系统字体，
+        /// 两者互斥，按令牌表统一到 SF Pro；Inter 的 otf 仍留在包里但不再被引用。
+        /// Diff 里的代码字体不在这里（见下面的 `code`），令牌表要求保持现状。
+        static func interface(
+            _ size: CGFloat = Theme.Typography.bodySize,
+            weight: Font.Weight = .regular
+        ) -> Font {
+            .system(size: size, weight: weight)
         }
 
         static func registerFonts() {
