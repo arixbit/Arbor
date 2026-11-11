@@ -711,7 +711,86 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         )
     }
 
+    /// 深色模式下逐区域检查：没有哪一块还是浅色的，也没有哪一块被画成全黑。
+    /// 整屏平均看不出来的问题，按区域能看出来。
+    @MainActor
+    func testDarkModeRegionsAreDarkButNotBlack() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.appearance", "dark",
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+            "-arbor.toolWindowMode", "commit",
+            "-arbor.log.showDetails.v1", "YES",
+        ]
+        session.launch()
+        defer { session.terminate() }
+
+        let image = try XCTUnwrap(
+            session.window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        )
+
+        // 归一化区域：工具栏、左栏（提交/项目）、日志列、右侧详情、状态栏。
+        let regions: [(String, CGRect)] = [
+            ("toolbar", CGRect(x: 0.0, y: 0.0, width: 1.0, height: 0.06)),
+            ("sidebar", CGRect(x: 0.03, y: 0.10, width: 0.33, height: 0.80)),
+            ("log", CGRect(x: 0.40, y: 0.15, width: 0.32, height: 0.70)),
+            ("detail", CGRect(x: 0.75, y: 0.15, width: 0.23, height: 0.70)),
+            ("statusbar", CGRect(x: 0.0, y: 0.97, width: 1.0, height: 0.03)),
+        ]
+        for (name, rect) in regions {
+            let stats = Self.luminanceStats(of: image, in: rect)
+            XCTAssertLessThan(stats.mean, 110,
+                              "\(name) is still light in dark mode (mean \(Int(stats.mean)))")
+            XCTAssertGreaterThan(stats.variance, 3,
+                                 "\(name) is a flat block in dark mode: content may be invisible")
+        }
+    }
+
     /// 每 8 个像素采一个点，足够判断整体明暗。
+    /// 采样一块归一化矩形（0…1）里像素的亮度和方差。
+    ///
+    /// 只测整屏平均会被大块深色掩盖：某一栏仍是浅色、或者某块被画成全黑，
+    /// 整屏亮度都可能看起来「正常」。按区域测才能把这两种情况分开。
+    static func luminanceStats(of image: CGImage, in rect: CGRect) -> (mean: Double, variance: Double) {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = pixels.withUnsafeMutableBytes({ buffer in
+            CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        }) else { return (0, 0) }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let x0 = max(0, Int(rect.minX * CGFloat(width)))
+        let x1 = min(width, Int(rect.maxX * CGFloat(width)))
+        let y0 = max(0, Int(rect.minY * CGFloat(height)))
+        let y1 = min(height, Int(rect.maxY * CGFloat(height)))
+        var values: [Double] = []
+        for y in stride(from: y0, to: y1, by: 6) {
+            for x in stride(from: x0, to: x1, by: 6) {
+                let offset = (y * width + x) * 4
+                let r = Double(pixels[offset])
+                let g = Double(pixels[offset + 1])
+                let b = Double(pixels[offset + 2])
+                values.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+            }
+        }
+        guard !values.isEmpty else { return (0, 0) }
+        let mean = values.reduce(0, +) / Double(values.count)
+        let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(values.count)
+        return (mean, variance)
+    }
+
     static func averageLuminance(of image: CGImage) -> Double {
         let width = image.width
         let height = image.height

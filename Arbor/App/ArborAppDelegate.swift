@@ -17,6 +17,15 @@ final class ArborAppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApp.setActivationPolicy(.regular)
+        // -arbor.appearance light|dark：把整个 App（含窗口标题栏和所有自定义绘制）
+        // 固定到一种外观。截图和视觉基线需要确定的结果，不能跟着采集时的系统设置走。
+        // 直接设 NSApp.appearance 而不是 SwiftUI 的 preferredColorScheme：后者只影响
+        // 内容视图，窗口底色仍跟随系统，深色模式下会出现「内容是深的、外框是浅的」。
+        switch UserDefaults.standard.string(forKey: "arbor.appearance") {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil
+        }
         ArborNativeNotificationCenter.shared.install()
         AppUpdateChecker.shared.start()
         // `open --args` can be terminated by AppKit's automatic-termination
