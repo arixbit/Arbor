@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.37 - 2026-11-11
+
+The interface follows the design tokens, and appearance and accessibility get
+the same treatment across the window.
+
+- The interface font is the system font (SF Pro) at the token body size instead
+  of the bundled Inter face. The diff viewer keeps its code face, as the tokens
+  require.
+- The appearance setting now applies to the whole window, title bar included.
+  Before, fixing dark mode left the window chrome light.
+- Controls that only showed an icon now announce themselves: the log filter
+  field, the branch popover's search, the history and revert actions in the
+  changes browser, and every picker and text field in Settings. No control is
+  labelled with its SF Symbol name any more.
+- The branch popover and the stash panel are now covered by the visual
+  baseline, in both appearances for Commit and Log.
+
 ## 1.0.36 - 2026-11-10
 
 The Stash panel now carries the same always-visible actions as the reference

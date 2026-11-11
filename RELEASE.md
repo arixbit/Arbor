@@ -2,7 +2,7 @@
 
 ## V1 scope
 
-The V1 release line is `1.0.x`; the current patch release is `1.0.36`. The
+The V1 release line is `1.0.x`; the current patch release is `1.0.37`. The
 local release script builds the Rust engine,
 runs the Rust and Swift test suites, creates an arm64 macOS archive, packages
 an app DMG and ZIP, signs the ZIP for Sparkle, and writes `appcast.xml` and
@@ -11,7 +11,7 @@ UniFFI bindings before invoking Xcode, so the command also works from a clean
 clone.
 
 ```sh
-ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.36
+ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.37
 ```
 
 Unsigned artifacts are named `Arbor-VERSION-unsigned-arm64.dmg` and
@@ -48,7 +48,7 @@ ZIP still build, sign with an ad-hoc identity and install normally — only
 artifacts on a machine without the key:
 
 ```sh
-ARBOR_SKIP_TESTS=1 ARBOR_SKIP_APPCAST=1 ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.36
+ARBOR_SKIP_TESTS=1 ARBOR_SKIP_APPCAST=1 ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.37
 ```
 
 That names the artifacts `Arbor-VERSION-unsigned-arm64.*` and writes
