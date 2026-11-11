@@ -674,23 +674,21 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// 深色模式从来没被验证过：所有基线截图都是浅色采集的。这条检查两件事——
-    /// 深色模式下窗口确实是暗的，而且和浅色模式明显不同。自定义绘制的地方
-    /// （分隔线、背景、列表行）最容易忽略外观变化，肉眼看不出、测试能看出。
+    /// 两种外观都要测：整体亮度落在各自区间，且彼此差得开。
+    /// 只测深色会被「系统当时恰好是深色」蒙混过去——这条最初就吃过这个亏。
     @MainActor
-    func testDarkModeRendersDark() throws {
+    func testAppearanceRendersAsRequested() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
 
-        func meanLuma(appearance: String) throws -> Double {
+        func meanLuma(_ appearance: String) throws -> Double {
             let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
-            var arguments = [
+            session.extraLaunchArguments = [
+                "-arbor.appearance", appearance,
                 "-arbor.toolWindowExpanded", "YES",
                 "-arbor.projectPanelExpanded.v3", "YES",
                 "-arbor.toolWindowMode", "commit",
             ]
-            arguments += ["-arbor.appearance", appearance]
-            session.extraLaunchArguments = arguments
             session.launch()
             defer { session.terminate() }
             let image = session.window.screenshot().image
@@ -700,92 +698,24 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             return Self.averageLuminance(of: cgImage)
         }
 
-        let light = try meanLuma(appearance: "light")
-        let dark = try meanLuma(appearance: "dark")
+        let light = try meanLuma("light")
+        let dark = try meanLuma("dark")
 
-        XCTAssertLessThan(dark, 90, "the dark appearance is not dark (mean luminance \(Int(dark)))")
+        XCTAssertGreaterThan(light, 150, "the light appearance is not light (mean \(Int(light)))")
+        XCTAssertLessThan(dark, 90, "the dark appearance is not dark (mean \(Int(dark)))")
         XCTAssertGreaterThan(
             light - dark, 60,
-            "dark and light render too similarly (\(Int(light)) vs \(Int(dark))): "
-                + "custom-drawn surfaces may be ignoring the appearance"
+            "the two appearances render too similarly (\(Int(light)) vs \(Int(dark))): "
+                + "custom-drawn surfaces may ignore the appearance"
         )
     }
 
-    /// 深色模式下文字要看得见：用无障碍树给出的**精确文字框**采样，
-    /// 求框内亮度的 5% / 95% 分位差。分位数不需要识别文字——框内几乎只有文字像素
-    /// 和背景像素两种，两者差异小就说明文字和底色糊在一起了。
+    /// 逐区域检查：浅色下没有哪一块是暗的，深色下没有哪一块还是亮的；
+    /// 两种外观下都不能出现「被画成纯色块」的区域（那是内容不可见的另一种形态）。
     @MainActor
-    func testDarkModeTextKeepsContrast() throws {
+    func testAppearanceRegionsAreConsistent() throws {
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
-        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
-        session.extraLaunchArguments = [
-            "-arbor.appearance", "dark",
-            "-arbor.toolWindowExpanded", "YES",
-            "-arbor.projectPanelExpanded.v3", "YES",
-            "-arbor.toolWindowMode", "commit",
-        ]
-        session.launch()
-        defer { session.terminate() }
-
-        let window = session.window
-        let image = try XCTUnwrap(
-            window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        )
-        let origin = window.frame.origin
-        let size = window.frame.size
-
-        func normalized(_ frame: CGRect) -> CGRect {
-            CGRect(
-                x: (frame.minX - origin.x) / size.width,
-                y: (frame.minY - origin.y) / size.height,
-                width: frame.width / size.width,
-                height: frame.height / size.height
-            )
-        }
-
-        var sampled = 0
-        let candidates: [XCUIElement] = [
-            window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Fix beta")).firstMatch,
-            window.staticTexts["src"].firstMatch,
-            window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "main")).firstMatch,
-        ]
-        for element in candidates where element.exists {
-            let stats = Self.luminancePercentiles(of: image, in: normalized(element.frame))
-            print("PROBE contrast \(element.label.isEmpty ? String(describing: element.value) : element.label) "
-                  + "p5=\(Int(stats.p5)) p95=\(Int(stats.p95)) delta=\(Int(stats.p95 - stats.p5))")
-            XCTAssertGreaterThanOrEqual(
-                stats.p95 - stats.p5, 45,
-                "text is barely distinguishable from its background in dark mode "
-                    + "(p5 \(Int(stats.p5)), p95 \(Int(stats.p95)))"
-            )
-            sampled += 1
-        }
-        XCTAssertGreaterThanOrEqual(sampled, 1, "no text sample was available")
-    }
-
-    /// 深色模式下逐区域检查：没有哪一块还是浅色的，也没有哪一块被画成全黑。
-    /// 整屏平均看不出来的问题，按区域能看出来。
-    @MainActor
-    func testDarkModeRegionsAreDarkButNotBlack() throws {
-        let fixture = try ArborUIFixture.create()
-        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
-        let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
-        session.extraLaunchArguments = [
-            "-arbor.appearance", "dark",
-            "-arbor.toolWindowExpanded", "YES",
-            "-arbor.projectPanelExpanded.v3", "YES",
-            "-arbor.toolWindowMode", "commit",
-            "-arbor.log.showDetails.v1", "YES",
-        ]
-        session.launch()
-        defer { session.terminate() }
-
-        let image = try XCTUnwrap(
-            session.window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        )
-
-        // 归一化区域：工具栏、左栏（提交/项目）、日志列、右侧详情、状态栏。
         let regions: [(String, CGRect)] = [
             ("toolbar", CGRect(x: 0.0, y: 0.0, width: 1.0, height: 0.06)),
             ("sidebar", CGRect(x: 0.03, y: 0.10, width: 0.33, height: 0.80)),
@@ -793,12 +723,81 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             ("detail", CGRect(x: 0.75, y: 0.15, width: 0.23, height: 0.70)),
             ("statusbar", CGRect(x: 0.0, y: 0.97, width: 1.0, height: 0.03)),
         ]
-        for (name, rect) in regions {
-            let stats = Self.luminanceStats(of: image, in: rect)
-            XCTAssertLessThan(stats.mean, 110,
-                              "\(name) is still light in dark mode (mean \(Int(stats.mean)))")
-            XCTAssertGreaterThan(stats.variance, 3,
-                                 "\(name) is a flat block in dark mode: content may be invisible")
+        for (appearance, isLight) in [("light", true), ("dark", false)] {
+            let session = ArborUISession(fixture: fixture, screenshotSink: { self.add($0) })
+            session.extraLaunchArguments = [
+                "-arbor.appearance", appearance,
+                "-arbor.toolWindowExpanded", "YES",
+                "-arbor.projectPanelExpanded.v3", "YES",
+                "-arbor.toolWindowMode", "commit",
+                "-arbor.log.showDetails.v1", "YES",
+            ]
+            session.launch()
+            defer { session.terminate() }
+            let image = try XCTUnwrap(
+                session.window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            )
+            for (name, rect) in regions {
+                let stats = Self.luminanceStats(of: image, in: rect)
+                XCTAssertTrue(
+                    isLight ? stats.mean > 150 : stats.mean < 110,
+                    "\(appearance)/\(name) has an unexpected brightness (mean \(Int(stats.mean)))"
+                )
+                XCTAssertGreaterThan(
+                    stats.variance, 3,
+                    "\(appearance)/\(name) is a flat block: content may be invisible"
+                )
+            }
+        }
+    }
+
+    /// 文字要看得见：用无障碍树给出的精确文字框采样，求框内亮度 5%/95% 分位差。
+    /// 框内几乎只有文字像素和底色像素两种，不需要识别文字；两种外观都要测。
+    @MainActor
+    func testAppearanceTextKeepsContrast() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+
+        for appearance in ["light", "dark"] {
+            let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+            session.extraLaunchArguments = [
+                "-arbor.appearance", appearance,
+                "-arbor.toolWindowExpanded", "YES",
+                "-arbor.projectPanelExpanded.v3", "YES",
+                "-arbor.toolWindowMode", "commit",
+            ]
+            session.launch()
+            defer { session.terminate() }
+            let window = session.window
+            let image = try XCTUnwrap(
+                window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            )
+            let origin = window.frame.origin
+            let size = window.frame.size
+            func normalized(_ frame: CGRect) -> CGRect {
+                CGRect(
+                    x: (frame.minX - origin.x) / size.width,
+                    y: (frame.minY - origin.y) / size.height,
+                    width: frame.width / size.width,
+                    height: frame.height / size.height
+                )
+            }
+            var sampled = 0
+            let candidates: [XCUIElement] = [
+                window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Fix beta")).firstMatch,
+                window.staticTexts["src"].firstMatch,
+                window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "main")).firstMatch,
+            ]
+            for element in candidates where element.exists {
+                let stats = Self.luminancePercentiles(of: image, in: normalized(element.frame))
+                XCTAssertGreaterThanOrEqual(
+                    stats.p95 - stats.p5, 45,
+                    "\(appearance): text is barely distinguishable from its background "
+                        + "(p5 \(Int(stats.p5)), p95 \(Int(stats.p95)))"
+                )
+                sampled += 1
+            }
+            XCTAssertGreaterThanOrEqual(sampled, 1, "\(appearance): no text sample was available")
         }
     }
 
