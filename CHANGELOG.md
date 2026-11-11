@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.38 - 2026-11-11
+
+The main window follows the Rebased 1.1.13 workbench: where a control sits, not how it is painted.
+
+- The top bar keeps Update and Push between the project and branch menus. Search and Settings are the only controls on the right; the extra Git actions menu is gone. Hosted reviews, staging, and copying the current branch name are in the VCS menu.
+- The activity bar bottom is Terminal and Git. Commit stays the top control.
+- The Commit toolbar keeps the daily actions. Stage all, stage untracked without content, and New Changelist move into the Options menu, and Hide sits beside it.
+- The amend line counts modified files. Commit and Commit and Push stay on the footer; Commit All and Commit and Rebase move into the gear menu. Partial stage stays in the file menu instead of a button on every row.
+- Changed files in the project tree show a status badge. The project header can create a file or directory, reveal the opened file, expand the selection, collapse the tree, send the file to Changes, and hide the panel.
+- Log keeps a Branches strip on its left edge. It starts collapsed; click it to open the branch panel.
+- Log no longer selects the first commit on its own. Changes and Commit Details stay empty until a commit is chosen.
+- The Changes toolbar is Show Diff, Revert Selected Changes, View Options, Expand All, and Collapse All. The split with Commit Details starts at 70/30 and stays proportional when the window is resized.
+- The Stash toolbar can group the selected stash's files by directory.
+
+
 ## 1.0.37 - 2026-11-11
 
 The interface follows the design tokens, and appearance and accessibility get
