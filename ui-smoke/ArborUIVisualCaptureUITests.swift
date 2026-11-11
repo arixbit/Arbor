@@ -711,6 +711,59 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         )
     }
 
+    /// 深色模式下文字要看得见：用无障碍树给出的**精确文字框**采样，
+    /// 求框内亮度的 5% / 95% 分位差。分位数不需要识别文字——框内几乎只有文字像素
+    /// 和背景像素两种，两者差异小就说明文字和底色糊在一起了。
+    @MainActor
+    func testDarkModeTextKeepsContrast() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.appearance", "dark",
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+            "-arbor.toolWindowMode", "commit",
+        ]
+        session.launch()
+        defer { session.terminate() }
+
+        let window = session.window
+        let image = try XCTUnwrap(
+            window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        )
+        let origin = window.frame.origin
+        let size = window.frame.size
+
+        func normalized(_ frame: CGRect) -> CGRect {
+            CGRect(
+                x: (frame.minX - origin.x) / size.width,
+                y: (frame.minY - origin.y) / size.height,
+                width: frame.width / size.width,
+                height: frame.height / size.height
+            )
+        }
+
+        var sampled = 0
+        let candidates: [XCUIElement] = [
+            window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "Fix beta")).firstMatch,
+            window.staticTexts["src"].firstMatch,
+            window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", "main")).firstMatch,
+        ]
+        for element in candidates where element.exists {
+            let stats = Self.luminancePercentiles(of: image, in: normalized(element.frame))
+            print("PROBE contrast \(element.label.isEmpty ? String(describing: element.value) : element.label) "
+                  + "p5=\(Int(stats.p5)) p95=\(Int(stats.p95)) delta=\(Int(stats.p95 - stats.p5))")
+            XCTAssertGreaterThanOrEqual(
+                stats.p95 - stats.p5, 45,
+                "text is barely distinguishable from its background in dark mode "
+                    + "(p5 \(Int(stats.p5)), p95 \(Int(stats.p95)))"
+            )
+            sampled += 1
+        }
+        XCTAssertGreaterThanOrEqual(sampled, 1, "no text sample was available")
+    }
+
     /// 深色模式下逐区域检查：没有哪一块还是浅色的，也没有哪一块被画成全黑。
     /// 整屏平均看不出来的问题，按区域能看出来。
     @MainActor
@@ -747,6 +800,47 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertGreaterThan(stats.variance, 3,
                                  "\(name) is a flat block in dark mode: content may be invisible")
         }
+    }
+
+    /// 一块区域的亮度的 5% / 95% 分位。分位数不依赖「识别文字」：背景通常占绝大多数
+    /// 像素，文字是少数派，两个分位的差就是这一块的实际对比度。
+    static func luminancePercentiles(of image: CGImage, in rect: CGRect) -> (p5: Double, p95: Double) {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = pixels.withUnsafeMutableBytes({ buffer in
+            CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        }) else { return (0, 0) }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let x0 = max(0, Int(rect.minX * CGFloat(width)))
+        let x1 = min(width, Int(rect.maxX * CGFloat(width)))
+        let y0 = max(0, Int(rect.minY * CGFloat(height)))
+        let y1 = min(height, Int(rect.maxY * CGFloat(height)))
+        var values: [Double] = []
+        values.reserveCapacity(((x1 - x0) / 3) * ((y1 - y0) / 3))
+        for y in stride(from: y0, to: y1, by: 3) {
+            for x in stride(from: x0, to: x1, by: 3) {
+                let offset = (y * width + x) * 4
+                let r = Double(pixels[offset])
+                let g = Double(pixels[offset + 1])
+                let b = Double(pixels[offset + 2])
+                values.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+            }
+        }
+        guard !values.isEmpty else { return (0, 0) }
+        values.sort()
+        let p5 = values[Int(Double(values.count - 1) * 0.05)]
+        let p95 = values[Int(Double(values.count - 1) * 0.95)]
+        return (p5, p95)
     }
 
     /// 每 8 个像素采一个点，足够判断整体明暗。
