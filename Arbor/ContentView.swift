@@ -299,11 +299,7 @@ struct ContentView: View {
     }
 
     private var preferredAppearance: ColorScheme? {
-        switch appearanceOverride {
-        case "light": .light
-        case "dark": .dark
-        default: nil
-        }
+        Theme.preferredColorScheme(forOverride: appearanceOverride)
     }
 
     var body: some View {

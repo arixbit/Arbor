@@ -17,6 +17,7 @@ targets:
       - path: App
       - path: ContentView.swift
       - path: Design.swift
+      - path: Theme.swift
       - path: ProjectFileTreeView.swift
       - path: FileReferenceComparisonView.swift
       - path: RevisionBrowserView.swift
