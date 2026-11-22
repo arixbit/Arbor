@@ -312,6 +312,7 @@ func refreshAll(
                     return
                 }
                 self.repositoryStatus.entries = st
+                self.commitWorkspace.retainChangedPaths(Set(st.map(\.path)), in: repo.workdir())
                 self.repositoryStatus.changeLists = cls
                 self.repositoryStatus.isShowingCachedStatusSnapshot = false
                 if incrementalStatusPaths == nil,

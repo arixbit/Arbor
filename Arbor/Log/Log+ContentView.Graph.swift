@@ -48,6 +48,9 @@ var externalLogRootsMenu: some View {
 var logGraphPanel: some View {
     logGraphBody
         .onChange(of: logSelectionState.selection) { _, id in
+            if let root = logRepository?.workdir() {
+                storePersistedLogRowSelection(id, rootPath: root)
+            }
             guard let id else { return }
             loadCommitDetailsIfNeeded(id)
         }
@@ -166,14 +169,16 @@ var logBranchesStrip: some View {
     Button {
         logBranchesVisible = true
     } label: {
-        ZStack {
+        VStack(spacing: 2) {
             Text("Branches")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .fixedSize()
                 .rotationEffect(.degrees(-90))
+                .frame(width: 22, height: 72)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -489,14 +494,12 @@ var logGraphGearMenu: some View {
             reloadLogView()
         }
     } label: {
-        HStack(spacing: 3) {
-            Image(systemName: "ellipsis")
-            Image(systemName: "chevron.down")
-        }
-        .foregroundStyle(.secondary)
-        .frame(width: 34, height: 32)
+        verticalEllipsisIcon()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
     }
     .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
 }
 
 
@@ -505,18 +508,6 @@ var logGraphGearMenu: some View {
 /// 从 `logGraphPanel` 拆出来，让外层只保留弹窗与 onChange 修饰符。
 var logGraphBody: some View {
 VStack(spacing: 0) {
-    logGraphHeader
-
-    if logSelectionState.tabs.count > 1 {
-        LogTabBar(
-            tabs: logSelectionState.tabs,
-            activeID: currentLogTabID,
-            onSelect: switchLogTab,
-            onClose: closeLogTab,
-            onNew: openAnotherLogTab
-        )
-    }
-
     if logList.viewMode == .command {
         logCommandFilterBar
     } else if logList.viewMode == .graph {

@@ -102,7 +102,7 @@ struct LogCommitInspectorView: View {
                                 onCreateBranch: onCreateBranch
                             )
                         } else {
-                            Text("Commit Details")
+                            Text("Commit details")
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }

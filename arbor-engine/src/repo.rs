@@ -7513,6 +7513,226 @@ impl Repository {
         Ok(commit_id)
     }
 
+    /// Commit selected worktree content with a temporary index, leaving other staged
+    /// entries intact. Selected entries in the real index are reconciled after commit.
+    pub fn commit_with_options_worktree_paths(
+        &self,
+        message: String,
+        paths: Vec<String>,
+        skip_hooks: bool,
+        author_name: Option<String>,
+        author_email: Option<String>,
+        committer_name: Option<String>,
+        committer_email: Option<String>,
+        sign_key: Option<String>,
+        sign_off: bool,
+        co_authors: Vec<String>,
+        amend: bool,
+    ) -> Result<SelectedWorktreeCommitOutcome, EngineError> {
+        if paths.is_empty() && !amend {
+            return Err(EngineError::GitOperation {
+                message: "selected commit requires one or more paths".into(),
+            });
+        }
+        if author_name.is_some() != author_email.is_some()
+            || committer_name.is_some() != committer_email.is_some()
+        {
+            return Err(EngineError::GitOperation {
+                message: "author and committer require both name and email".into(),
+            });
+        }
+        let mut paths = paths
+            .iter()
+            .map(|path| {
+                let relative = worktree_relative_path(path)?;
+                if relative.as_os_str().is_empty() || path.contains('\0') {
+                    return Err(EngineError::GitOperation {
+                        message: "selected commit requires file paths".into(),
+                    });
+                }
+                Ok(relative.to_string_lossy().into_owned())
+            })
+            .collect::<Result<Vec<_>, EngineError>>()?;
+        paths.sort();
+        paths.dedup();
+        let selected_paths = paths.iter().map(String::as_str).collect::<HashSet<_>>();
+
+        let repo = self.inner.lock().expect("repo mutex poisoned");
+        let workdir = repo.workdir().ok_or_else(|| EngineError::GitOperation {
+            message: "selected commit requires a non-bare worktree".into(),
+        })?;
+        let current_index = run_git_with_index(
+            workdir,
+            &["ls-files".into(), "--stage".into(), "-z".into()],
+            None,
+        )?;
+        ensure_git_command_success(&current_index, "git ls-files")?;
+        let original_entries = parse_index_stage_records(&current_index.stdout)?;
+        for (indexed_path, entries) in &original_entries {
+            if entries.iter().any(|entry| entry.stage != 0)
+                && selected_worktree_path(&selected_paths, indexed_path)
+            {
+                return Err(EngineError::GitOperation {
+                    message: format!(
+                        "selected commit cannot include unresolved index stages: {indexed_path}"
+                    ),
+                });
+            }
+        }
+
+        let temporary = tempfile::tempdir().map_err(EngineError::from_gix)?;
+        let temporary_index = temporary.path().join("index");
+        let head_is_unborn = repo.head().map_err(EngineError::from_gix)?.is_unborn();
+        let read_tree_args = if head_is_unborn {
+            vec!["read-tree".into(), "--empty".into()]
+        } else {
+            vec!["read-tree".into(), "HEAD".into()]
+        };
+        let output = run_git_with_index(workdir, &read_tree_args, Some(&temporary_index))?;
+        ensure_git_command_success(&output, "git read-tree")?;
+
+        if !paths.is_empty() {
+            let pathspec = write_literal_pathspec_file(temporary.path(), "add-paths", &paths)?;
+            let add_args = vec![
+                "add".into(),
+                "-A".into(),
+                format!("--pathspec-from-file={}", pathspec.display()),
+                "--pathspec-file-nul".into(),
+            ];
+            let output = run_git_with_index(workdir, &add_args, Some(&temporary_index))?;
+            ensure_git_command_success(&output, "git add -A")?;
+        }
+
+        let temporary_entries = if paths.is_empty() {
+            HashMap::new()
+        } else {
+            let output = run_git_with_index(
+                workdir,
+                &["ls-files".into(), "--stage".into(), "-z".into()],
+                Some(&temporary_index),
+            )?;
+            ensure_git_command_success(&output, "git ls-files temporary index")?;
+            parse_index_stage_records(&output.stdout)?
+        };
+
+        let message = append_coauthor_trailers(message, &co_authors);
+        let mut commit_args = vec!["commit".into(), "--message".into(), message];
+        if amend {
+            commit_args.push("--amend".into());
+        }
+        if skip_hooks {
+            commit_args.push("--no-verify".into());
+        }
+        if sign_off {
+            commit_args.push("--signoff".into());
+        }
+        if let (Some(name), Some(email)) = (author_name, author_email) {
+            commit_args.push("--author".into());
+            commit_args.push(format!("{} <{}>", name.trim(), email.trim()));
+        }
+        if let Some(key) = sign_key.filter(|value| !value.trim().is_empty()) {
+            commit_args.push(format!("--gpg-sign={}", key.trim()));
+        }
+        let mut commit_environment = Vec::new();
+        if let (Some(name), Some(email)) = (committer_name, committer_email) {
+            commit_environment.push(("GIT_COMMITTER_NAME".into(), name.trim().to_string()));
+            commit_environment.push(("GIT_COMMITTER_EMAIL".into(), email.trim().to_string()));
+        }
+        let output = run_git_with_index_and_environment(
+            workdir,
+            &commit_args,
+            Some(&temporary_index),
+            &commit_environment,
+        )?;
+        ensure_git_command_success(&output, "git commit")?;
+
+        let id = run_git_with_index(workdir, &["rev-parse".into(), "HEAD".into()], None)?;
+        ensure_git_command_success(&id, "git rev-parse HEAD")?;
+        let commit_id = String::from_utf8_lossy(&id.stdout).trim().to_string();
+        if commit_id.is_empty() {
+            return Err(EngineError::GitOperation {
+                message: "selected commit completed without a HEAD revision".into(),
+            });
+        }
+        let mut warning = None;
+        if !paths.is_empty() {
+            let current = run_git_with_index(
+                workdir,
+                &["ls-files".into(), "--stage".into(), "-z".into()],
+                None,
+            )
+            .and_then(|output| {
+                ensure_git_command_success(&output, "git ls-files after commit")?;
+                parse_index_stage_records(&output.stdout)
+            });
+            match current {
+                Err(error) => warning = Some(format!("Index reconciliation skipped: {error}")),
+                Ok(current_entries) => {
+                    let selected = |path: &str| selected_worktree_path(&selected_paths, path);
+                    let mut changed = original_entries
+                        .keys()
+                        .chain(current_entries.keys())
+                        .filter(|path| selected(path))
+                        .filter(|path| original_entries.get(*path) != current_entries.get(*path))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    changed.sort();
+                    changed.dedup();
+                    if !changed.is_empty() {
+                        warning = Some(format!(
+                            "Index changed during commit; preserved staged entries for: {}",
+                            changed.join(", ")
+                        ));
+                    }
+                    let mut reset_paths = original_entries
+                        .keys()
+                        .chain(current_entries.keys())
+                        .chain(temporary_entries.keys())
+                        .filter(|path| selected(path))
+                        .filter(|path| original_entries.get(*path) == current_entries.get(*path))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    reset_paths.sort();
+                    reset_paths.dedup();
+                    if !reset_paths.is_empty() {
+                        let reset = write_literal_pathspec_file(
+                            temporary.path(),
+                            "reset-paths",
+                            &reset_paths,
+                        )
+                        .and_then(|pathspec| {
+                            run_git_with_index(
+                                workdir,
+                                &[
+                                    "reset".into(),
+                                    "-q".into(),
+                                    "HEAD".into(),
+                                    format!("--pathspec-from-file={}", pathspec.display()),
+                                    "--pathspec-file-nul".into(),
+                                ],
+                                None,
+                            )
+                        })
+                        .and_then(|output| {
+                            ensure_git_command_success(&output, "git reset selected paths")
+                        });
+                        if let Err(error) = reset {
+                            let message = format!("Index reconciliation failed: {error}");
+                            warning = Some(match warning {
+                                Some(previous) => format!("{previous}; {message}"),
+                                None => message,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        Ok(SelectedWorktreeCommitOutcome {
+            id: commit_id,
+            index_reconciliation_warning: warning,
+        })
+    }
+
     /// 在当前仓库根目录执行一个提交前检查命令。命令与参数按 argv 传递，绝不经过 shell。
     /// 默认超时 60 秒；需要短超时测试或调用方策略时使用 `run_check_command_with_timeout`。
     // MARK: COMMIT-001 内置检查与签名配置
@@ -14219,6 +14439,7 @@ impl Repository {
                 "stash",
                 "show",
                 "--name-only",
+                "-z",
                 "--include-untracked",
                 "--format=",
                 &stash,
@@ -14234,12 +14455,16 @@ impl Repository {
                 ),
             });
         }
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(str::to_string)
-            .collect())
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| {
+                String::from_utf8(path.to_vec()).map_err(|_| EngineError::GitOperation {
+                    message: "stash contains a non-UTF-8 filename".into(),
+                })
+            })
+            .collect()
     }
 
     /// 返回 stash 中单个文件的结构化 diff。
@@ -25635,11 +25860,44 @@ fn git_process_output_message(output: &crate::gitprocess::GitProcessOutcome) -> 
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct SelectedWorktreeCommitOutcome {
+    pub id: String,
+    pub index_reconciliation_warning: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct IndexStageRecord {
     mode: String,
     object: String,
     stage: u8,
+}
+
+/// Match a selected file or a selected directory without scanning every
+/// selection for each index entry. Slash boundaries cannot split UTF-8 codepoints.
+fn selected_worktree_path(selected: &HashSet<&str>, path: &str) -> bool {
+    selected.contains(path)
+        || path
+            .match_indices('/')
+            .any(|(index, _)| selected.contains(&path[..index]))
+}
+
+/// Git reads the NUL-terminated literal pathspecs from disk, so even large
+/// selections and filenames containing newlines avoid argv and quoting limits.
+fn write_literal_pathspec_file(
+    directory: &Path,
+    name: &str,
+    paths: &[String],
+) -> Result<PathBuf, EngineError> {
+    let pathspec_file = directory.join(name);
+    let mut bytes = Vec::new();
+    for path in paths {
+        bytes.extend_from_slice(b":(literal)");
+        bytes.extend_from_slice(path.as_bytes());
+        bytes.push(0);
+    }
+    std::fs::write(&pathspec_file, bytes).map_err(EngineError::from_gix)?;
+    Ok(pathspec_file)
 }
 
 fn run_git_with_index(

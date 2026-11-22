@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 
 /// Click every visible control on the surfaces Arbor's own workflow touches
 /// first, and require that each click produces something the user can observe:
@@ -224,7 +225,7 @@ final class ArborUISmokeUITests: XCTestCase {
 
         XCTAssertTrue(session.openBranchesPopover())
         // Clicking outside the popup closes it, as a popover would.
-        let editor = session.window.staticTexts["Changes"].firstMatch
+        let editor = session.window.staticTexts["Project"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(
@@ -358,56 +359,175 @@ final class ArborUISmokeContractUITests: XCTestCase {
         XCTAssertFalse(session.window.buttons["Partial stage"].exists)
         XCTAssertFalse(session.window.buttons["Stage all changes"].exists)
         XCTAssertFalse(session.window.buttons["New Changelist"].exists)
-        XCTAssertTrue(session.window.staticTexts["2 modified"].exists)
+        XCTAssertFalse(session.window.checkBoxes["Include group: Changes"].firstMatch.isSelected)
 
-        let preview = session.window.buttons["Show changes preview"].firstMatch
-        let tracked = session.window.buttons["Stage tracked changes"].firstMatch
-        let stash = session.window.buttons["Stash changes silently"].firstMatch
+        let refresh = session.window.buttons["Refresh"].firstMatch
+        let rollback = session.window.buttons["Rollback…"].firstMatch
+        let diff = session.window.buttons["Show Diff"].firstMatch
+        let shelve = session.window.buttons["Shelve Silently"].firstMatch
         let options = session.window.descendants(matching: .any)["changes-view-options"].firstMatch
-        XCTAssertLessThan(preview.frame.minX, tracked.frame.minX)
-        XCTAssertLessThan(tracked.frame.minX, stash.frame.minX)
-        XCTAssertLessThan(stash.frame.minX, options.frame.minX)
+        XCTAssertLessThan(refresh.frame.minX, rollback.frame.minX)
+        XCTAssertLessThan(rollback.frame.minX, diff.frame.minX)
+        XCTAssertLessThan(diff.frame.minX, shelve.frame.minX)
+        XCTAssertLessThan(shelve.frame.minX, options.frame.minX)
 
-        session.window.buttons["Hide Commit Tool Window"].firstMatch.click()
+        options.click()
+        session.app.menuItems["Hide Tool Window"].firstMatch.click()
         let collapsed = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in !tracked.isHittable },
-            object: tracked
+            predicate: NSPredicate { _, _ in !shelve.isHittable },
+            object: shelve
         )
         XCTAssertEqual(XCTWaiter.wait(for: [collapsed], timeout: 5), .completed, "hiding Commit must collapse its toolbar")
         session.window.buttons["slider.horizontal.3"].firstMatch.click()
         let restored = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tracked.isHittable },
-            object: tracked
+            predicate: NSPredicate { _, _ in shelve.isHittable },
+            object: shelve
         )
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
 
-        session.window.descendants(matching: .any)["commit-tool-window-options"].firstMatch.click()
+        options.click()
         let stageAll = session.app.menuItems["Stage all changes"].firstMatch
         XCTAssertTrue(stageAll.waitForExistence(timeout: 5))
         XCTAssertTrue(session.app.menuItems["New Changelist"].firstMatch.exists)
         stageAll.click()
-        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
-        let changes = session.window.checkBoxes["Stage group: Changes"].firstMatch
-        let allStaged = XCTNSPredicateExpectation(
+        let changes = session.window.checkBoxes["Include group: Changes"].firstMatch
+        XCTAssertTrue(changes.waitForExistence(timeout: 10))
+        XCTAssertEqual(String(describing: changes.value ?? ""), "0", "staging must not select files for commit")
+        changes.click()
+        let selected = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in String(describing: changes.value ?? "") == "1" },
             object: changes
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [allStaged], timeout: 10), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
         changes.click()
-        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 10))
+        XCTAssertEqual(String(describing: changes.value ?? ""), "0")
         XCTAssertFalse(session.window.buttons["Commit All"].exists)
-        session.window.textViews.firstMatch.click()
-        session.window.textViews.firstMatch.typeText("Relocated commit action")
-        session.window.descendants(matching: .any)["commit-options"].firstMatch.click()
-        let commitAll = session.app.menuItems["Commit All"].firstMatch
-        XCTAssertTrue(commitAll.waitForExistence(timeout: 5))
-        XCTAssertTrue(commitAll.isEnabled)
-        commitAll.click()
+    }
+
+    @MainActor
+    func testStashContextMenuClearAndDiffTab() throws {
+        let fixture = try ArborUIFixture.create()
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
+        let session = ArborUISession(fixture: fixture, toolWindow: "commit", screenshotSink: { self.add($0) })
+        session.extraLaunchArguments = [
+            "-arbor.toolWindowMode", "commit",
+            "-arbor.toolWindowExpanded", "YES",
+            "-arbor.projectPanelExpanded.v3", "YES",
+        ]
+        session.launch()
+        defer { session.terminate() }
+        if !session.window.exists {
+            // An existing macOS Space can leave the launched window offscreen
+            // even though XCUITest has activated its process.
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.arbor.app")
+            _ = (running.first(where: \.isActive) ?? running.last)?
+                .activate(options: [.activateAllWindows])
+        }
+        XCTAssertTrue(session.window.waitForExistence(timeout: 10))
+
+        let stashTab = session.window.buttons["Stash"].firstMatch
+        guard stashTab.waitForExistence(timeout: 10) else {
+            XCTFail("the Commit tool window has no Stash tab")
+            return
+        }
+        stashTab.click()
+        let stash = session.window.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "stash-row-")).firstMatch
+        if !stash.waitForExistence(timeout: 3) {
+            // After activating a window on another Space, its first click can
+            // focus the window without selecting the tab.
+            stashTab.click()
+        }
+        guard stash.waitForExistence(timeout: 10) else {
+            XCTFail("switching to Stash did not show the fixture stash")
+            return
+        }
+        let project = session.window.buttons["Project"].firstMatch
+        XCTAssertTrue(project.waitForExistence(timeout: 5))
+        project.click()
+        XCTAssertTrue(stash.waitForExistence(timeout: 5), "closing Project must keep Stash selected")
+        project.click()
+        XCTAssertTrue(stash.waitForExistence(timeout: 5), "opening Project must keep Stash selected")
+
+        let stashFile = session.window.descendants(matching: .any)["stash-change-file-README.md"].firstMatch
+        XCTAssertTrue(stashFile.waitForExistence(timeout: 10))
+        XCTAssertTrue(stashFile.label.hasPrefix("Modified README.md"),
+                      "the stash file should expose its modified status: \(stashFile.label)")
+        stashFile.click()
+        XCTAssertFalse(session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch.exists,
+                       "a single click should only select the stash file")
+        stashFile.doubleClick()
+        let fileTab = session.window.descendants(matching: .any)["log-file-diff-show-tab"].firstMatch
+        XCTAssertTrue(fileTab.waitForExistence(timeout: 10))
+        XCTAssertTrue(fileTab.label.contains("Stash@{0}: README.md"))
+        XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(session.window.staticTexts["Current version"].firstMatch.exists)
+        let diffSettings = session.window.descendants(matching: .any)["stash-diff-settings"].firstMatch
+        XCTAssertTrue(diffSettings.waitForExistence(timeout: 5))
+        diffSettings.click()
+        let softWraps = session.app.menuItems["Use Soft Wraps"].firstMatch
+        XCTAssertTrue(softWraps.waitForExistence(timeout: 5))
+        softWraps.click()
+        XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.exists)
+        diffSettings.click()
+        softWraps.click()
+        diffSettings.click()
+        XCTAssertTrue(session.app.menuItems["External Diff"].firstMatch.waitForExistence(timeout: 5))
+        session.app.menuItems["File Properties"].firstMatch.click()
+        XCTAssertTrue(session.app.staticTexts["File Properties"].firstMatch.waitForExistence(timeout: 5))
+        session.app.typeKey(.escape, modifierFlags: [])
+        diffSettings.click()
+        session.app.menuItems["Dimensions"].firstMatch.click()
+        XCTAssertTrue(session.app.checkBoxes["Line Numbers"].firstMatch.waitForExistence(timeout: 5))
+        session.app.typeKey(.escape, modifierFlags: [])
+
+        let jump = session.window.descendants(matching: .any)["stash-diff-jump-to-source"].firstMatch
+        XCTAssertTrue(jump.waitForExistence(timeout: 5))
+        jump.click()
+        XCTAssertTrue(session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
+            .waitForExistence(timeout: 10))
+        let returnToDiff = session.window.descendants(matching: .any)["workspace-show-diff-tab"].firstMatch
+        XCTAssertTrue(returnToDiff.exists, "Jump to Source should keep the stash diff tab")
+        returnToDiff.click()
+        let sourceTab = session.window.descendants(matching: .any)["log-file-diff-source-tab"].firstMatch
+        XCTAssertTrue(sourceTab.waitForExistence(timeout: 10))
+        sourceTab.click()
+        XCTAssertTrue(session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
+            .waitForExistence(timeout: 10))
+        session.window.descendants(matching: .any)["workspace-close-file"].firstMatch.click()
+        XCTAssertTrue(session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+            .waitForExistence(timeout: 10), "closing the source tab should return to the diff")
+        jump.click()
+        returnToDiff.click()
+        session.window.descendants(matching: .any)["log-file-diff-close"].firstMatch.click()
+        XCTAssertTrue(sourceTab.waitForExistence(timeout: 10),
+                      "closing the diff should leave the source tab available")
+        sourceTab.click()
+        XCTAssertTrue(session.window.descendants(matching: .any)["workspace-file-editor"].firstMatch
+            .waitForExistence(timeout: 10))
+        session.window.descendants(matching: .any)["workspace-close-file"].firstMatch.click()
+
+        stash.rightClick()
+        let clear = session.app.menuItems["Clear"].firstMatch
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.click()
         let sheet = session.app.sheets.firstMatch
-        XCTAssertTrue(sheet.waitForExistence(timeout: 5), "Commit All must still ask before staging tracked changes")
-        let cancel = sheet.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
-        cancel.click()
+        XCTAssertTrue(sheet.staticTexts["Clear all stashes?"].firstMatch.waitForExistence(timeout: 5))
+        sheet.buttons["Cancel"].firstMatch.click()
+        XCTAssertTrue(stash.waitForExistence(timeout: 5), "cancel must preserve the stash")
+
+        stash.rightClick()
+        let newTab = session.app.menuItems["Show Diff in New Tab"].firstMatch
+        XCTAssertTrue(newTab.waitForExistence(timeout: 5))
+        newTab.click()
+        let diffTab = session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+        XCTAssertTrue(diffTab.waitForExistence(timeout: 10))
+        let tabButton = session.window.descendants(matching: .any)["log-file-diff-show-tab"].firstMatch
+        XCTAssertTrue(tabButton.exists)
+        XCTAssertTrue(tabButton.label.contains("README.md"), "the diff tab should name the stashed file")
+        XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.waitForExistence(timeout: 10),
+                      "the stash diff tab must load the file's actual change")
+        XCTAssertTrue(stash.exists, "opening the diff tab must preserve the stash")
     }
 
     @MainActor
@@ -419,8 +539,8 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
 
-        let app = session.window.checkBoxes["Stage src/App.swift"].firstMatch
-        let engine = session.window.checkBoxes["Stage src/Core/Engine.swift"].firstMatch
+        let app = session.window.checkBoxes["Include src/App.swift"].firstMatch
+        let engine = session.window.checkBoxes["Include src/Core/Engine.swift"].firstMatch
         XCTAssertTrue(app.waitForExistence(timeout: 10))
         XCTAssertTrue(engine.isHittable)
         func waitForValue(_ value: String, _ checkbox: XCUIElement) {
@@ -430,44 +550,57 @@ final class ArborUISmokeContractUITests: XCTestCase {
             )
             XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed)
         }
+        let index = fixture.appendingPathComponent(".git/index")
+        let initialIndex = try Data(contentsOf: index)
         waitForValue("0", app)
-        waitForValue("1", engine)
-        XCTAssertFalse(session.window.checkBoxes["Stage src/Untracked.swift"].exists,
+        waitForValue("0", engine)
+        XCTAssertFalse(session.window.checkBoxes["Include src/Untracked.swift"].exists,
                        "untracked files should start collapsed")
-        XCTAssertFalse(session.window.staticTexts["Ignored Files"].exists)
 
         app.click()
+        engine.click()
         waitForValue("1", app)
-        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 5))
+        waitForValue("1", engine)
+        XCTAssertEqual(try Data(contentsOf: index), initialIndex,
+                       "commit inclusion must leave Git staging untouched")
+
+        app.rightClick()
+        let stage = session.app.menuItems["Stage"].firstMatch
+        XCTAssertTrue(stage.waitForExistence(timeout: 5))
+        stage.click()
+        let stagedIndex = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in (try? Data(contentsOf: index)) != initialIndex },
+            object: index
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [stagedIndex], timeout: 10), .completed)
+        waitForValue("1", app)
         let path = fixture.appendingPathComponent("src/App.swift")
         var content = try String(contentsOf: path, encoding: .utf8)
         content += "\n// a new worktree edit after staging\n"
         try Data(content.utf8).write(to: path)
         XCTAssertTrue(session.window.staticTexts["Partially staged"].firstMatch.waitForExistence(timeout: 10))
-        waitForValue("0", app)
-        app.click()
         waitForValue("1", app)
         app.rightClick()
         let unstage = session.app.menuItems["Unstage"].firstMatch
         XCTAssertTrue(unstage.waitForExistence(timeout: 5))
         unstage.click()
-        waitForValue("0", app)
-        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 5))
+        waitForValue("1", app)
 
         session.window.buttons["Unversioned Files"].firstMatch.click()
-        let untracked = session.window.checkBoxes["Stage src/Untracked.swift"].firstMatch
+        let untracked = session.window.checkBoxes["Include src/Untracked.swift"].firstMatch
         XCTAssertTrue(untracked.waitForExistence(timeout: 5))
-        session.window.checkBoxes["Stage group: Unversioned Files"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
-        waitForValue("1", engine)
-        XCTAssertTrue(session.window.checkBoxes["Stage src/Untracked.swift"].exists)
-        session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["3 modified"].waitForExistence(timeout: 10))
-        waitForValue("1", app)
-        session.window.checkBoxes["Stage group: Changes"].firstMatch.click()
-        XCTAssertTrue(session.window.staticTexts["2 modified"].waitForExistence(timeout: 10))
+        let beforeUntrackedSelection = try Data(contentsOf: index)
+        session.window.checkBoxes["Include group: Unversioned Files"].firstMatch.click()
+        waitForValue("1", untracked)
+        XCTAssertEqual(try Data(contentsOf: index), beforeUntrackedSelection)
+        let changes = session.window.checkBoxes["Include group: Changes"].firstMatch
+        changes.click()
         waitForValue("0", app)
         waitForValue("0", engine)
+        XCTAssertEqual(try Data(contentsOf: index), beforeUntrackedSelection)
+        changes.click()
+        waitForValue("1", app)
+        waitForValue("1", engine)
     }
 
     /// The reference opens a change's diff as a `Repository Diff: <file>`
@@ -683,7 +816,8 @@ final class ArborUISmokeContractUITests: XCTestCase {
             XCTAssertNotEqual(after, before, "clicking \(label) did not change its value")
         }
 
-        let options = session.window.descendants(matching: .any)["Show Commit Options"].firstMatch
+        let options = session.window.descendants(matching: .any)["commit-tool-window-options"].firstMatch
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
         options.click()
         let skipHooks = session.app.menuItems["Skip hooks"].firstMatch
         XCTAssertTrue(skipHooks.waitForExistence(timeout: 5))
@@ -693,6 +827,21 @@ final class ArborUISmokeContractUITests: XCTestCase {
         options.click()
         skipHooks.click()
         XCTAssertFalse(session.window.staticTexts["Skip hooks"].firstMatch.exists)
+
+        let commitSettings = session.window.descendants(matching: .any)["commit-options"].firstMatch
+        XCTAssertTrue(commitSettings.waitForExistence(timeout: 5))
+        commitSettings.click()
+        let signOff = session.app.checkBoxes["Sign-off commit"].firstMatch
+        XCTAssertTrue(signOff.waitForExistence(timeout: 5))
+        let originalValue = String(describing: signOff.value)
+        signOff.click()
+        XCTAssertNotEqual(String(describing: signOff.value), originalValue)
+        session.app.typeKey(.escape, modifierFlags: [])
+        commitSettings.click()
+        XCTAssertNotEqual(String(describing: signOff.value), originalValue,
+                          "the commit setting should survive closing and reopening the gear")
+        signOff.click()
+        session.app.typeKey(.escape, modifierFlags: [])
     }
 }
 

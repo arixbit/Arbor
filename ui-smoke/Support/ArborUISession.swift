@@ -715,8 +715,11 @@ extension ArborUISession {
     func openBranchesPopover(branch: String = "main") -> Bool {
         // The chip toggles the popover, so clicking it again closes it.
         if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
-        // The status bar repeats the branch name, so the first match is not
-        // necessarily the chip that opens the popover. Try them top-down.
+        // Repository loading can finish after the window becomes stable.
+        // Wait for its branch chip before searching the candidate buttons.
+        let chip = window.buttons.matching(NSPredicate(format: "label == %@", branch)).firstMatch
+        guard chip.waitForExistence(timeout: 15) else { return false }
+        // The status bar may repeat the branch name. Try matches top-down.
         let candidates = window.buttons
             .matching(NSPredicate(format: "label == %@", branch))
             .allElementsBoundByIndex

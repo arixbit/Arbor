@@ -212,11 +212,7 @@ func ignoreRuleSourceName(_ source: IgnoreRuleSource) -> String {
 }
 
 struct RebasedStatusBar: View {
-    let branch: String
-    let headID: String?
-    let changedCount: Int
     let projectPath: String?
-    let onBranch: () -> Void
     @ObservedObject var feedbackCenter: FeedbackCenter
     let syncStatus: SyncStatus?
     let hasUnfetchedIncoming: Bool
@@ -228,13 +224,6 @@ struct RebasedStatusBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Button(action: onBranch) {
-                Label(branch, systemImage: "arrow.triangle.branch")
-                    .font(.caption)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .help("Open branches")
             if incomingOutgoingInfoEnabled, let syncStatus {
                 if syncStatus.trackingExists {
                     HStack(spacing: 3) {
@@ -259,10 +248,6 @@ struct RebasedStatusBar: View {
                     .foregroundStyle(.blue)
                     .help("Remote has incoming commits not fetched locally")
             }
-            Divider().frame(height: 14)
-            Label("Git", systemImage: "checkmark.circle")
-                .font(.caption)
-                .foregroundStyle(.green)
             Button(action: onOperationLog) {
                 Label("Operation Log", systemImage: "list.bullet.rectangle")
                     .font(.caption)
@@ -270,11 +255,6 @@ struct RebasedStatusBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Open Git tasks and operation log")
-            if changedCount > 0 {
-                Text("\(changedCount) changed")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
             if let feedback = feedbackCenter.current {
                 Divider().frame(height: 14)
                 if feedbackCenter.isRunning {
@@ -352,16 +332,11 @@ struct RebasedStatusBar: View {
             }
             Spacer()
             if let projectPath {
-                Text(projectPath)
+                Text(resolvedProjectPath(projectPath))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-            }
-            if let headID {
-                Text(String(headID.prefix(7)))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 14)

@@ -5,7 +5,6 @@ import AppKit
 /// Git log 的图表列。它对应 IntelliJ 的 VcsLogGraphTable：
 /// 图和提交信息是同一张可横向滚动的表，而不是一块固定宽度的装饰性 Canvas。
 struct LogGraphView: View {
-    @Environment(\.locale) private var locale
     let commits: [CommitInfo]
     @Binding var selection: String?
     @Binding var selectedIDs: Set<String>
@@ -108,7 +107,7 @@ struct LogGraphView: View {
     // horizontally scrollable when a repository has even more active lanes.
     private let laneWidth: CGFloat = 18
     private let maximumGraphWidth: CGFloat = 360
-    private let minimumCommitColumnWidth: CGFloat = 276
+    private let minimumCommitColumnWidth: CGFloat = 160
     private let columnHeaderHeight: CGFloat = 28
 
     private enum RefKind {
@@ -119,17 +118,16 @@ struct LogGraphView: View {
 
         var foreground: Color {
             switch self {
-            case .head: .orange
             case .local: .green
-            case .tag: .orange
+            case .head: .orange
+            case .tag: Color.secondary
             case .remote: .blue
             }
         }
 
         var symbol: String {
             switch self {
-            case .head: "arrowtriangle.right.fill"
-            case .local, .tag: "tag"
+            case .head, .local, .tag: "tag"
             case .remote: "tag.fill"
             }
         }
@@ -241,9 +239,13 @@ struct LogGraphView: View {
                 columnLayout.width(for: .commit)
             )
             let columnChrome = 20 + CGFloat(max(0, visibleColumns.count - 1)) * 6
+            // Rebased gives the leftover graph width to the commit column, so
+            // the branch labels sit just before Author and the date reaches
+            // the Changes divider.
+            let fixedColumns = layoutGraphWidth + dynamicColumnWidth + columnChrome
             let layoutCommitColumnWidth = max(
                 configuredCommitWidth,
-                viewport.size.width - layoutGraphWidth - dynamicColumnWidth - columnChrome
+                viewport.size.width - fixedColumns
             )
             let layoutContentWidth = max(
                 viewport.size.width,
@@ -385,6 +387,7 @@ struct LogGraphView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .frame(minHeight: 0, maxHeight: .infinity)
+        .background(logHistoryBackground)
         .onChange(of: ObjectIdentifier(resolvedGraph)) { _, _ in
             hoveredLinearBekHighlight = nil
             hoveredLinearBekElement = nil
@@ -415,6 +418,16 @@ struct LogGraphView: View {
             hoveredLinearBekHighlight = nil
             hoveredLinearBekElement = nil
         }
+    }
+
+    /// Rebased paints the history rows a pale blue, not the window white.
+    private var logHistoryBackground: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return dark
+                ? NSColor(calibratedRed: 0.16, green: 0.18, blue: 0.22, alpha: 1)
+                : NSColor(calibratedRed: 0.933, green: 0.953, blue: 0.996, alpha: 1)
+        })
     }
 
     private func logColumnHeader(
@@ -560,11 +573,16 @@ struct LogGraphView: View {
             }
         }
         .frame(width: contentWidth, height: rowHeight, alignment: .leading)
-        .background(
-            selectedIDs.contains(identity)
-                ? Color.accentColor.opacity(0.14)
-                : isCherryPicked ? Color.purple.opacity(0.13) : Color.clear
-        )
+        .background {
+            if selectedIDs.contains(identity) {
+                // Live Rebased selection is a full-width neutral bar, not an
+                // inset accent pill.
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+            } else if isCherryPicked {
+                Color.purple.opacity(0.13)
+            }
+        }
         .overlay(alignment: .leading) {
             if isCherryPicked {
                 Capsule()
@@ -1075,16 +1093,17 @@ struct LogGraphView: View {
         switch column {
         case .commit:
             HStack(spacing: 6) {
-                // VcsLog's default table starts the commit column after the
-                // graph gutter and paints branch/HEAD references in the same
-                // cell as the subject. Reordering moves this whole semantic
-                // column, not just one of its labels.
+                // VcsLog paints branch/HEAD labels immediately after the
+                // subject. Extra column width stays after those labels.
                 if alignLabels {
                     referenceLabels(for: commit, showTagNames: showTagNames)
+                        .fixedSize(horizontal: true, vertical: false)
                     commitSummary(commit)
                 } else {
                     commitSummary(commit)
+                    Spacer(minLength: 8)
                     referenceLabels(for: commit, showTagNames: showTagNames)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .frame(width: commitWidth, height: rowHeight, alignment: .leading)
@@ -1096,10 +1115,10 @@ struct LogGraphView: View {
                 .foregroundStyle(.primary)
                 .frame(width: columnLayout.width(for: .author), alignment: .leading)
         case .date:
-            Text(Design.Typography.commitDate(commit.time, locale: locale))
+            Text(Design.Typography.commitDate(commit.time, locale: .current))
                 .lineLimit(1)
                 .foregroundStyle(.primary)
-                .frame(width: columnLayout.width(for: .date), alignment: .trailing)
+                .frame(width: columnLayout.width(for: .date), alignment: .leading)
         case .hash:
             Text(commit.shortId)
                 .font(.caption.monospaced())
@@ -1189,37 +1208,47 @@ struct LogGraphView: View {
         Text(commit.summary)
             .lineLimit(1)
             .truncationMode(.tail)
-            // Match the graph's fixed row pitch even when a long subject is
-            // measured inside a compressed cell during column/window resizing.
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(-1)
     }
 
     @ViewBuilder
     private func referenceLabels(for commit: CommitInfo, showTagNames: Bool) -> some View {
         ForEach(refLabels(
             for: commit,
-            compact: compactReferences,
-            showTagNames: showTagNames
+            compact: compactReferences
         )) { ref in
             HStack(spacing: 3) {
-                Image(systemName: ref.kind.symbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(ref.kind.foreground)
-                Text(ref.title)
-                    .font(Design.Typography.interface(12))
-                    .foregroundStyle(.secondary)
+                if ref.kind == .head, ref.title != "HEAD" {
+                    HStack(spacing: -7) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                        Image(systemName: "tag")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.green)
+                    }
+                } else {
+                    Image(systemName: ref.kind.symbol)
+                        .font(.system(size: 11))
+                        .foregroundStyle(ref.kind.foreground)
+                }
+                if showTagNames || ref.kind != .tag {
+                    Text(ref.title)
+                        .font(Design.Typography.interface(12))
+                        .foregroundStyle(.secondary)
+                }
             }
                 .lineLimit(1)
                 .frame(minWidth: alignLabels ? 56 : nil, alignment: .leading)
-                .help(ref.title)
+                .help(ref.kind == .head && ref.title != "HEAD" ? "\(ref.title) (HEAD)" : ref.title)
         }
     }
 
     private func refLabels(
         for commit: CommitInfo,
-        compact: Bool,
-        showTagNames: Bool
+        compact: Bool
     ) -> [RefLabel] {
         var labels: [RefLabel] = []
         var seen = Set<String>()
@@ -1234,13 +1263,30 @@ struct LogGraphView: View {
             labels.append(label)
         }
 
-        if commit.isHead {
+        let currentBranch = commit.isHead ? currentBranchNameForCommit(commit) : nil
+        func namesCurrentBranch(_ name: String) -> Bool {
+            guard let currentBranch, !currentBranch.isEmpty else {
+                // The branch snapshot is not always ready while the log is
+                // drawing. A single local ref on HEAD is that checked-out branch.
+                return commit.isHead && commit.refs.count == 1
+            }
+            return name == currentBranch
+                || currentBranch == name.split(separator: "/").last.map(String.init)
+                || name == currentBranch.split(separator: "/").last.map(String.init)
+        }
+        var markedCurrentBranch = false
+        commit.refs.forEach { name in
+            let isCurrent = namesCurrentBranch(name)
+            if isCurrent { markedCurrentBranch = true }
+            // Rebased marks the checked-out branch on the commit instead of
+            // adding a separate HEAD label beside it.
+            append(RefLabel(id: "local:\(name)", title: name, kind: isCurrent ? .head : .local))
+        }
+        if commit.isHead, !markedCurrentBranch {
             append(RefLabel(id: "head", title: "HEAD", kind: .head))
         }
-        commit.refs.forEach { append(RefLabel(id: "local:\($0)", title: $0, kind: .local)) }
-        if showTagNames {
-            commit.tagRefs.forEach { append(RefLabel(id: "tag:\($0)", title: $0, kind: .tag)) }
-        }
+        // Rebased keeps tag icons in the log even when names are hidden.
+        commit.tagRefs.forEach { append(RefLabel(id: "tag:\($0)", title: $0, kind: .tag)) }
         commit.remoteRefs.forEach { append(RefLabel(id: "remote:\($0)", title: $0, kind: .remote)) }
         if compact, labels.count > 2 {
             let hiddenCount = labels.count - 2

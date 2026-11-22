@@ -52,6 +52,7 @@ struct WorkspacePanelHeader: View {
     let title: LocalizedStringKey
     let systemImage: String
     let isExpanded: Bool
+    let showsDisclosure: Bool
     let onToggle: () -> Void
     let trailing: AnyView?
 
@@ -59,30 +60,51 @@ struct WorkspacePanelHeader: View {
         title: LocalizedStringKey,
         systemImage: String,
         isExpanded: Bool,
+        showsDisclosure: Bool = true,
         onToggle: @escaping () -> Void,
         trailing: AnyView? = nil
     ) {
         self.title = title
         self.systemImage = systemImage
         self.isExpanded = isExpanded
+        self.showsDisclosure = showsDisclosure
         self.onToggle = onToggle
         self.trailing = trailing
     }
 
+    private var headerContent: some View {
+        HStack(spacing: 8) {
+            if showsDisclosure {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .frame(width: 12)
+                    .accessibilityHidden(true)
+            }
+            Group {
+                if systemImage.isEmpty {
+                    Text(title)
+                } else {
+                    Label(title, systemImage: systemImage)
+                }
+            }
+            .font(Design.Typography.interface(12, weight: .semibold))
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: onToggle) {
-                HStack(spacing: 8) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .frame(width: 12)
-                    Label(title, systemImage: systemImage)
-                        .font(Design.Typography.interface(12, weight: .semibold))
-                    Spacer(minLength: 0)
+            Group {
+                if showsDisclosure {
+                    Button(action: onToggle) {
+                        headerContent
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    headerContent
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .foregroundStyle(.primary)
 
             if let trailing {
@@ -97,9 +119,9 @@ struct WorkspacePanelHeader: View {
                 .fill(Color.primary.opacity(0.08))
                 .frame(height: 1)
         }
-        .help(isExpanded ? "Collapse panel" : "Expand panel")
+        .help(showsDisclosure ? (isExpanded ? "Collapse panel" : "Expand panel") : "")
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(isExpanded ? "Collapse panel" : "Expand panel")
+        .accessibilityLabel(showsDisclosure ? (isExpanded ? "Collapse panel" : "Expand panel") : title)
     }
 }
 
@@ -371,6 +393,8 @@ struct WorkspaceHorizontalSplit<LeftContent: View, RightContent: View>: View {
 struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
     @Binding var persistedSidebarWidth: Double
     let selectedToolWindow: ToolWindowMode
+    let projectOpen: Bool
+    let logOpen: Bool
     let sidebarVisible: Bool
     let minimumMainWidth: CGFloat
     let onSelectToolWindow: (ToolWindowMode) -> Void
@@ -380,6 +404,8 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
     init(
         persistedSidebarWidth: Binding<Double>,
         selectedToolWindow: ToolWindowMode,
+        projectOpen: Bool = false,
+        logOpen: Bool = false,
         sidebarVisible: Bool = true,
         minimumMainWidth: CGFloat = 420,
         onSelectToolWindow: @escaping (ToolWindowMode) -> Void,
@@ -389,6 +415,8 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
     ) {
         _persistedSidebarWidth = persistedSidebarWidth
         self.selectedToolWindow = selectedToolWindow
+        self.projectOpen = projectOpen
+        self.logOpen = logOpen
         self.sidebarVisible = sidebarVisible
         self.minimumMainWidth = minimumMainWidth
         self.onSelectToolWindow = onSelectToolWindow
@@ -401,6 +429,8 @@ struct WorkspaceSplitLayout<SidebarContent: View, MainContent: View>: View {
         HStack(spacing: 0) {
             RebasedActivityRail(
                 selectedMode: selectedToolWindow,
+                projectOpen: projectOpen,
+                logOpen: logOpen,
                 onSelect: onSelectToolWindow,
                 onOpenProject: onOpenProject
             )

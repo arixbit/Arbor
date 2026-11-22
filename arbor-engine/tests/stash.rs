@@ -313,6 +313,9 @@ fn stash_files_lists_changed_paths() {
 
     r.write("tracked.txt", "v2");
     r.write("added.txt", "new file");
+    r.write(" leading name.txt", "leading space");
+    r.write("tab\tname.txt", "tab");
+    r.write("line\nbreak.txt", "newline");
     let repo = r.open();
 
     repo.stash_save_including_untracked(Some("files".into()))
@@ -323,6 +326,12 @@ fn stash_files_lists_changed_paths() {
     sorted.sort();
     assert_eq!(
         sorted,
-        vec!["added.txt".to_string(), "tracked.txt".to_string()]
+        vec![
+            " leading name.txt".to_string(),
+            "added.txt".to_string(),
+            "line\nbreak.txt".to_string(),
+            "tab\tname.txt".to_string(),
+            "tracked.txt".to_string(),
+        ]
     );
 }

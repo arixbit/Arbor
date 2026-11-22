@@ -170,11 +170,13 @@ func openProjectPath(_ projectPath: String) {
     fileWorkspace.previewPath = nil
     fileWorkspace.previewVisible = false
     logSelectionState.selectedIDs = []
+    logSelectionState.sourceTabPath = nil
     reflog.rootPath = nil
     reflog.rootRepo = nil
     reflog.entries = []
     reflog.selection = nil
     reflog.selectedIDs = []
+    stashUI.selectedListStashID = nil
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false
@@ -327,6 +329,7 @@ func openProjectPath(_ projectPath: String) {
                     await MainActor.run {
                         guard self.projectWorkspace.repository === r else { return }
                         self.repositoryStatus.entries = st
+                        self.commitWorkspace.retainChangedPaths(Set(st.map(\.path)), in: r.workdir())
                         self.repositoryStatus.changeLists = cls
                         self.repositoryStatus.isShowingCachedStatusSnapshot = false
                         if let rootPath = r.workdir() {
@@ -514,6 +517,7 @@ func resetProjectState() {
     logSelectionState.detailCommit = nil
     logSelectionState.fileDiffTab = nil
     logSelectionState.fileDiffTabActive = false
+    logSelectionState.sourceTabPath = nil
     branchComparison.firstEntries = []
     branchComparison.secondEntries = []
     branchComparison.selectionID = nil
@@ -554,6 +558,7 @@ func resetProjectState() {
     fileWorkspace.previewPath = nil
     fileWorkspace.previewVisible = false
     logSelectionState.selectedIDs = []
+    stashUI.selectedListStashID = nil
     stashUI.previewStashID = nil
     stashUI.previewText = nil
     stashUI.showPreview = false

@@ -9,8 +9,13 @@ func beginCommitAndPush() {
         openMultiRootCommitDialog()
         return
     }
-    guard hasStaged,
-          !commitWorkspace.message.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    let included = commitWorkspace.includedPaths(for: repo?.workdir())
+    guard repositoryStatus.entries.contains(where: {
+        included.contains($0.path)
+            && $0.staged != .conflicted
+            && $0.unstaged != .conflicted
+            && $0.unstaged != .ignored
+    }), !commitWorkspace.message.trimmingCharacters(in: .whitespaces).isEmpty else { return }
     // Match GitCommitAndPushExecutor: the commit workflow owns the first
     // stage. Push options are shown only after Git has created the commit.
     // This prevents a rejected/failed commit from ever entering transport.

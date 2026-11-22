@@ -380,6 +380,20 @@ extension CompareSelectionTests {
         XCTAssertTrue(missing.selectedIDs.isEmpty)
     }
 
+    func testPersistedLogRowSelectionRoundTripsPerRoot() {
+        let suite = "Arbor.LogSelectionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertNil(persistedLogRowSelection(rootPath: "/tmp/visual-fixture", defaults: defaults))
+        storePersistedLogRowSelection("aaad847", rootPath: "/tmp/visual-fixture", defaults: defaults)
+        XCTAssertEqual(
+            persistedLogRowSelection(rootPath: "/private/tmp/visual-fixture", defaults: defaults),
+            "aaad847"
+        )
+        storePersistedLogRowSelection(nil, rootPath: "/private/tmp/visual-fixture", defaults: defaults)
+        XCTAssertNil(persistedLogRowSelection(rootPath: "/tmp/visual-fixture", defaults: defaults))
+    }
+
     func testLogCommandMergeKeepsEqualObjectIDsRootQualified() {
         var firstRoot = logCommit(id: "same", repositoryPath: "/workspace/one")
         firstRoot.time = 10

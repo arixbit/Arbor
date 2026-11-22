@@ -309,6 +309,7 @@ func loadLog(reset: Bool = true) {
                           self.externalLogTabIsAlive(tabID),
                           self.isActiveLogRepository(repo) else { return }
                     let previousSelection = self.logSelectionState.selection
+                        ?? persistedLogRowSelection(rootPath: rootPath)
                     let previousSelections = self.logSelectionState.selectedIDs
                     self.logList.entries = restoredGraph.commits
                     self.logList.pageCursor = restoredGraph.cursor
@@ -391,6 +392,7 @@ func loadLog(reset: Bool = true) {
                       self.isActiveLogRepository(repo) else { return } // 过期结果丢弃
                 if reset {
                     let previousSelection = self.logSelectionState.selection
+                        ?? persistedLogRowSelection(rootPath: rootPath)
                     let previousSelections = self.logSelectionState.selectedIDs
                     var restoredEntries = restoredGraph?.commits ?? []
                     let restoredIDs = Set(restoredEntries.map(\.id))

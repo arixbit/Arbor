@@ -353,5 +353,10 @@ extension ContentView {
         projectTreeExpansion.kind = .collapseAll
     }
 
+    func expandAllProjectDirectories() {
+        projectTreeExpansion.token += 1
+        projectTreeExpansion.kind = .expandAll
+    }
+
 
 }

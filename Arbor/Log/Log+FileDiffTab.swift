@@ -26,6 +26,7 @@ enum LogDiffSource: Equatable {
 struct LogFileDiffTab: Equatable {
     var record: LogChangeRecord
     var source: LogDiffSource
+    var labelPrefix: String = "Repository Diff"
     /// 打开时 Changes Browser 中可见的文件顺序，用于 tab 内的上一/下一文件
     /// 导航。顺序在打开瞬间固定，避免后台重载让导航跳过文件。
     var siblings: [LogChangeRecord] = []
@@ -34,6 +35,8 @@ struct LogFileDiffTab: Equatable {
         let name = URL(fileURLWithPath: record.change.path).lastPathComponent
         return name.isEmpty ? record.change.path : name
     }
+
+    var displayTitle: String { "\(labelPrefix): \(title)" }
 
     var previousRecord: LogChangeRecord? {
         adjacentRecord(offset: -1)
@@ -61,12 +64,22 @@ extension ContentView {
         source: LogDiffSource = .commit,
         siblings: [LogChangeRecord] = []
     ) {
+        openLogFileDiffTab(record, source: source, siblings: siblings, labelPrefix: "Repository Diff")
+    }
+
+    func openLogFileDiffTab(
+        _ record: LogChangeRecord,
+        source: LogDiffSource = .commit,
+        siblings: [LogChangeRecord] = [],
+        labelPrefix: String
+    ) {
         let ordered = siblings.contains(where: { $0.id == record.id })
             ? siblings
             : [record]
         logSelectionState.fileDiffTab = LogFileDiffTab(
             record: record,
             source: source,
+            labelPrefix: labelPrefix,
             siblings: ordered
         )
         logSelectionState.fileDiffTabActive = true
@@ -75,6 +88,16 @@ extension ContentView {
     func showLogFileDiffTab() {
         guard logSelectionState.fileDiffTab != nil else { return }
         logSelectionState.fileDiffTabActive = true
+    }
+
+    func jumpToStashSource(_ path: String) {
+        logSelectionState.sourceTabPath = path
+        showCommitLocalVersion(path)
+    }
+
+    func closeStashSourceTab() {
+        logSelectionState.sourceTabPath = nil
+        if fileWorkspace.fileSelection != nil { closeWorkspaceFile() }
     }
 
     func showLogTab() {
@@ -95,8 +118,8 @@ extension ContentView {
     /// Log 编辑区的 tab 条：`Log` 与当前 diff tab。切换页签不会丢失已经
     /// 打开的 diff；关闭 diff tab 才清除它。
     @ViewBuilder
-    func logFileDiffTabBar(_ tab: LogFileDiffTab) -> some View {
-        let isDiffActive = logSelectionState.fileDiffTabActive
+    func logFileDiffTabBar(_ tab: LogFileDiffTab?) -> some View {
+        let isDiffActive = logSelectionState.fileDiffTabActive && tab != nil
         HStack(spacing: 6) {
             Button(action: showLogTab) {
                 Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
@@ -112,37 +135,61 @@ extension ContentView {
             )
             .accessibilityIdentifier("log-file-diff-return-to-log")
 
-            HStack(spacing: 6) {
-                Button(action: showLogFileDiffTab) {
-                    HStack(spacing: 6) {
-                        Image(systemName: repositoryFileSymbol(for: tab.record.change.path))
-                        Text("Repository Diff: \(tab.title)")
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .padding(.vertical, 5)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(isDiffActive ? .primary : .secondary)
-                .accessibilityIdentifier("log-file-diff-show-tab")
-                Button(action: closeLogFileDiffTab) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10))
-                        .frame(width: 20, height: 20)
+            if let tab {
+                HStack(spacing: 6) {
+                    Button(action: showLogFileDiffTab) {
+                        HStack(spacing: 6) {
+                            Image(systemName: repositoryFileSymbol(for: tab.record.change.path))
+                            Text(tab.displayTitle)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .padding(.vertical, 5)
                         .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(isDiffActive ? .primary : .secondary)
+                    .accessibilityIdentifier("log-file-diff-show-tab")
+                    Button(action: closeLogFileDiffTab) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10))
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
+                    .accessibilityLabel("Close")
+                    .accessibilityIdentifier("log-file-diff-close")
                 }
-                .buttonStyle(.plain)
-                .help("Close")
-                .accessibilityLabel("Close")
-                .accessibilityIdentifier("log-file-diff-close")
+                .padding(.horizontal, 8)
+                .background(
+                    isDiffActive ? Design.Colors.selection : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 5)
+                )
+                .help(tab.record.change.path)
             }
-            .padding(.horizontal, 8)
-            .background(
-                isDiffActive ? Design.Colors.selection : Color.clear,
-                in: RoundedRectangle(cornerRadius: 5)
-            )
-            .help(tab.record.change.path)
+            if let path = logSelectionState.sourceTabPath {
+                HStack(spacing: 6) {
+                    Button { showCommitLocalVersion(path) } label: {
+                        Label((path as NSString).lastPathComponent,
+                              systemImage: repositoryFileSymbol(for: path))
+                            .frame(height: 26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("log-file-diff-source-tab")
+                    Button(action: closeStashSourceTab) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10))
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
+                    .accessibilityLabel("Close source tab")
+                }
+                .padding(.horizontal, 8)
+                .background(Color.clear, in: RoundedRectangle(cornerRadius: 5))
+            }
             Spacer(minLength: 0)
         }
         .font(Design.Typography.interface(12))
@@ -157,9 +204,16 @@ extension ContentView {
     func logFileDiffTabContent(_ tab: LogFileDiffTab) -> some View {
         let previous = tab.previousRecord
         let next = tab.nextRecord
+        let sourceExists = repo?.workdir().map { root in
+            FileManager.default.fileExists(
+                atPath: URL(fileURLWithPath: root)
+                    .appendingPathComponent(tab.record.change.path).path
+            )
+        } ?? false
         LogFileDiffView(
             record: tab.record,
             source: tab.source,
+            stashLabel: tab.labelPrefix.hasPrefix("Stash@{") ? tab.labelPrefix : nil,
             repositoryForCommit: logRepository(for:),
             siblings: tab.siblings,
             onSelectFile: { record in
@@ -171,7 +225,10 @@ extension ContentView {
             },
             onSelectNext: next.map { record in
                 { selectLogFileDiffTabRecord(record) }
-            }
+            },
+            onJumpToSource: tab.labelPrefix.hasPrefix("Stash@{") && sourceExists
+                ? { jumpToStashSource(tab.record.change.path) }
+                : nil
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Design.Colors.canvas)

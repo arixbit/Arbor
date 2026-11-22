@@ -999,6 +999,74 @@ func showStashDiffFor(stashID: String) {
     }
 }
 
+/// Double-clicking a stash file opens that file's diff, with a title matching
+/// the stash entry in Rebased. A missing file must never open another file.
+func openStashFileDiffInNewTab(stashID: String, path: String) {
+    guard let index = stashUI.stashes.firstIndex(where: { $0.id == stashID }) else { return }
+    openStashDiffInNewTab(
+        stashID: stashID,
+        selectedPath: path,
+        labelPrefix: "Stash@{\(index)}"
+    )
+}
+
+/// Open a stash's changed files in the Log editor's full-width diff tab.
+/// The stash commit's first parent is the worktree state before the stash.
+func openStashDiffInNewTab(
+    stashID: String,
+    selectedPath: String? = nil,
+    labelPrefix: String = "Repository Diff"
+) {
+    guard let repo else { return }
+    Task.detached(priority: .userInitiated) {
+        do {
+            let commit = try repo.commitInfo(commitId: stashID)
+            let changes = try repo.commitDiff(commitId: stashID, parentIndex: 0).changes
+            // `git stash push -u` saves untracked files in a separate root
+            // commit (the third parent). The stash worktree diff omits them.
+            let untracked: (commit: CommitInfo, changes: [TreeChange])?
+            if commit.parentIds.count > 2 {
+                let untrackedID = commit.parentIds[2]
+                untracked = (
+                    try repo.commitInfo(commitId: untrackedID),
+                    try repo.commitDiff(commitId: untrackedID, parentIndex: nil).changes
+                )
+            } else {
+                untracked = nil
+            }
+            await MainActor.run {
+                guard self.projectWorkspace.repository === repo else { return }
+                let records = changes.map {
+                    LogChangeRecord(commit: commit, parentIndex: 0, change: $0)
+                } + (untracked.map { info in
+                    info.changes.map {
+                        LogChangeRecord(commit: info.commit, parentIndex: nil, change: $0)
+                    }
+                } ?? [])
+                let selected = selectedPath == nil
+                    ? records.first
+                    : records.first(where: { $0.change.path == selectedPath })
+                guard let selected else {
+                    self.feedbackCenter.warning(
+                        "Stash diff unavailable",
+                        detail: selectedPath == nil
+                            ? "This stash contains no file changes."
+                            : "The selected file is no longer in this stash."
+                    )
+                    return
+                }
+                if self.fileWorkspace.fileSelection != nil { self.closeWorkspaceFile() }
+                self.openLogFileDiffTab(selected, siblings: records, labelPrefix: labelPrefix)
+            }
+        } catch {
+            await MainActor.run {
+                guard self.projectWorkspace.repository === repo else { return }
+                self.feedbackCenter.error("Stash diff unavailable", detail: errorMessage(error))
+            }
+        }
+    }
+}
+
 /// Stash 工作区的内嵌预览入口。与分支弹出菜单使用的文本 sheet 分开，
 /// 这样 Commit/Stash 左工作区不会因为查看 diff 而遮住右侧 Log。
 func showStashPreviewFor(stashID: String) {

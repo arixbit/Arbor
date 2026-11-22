@@ -250,6 +250,21 @@ func exportShelve(_ name: String, rootPath: String? = nil) {
     }
 }
 
+/// Rebased Commit toolbar: shelve the current changes without the name dialog.
+func shelveSilently() {
+    let paths = repositoryStatus.entries.compactMap { entry -> String? in
+        if entry.unstaged == .ignored { return nil }
+        if entry.staged == .unchanged && entry.unstaged == .unchanged { return nil }
+        return entry.path
+    }
+    guard !paths.isEmpty else { return }
+    let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .short)
+    shelfWorkspace.name = "Changes \(stamp)"
+    doShelve(paths: paths, includeUntracked: paths.contains { path in
+        repositoryStatus.entries.contains { $0.path == path && $0.unstaged == .untracked }
+    })
+}
+
 /// shelve 当前激活仓库的全部变更。
 func doShelve(
     paths selectedPaths: [String]? = nil,

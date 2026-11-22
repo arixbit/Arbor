@@ -25,8 +25,8 @@ enum LogColumnID: String, CaseIterable, Hashable, Identifiable {
 
     var defaultWidth: CGFloat {
         switch self {
-        case .commit: 276
-        case .author: 132
+        case .commit: 240
+        case .author: 112
         case .date: 154
         case .hash: 76
         case .root: 180
@@ -36,7 +36,7 @@ enum LogColumnID: String, CaseIterable, Hashable, Identifiable {
 
     var minimumWidth: CGFloat {
         switch self {
-        case .commit: 276
+        case .commit: 160
         case .author: 88
         case .date: 112
         case .hash: 64

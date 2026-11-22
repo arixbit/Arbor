@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 extension TreeChangeKind {
     var displayTitle: LocalizedStringKey {
@@ -53,11 +54,14 @@ struct UnifiedDiffView: View {
     /// and the view scrolls to it when the ordinal changes.
     var activeDifference: Int? = nil
     var showsLineNumbers = true
+    var wrapsLines = true
 
     var body: some View {
         let items = unifiedDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
         let ordinals = unifiedDifferenceOrdinals(items)
+        let unwrappedWidth = unifiedUnwrappedWidth(items)
         GeometryReader { proxy in
+            let contentWidth = wrapsLines ? proxy.size.width : max(proxy.size.width, unwrappedWidth)
             ScrollViewReader { scroller in
                 ScrollView([.vertical, .horizontal]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -65,21 +69,22 @@ struct UnifiedDiffView: View {
                             switch items[index] {
                             case let .hunkHeader(hunkIndex):
                                 HunkHeaderView(hunk: fileDiff.hunks[hunkIndex])
-                                    .frame(minWidth: proxy.size.width, alignment: .leading)
+                                    .frame(minWidth: contentWidth, alignment: .leading)
                             case let .row(row):
                                 UnifiedDiffRowView(
                                     row: row,
                                     isActiveDifference: ordinals[index] == activeDifference,
-                                    showsLineNumbers: showsLineNumbers
+                                    showsLineNumbers: showsLineNumbers,
+                                    wrapsLines: wrapsLines
                                 )
-                                .frame(minWidth: proxy.size.width, alignment: .leading)
+                                .frame(minWidth: contentWidth, alignment: .leading)
                                 .id(diffRowAnchorID(index))
                             }
                         }
                     }
                     .font(.system(.body, design: .monospaced))
                     .frame(
-                        minWidth: proxy.size.width,
+                        minWidth: contentWidth,
                         minHeight: proxy.size.height,
                         alignment: .topLeading
                     )
@@ -96,6 +101,17 @@ struct UnifiedDiffView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .scrollContentBackground(.hidden)
+    }
+
+    private func unifiedUnwrappedWidth(_ items: [UnifiedDisplayItem]) -> CGFloat {
+        guard !wrapsLines else { return 0 }
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let longest = items.reduce(CGFloat.zero) { width, item in
+            guard case let .row(row) = item else { return width }
+            return max(width, (row.line.text as NSString).size(withAttributes: attributes).width)
+        }
+        return longest + (showsLineNumbers ? 88 : 0) + 38
     }
 }
 
@@ -287,6 +303,7 @@ private struct UnifiedDiffRowView: View {
     let row: UnifiedDiffRow
     var isActiveDifference = false
     var showsLineNumbers = true
+    var wrapsLines = true
 
     var body: some View {
         HStack(spacing: 0) {
@@ -303,6 +320,8 @@ private struct UnifiedDiffRowView: View {
                 .foregroundStyle(rowColor)
             Text(highlightedText)
                 .foregroundStyle(.primary)
+                .lineLimit(wrapsLines ? nil : 1)
+                .fixedSize(horizontal: !wrapsLines, vertical: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 8)

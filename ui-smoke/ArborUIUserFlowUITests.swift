@@ -220,7 +220,7 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try write(original.replacingOccurrences(of: "line 2\n", with: "selected change\n")
             .replacingOccurrences(of: "line 22\n", with: "leave for later\n"), to: "notes.txt")
         launch()
-        let change = session.window.checkBoxes["Stage notes.txt"].firstMatch
+        let change = session.window.checkBoxes["Include notes.txt"].firstMatch
         XCTAssertTrue(change.waitForExistence(timeout: 10))
         change.rightClick()
         click(session.app.menuItems["Partial stage"].firstMatch)
@@ -236,14 +236,13 @@ final class ArborUIUserFlowUITests: XCTestCase {
             return staged.contains("selected change") && !staged.contains("leave for later")
         }
         session.recordScreenshot(named: "daily-partial-stage")
-        // Close the diff dialog and commit only the selected change.
+        // The normal Commit action includes the whole selected worktree file;
+        // use the staged-only action to preserve the edit left for later.
         if session.app.buttons["Close"].firstMatch.exists { click(session.app.buttons["Close"].firstMatch) }
         let editor = session.window.textViews.firstMatch
         enter("Journey partial commit", into: editor)
-        let commit = try XCTUnwrap(session.window.buttons
-            .matching(NSPredicate(format: "label == %@", "Commit"))
-            .allElementsBoundByIndex.first { $0.frame.minY > editor.frame.maxY })
-        click(commit)
+        click(session.window.descendants(matching: .any)["commit-tool-window-options"].firstMatch)
+        click(session.app.menuItems["Commit Staged Changes"].firstMatch)
         try eventually("commit") { try self.git("log", "-1", "--format=%s") == "Journey partial commit" }
         XCTAssertTrue(try git("diff").contains("leave for later"))
         XCTAssertFalse(try git("show", "HEAD:notes.txt").contains("leave for later"))
@@ -253,6 +252,99 @@ final class ArborUIUserFlowUITests: XCTestCase {
             try self.git("rev-parse", "HEAD") == self.git("--git-dir", self.root.appendingPathComponent("remote.git").path, "rev-parse", "main")
         }
         session.recordScreenshot(named: "daily-pushed")
+    }
+
+    func testCommitInclusionPreservesUnselectedStaging() throws {
+        try prepare()
+        try write("base-other\n", to: "other.txt")
+        try git("add", "other.txt")
+        try git("commit", "-m", "Add second file")
+        let notes = try String(contentsOf: repo.appendingPathComponent("notes.txt"), encoding: .utf8)
+        try write(notes.replacingOccurrences(of: "line 2\n", with: "included worktree edit\n"), to: "notes.txt")
+        try write("base-other\nstaged-other\n", to: "other.txt")
+        try git("add", "other.txt")
+        try write("base-other\nstaged-other\nlocal-other\n", to: "other.txt")
+
+        launch()
+        click(session.window.checkBoxes["Include notes.txt"].firstMatch)
+        XCTAssertEqual(try git("diff", "--cached", "--name-only"), "other.txt",
+                       "selecting a commit file must not change the Git index")
+        let editor = session.window.textViews.firstMatch
+        enter("Selected worktree commit", into: editor)
+        let commit = try XCTUnwrap(session.window.buttons
+            .matching(NSPredicate(format: "label == %@", "Commit"))
+            .allElementsBoundByIndex.first { $0.frame.minY > editor.frame.maxY })
+        click(commit)
+        try eventually("selected-commit") {
+            try self.git("log", "-1", "--format=%s") == "Selected worktree commit"
+        }
+        XCTAssertTrue(try git("show", "HEAD:notes.txt").contains("included worktree edit"))
+        XCTAssertEqual(try git("show", "HEAD:other.txt"), "base-other")
+        XCTAssertTrue(try git("diff", "--cached", "other.txt").contains("staged-other"))
+        XCTAssertTrue(try git("diff", "other.txt").contains("local-other"))
+        XCTAssertEqual(try git("status", "--short", "notes.txt"), "")
+    }
+
+    func testStashUntrackedFileOpensInDiffTab() throws {
+        try prepare()
+        try write("untracked stash content\n", to: "notes-untracked.txt")
+        try git("stash", "push", "-u", "-m", "Untracked fixture")
+        launch()
+        if !session.window.exists {
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.arbor.app")
+            _ = (running.first(where: \.isActive) ?? running.last)?
+                .activate(options: [.activateAllWindows])
+        }
+        XCTAssertTrue(session.window.waitForExistence(timeout: 10))
+        let stashTab = session.window.buttons["Stash"].firstMatch
+        click(stashTab)
+        let stash = session.window.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "stash-row-")).firstMatch
+        if !stash.waitForExistence(timeout: 3) { click(stashTab) }
+        XCTAssertTrue(stash.waitForExistence(timeout: 10))
+        stash.rightClick()
+        click(session.app.menuItems["Show Diff in New Tab"].firstMatch)
+        XCTAssertTrue(session.window.descendants(matching: .any)["log-file-diff-tab"].firstMatch
+            .waitForExistence(timeout: 10))
+        let tabButton = session.window.descendants(matching: .any)["log-file-diff-show-tab"].firstMatch
+        XCTAssertTrue(tabButton.label.contains("notes-untracked.txt"))
+        XCTAssertTrue(session.window.staticTexts["1 difference"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(try git("stash", "list").contains("Untracked fixture"))
+    }
+
+    func testStashSelectionSurvivesProjectToggle() throws {
+        try prepare()
+        try write("alpha base\n", to: "alpha.txt")
+        try write("beta base\n", to: "beta.txt")
+        try git("add", "alpha.txt", "beta.txt")
+        try git("commit", "-m", "Add stash fixture files")
+        try write("alpha stashed\n", to: "alpha.txt")
+        try git("stash", "push", "-m", "Alpha saved")
+        try write("beta stashed\n", to: "beta.txt")
+        try git("stash", "push", "-m", "Beta saved")
+        launch(extraArguments: ["-arbor.projectPanelExpanded.v3", "YES"])
+        if !session.window.exists {
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.arbor.app")
+            _ = (running.first(where: \.isActive) ?? running.last)?
+                .activate(options: [.activateAllWindows])
+        }
+        XCTAssertTrue(session.window.waitForExistence(timeout: 10))
+        let stashTab = session.window.buttons["Stash"].firstMatch
+        click(stashTab)
+        let older = session.window.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+                                  "stash-row-", "Alpha saved")).firstMatch
+        if !older.waitForExistence(timeout: 3) { click(stashTab) }
+        click(older)
+        let alpha = session.window.descendants(matching: .any)["stash-change-file-alpha.txt"].firstMatch
+        XCTAssertTrue(alpha.waitForExistence(timeout: 10))
+        let project = session.window.buttons["Project"].firstMatch
+        click(project)
+        XCTAssertTrue(alpha.waitForExistence(timeout: 10), "closing Project changed the selected stash")
+        click(project)
+        XCTAssertTrue(alpha.waitForExistence(timeout: 10), "opening Project changed the selected stash")
+        XCTAssertFalse(session.window.descendants(matching: .any)["stash-change-file-beta.txt"].firstMatch.exists)
+        XCTAssertEqual(try git("stash", "list").components(separatedBy: "\n").count, 2)
     }
 
     func test02FetchPullCheckout() throws {

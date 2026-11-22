@@ -3,9 +3,257 @@
 
 mod common;
 
-use arbor_engine::{ChangeKind, LineSelection};
+use arbor_engine::{ChangeKind, LineSelection, Repository};
 
 use common::TestRepo;
+
+fn commit_worktree_outcome(
+    repo: &Repository,
+    paths: &[&str],
+    amend: bool,
+) -> Result<(String, Option<String>), arbor_engine::EngineError> {
+    repo.commit_with_options_worktree_paths(
+        "worktree selection".into(),
+        paths.iter().map(|path| (*path).into()).collect(),
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        false,
+        Vec::new(),
+        amend,
+    )
+    .map(|outcome| (outcome.id, outcome.index_reconciliation_warning))
+}
+
+fn commit_worktree(
+    repo: &Repository,
+    paths: &[&str],
+    amend: bool,
+) -> Result<String, arbor_engine::EngineError> {
+    commit_worktree_outcome(repo, paths, amend).map(|(id, _)| id)
+}
+
+#[test]
+fn worktree_commit_preserves_other_staged_entries_and_commits_unstaged_content() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "selected.txt", "head\n", "init");
+    common::commit(&r.path, "other.txt", "old\n", "other");
+    r.write("other.txt", "staged\n");
+    r.git(&["add", "other.txt"]);
+    r.write("selected.txt", "worktree\n");
+    let before = r.git(&["show", ":other.txt"]);
+
+    let id = commit_worktree(&r.open(), &["selected.txt"], false).unwrap();
+    assert_eq!(r.git(&["show", &format!("{id}:selected.txt")]), "worktree");
+    assert_eq!(r.git(&["show", ":other.txt"]), before);
+    assert_eq!(r.git(&["diff", "--cached", "--name-only"]), "other.txt");
+    assert!(r.git(&["diff", "--", "selected.txt"]).is_empty());
+}
+
+#[test]
+fn worktree_commit_uses_entire_partially_staged_worktree_version() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "partial.txt", "head\n", "init");
+    r.write("partial.txt", "staged\n");
+    r.git(&["add", "partial.txt"]);
+    r.write("partial.txt", "staged\nlocal\n");
+
+    commit_worktree(&r.open(), &["partial.txt"], false).unwrap();
+    assert_eq!(r.git(&["show", "HEAD:partial.txt"]), "staged\nlocal");
+    assert!(r.git(&["diff", "--cached", "--", "partial.txt"]).is_empty());
+    assert!(r.git(&["diff", "--", "partial.txt"]).is_empty());
+}
+
+#[test]
+fn worktree_commit_handles_literal_untracked_rename_and_deletion() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "old.txt", "old\n", "init");
+    common::commit(&r.path, "deleted.txt", "deleted\n", "second");
+    r.write("keep.txt", "keep\n");
+    r.git(&["add", "keep.txt"]);
+    std::fs::rename(r.path.join("old.txt"), r.path.join("new.txt")).unwrap();
+    std::fs::remove_file(r.path.join("deleted.txt")).unwrap();
+    r.write("[literal].txt", "literal\n");
+    // A matching wildcard name must not be included by the literal pathspec.
+    r.write("l.txt", "other\n");
+
+    commit_worktree(
+        &r.open(),
+        &["old.txt", "new.txt", "deleted.txt", "[literal].txt"],
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        r.git(&["show", "--format=", "--name-status", "HEAD"]),
+        "A\t[literal].txt\nD\tdeleted.txt\nR100\told.txt\tnew.txt"
+    );
+    assert_eq!(r.git(&["show", "HEAD:[literal].txt"]), "literal");
+    assert_eq!(r.git(&["diff", "--cached", "--name-only"]), "keep.txt");
+    assert_eq!(r.git(&["status", "--short", "--", "l.txt"]), "?? l.txt");
+}
+
+#[test]
+fn worktree_commit_accepts_staged_rename_and_deletion() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "old.txt", "rename me\n", "init");
+    common::commit(&r.path, "deleted.txt", "delete me\n", "second");
+    r.git(&["mv", "old.txt", "renamed.txt"]);
+    r.git(&["rm", "-q", "deleted.txt"]);
+
+    commit_worktree(&r.open(), &["old.txt", "renamed.txt", "deleted.txt"], false).unwrap();
+    assert_eq!(
+        r.git(&["show", "--format=", "--name-status", "HEAD"]),
+        "D\tdeleted.txt\nR100\told.txt\trenamed.txt"
+    );
+    assert!(r.git(&["diff", "--cached", "--name-only"]).is_empty());
+}
+
+#[test]
+fn worktree_commit_failures_leave_real_index_untouched() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "selected.txt", "head\n", "init");
+    r.write("selected.txt", "staged\n");
+    r.git(&["add", "selected.txt"]);
+    r.write("selected.txt", "head\n");
+    let before = r.git(&["ls-files", "--stage"]);
+    let head = r.git(&["rev-parse", "HEAD"]);
+    let repo = r.open();
+
+    assert!(commit_worktree(&repo, &["selected.txt"], false).is_err());
+    assert!(commit_worktree(&repo, &[], false).is_err());
+    assert!(commit_worktree(&repo, &["missing.txt"], false).is_err());
+    assert_eq!(r.git(&["ls-files", "--stage"]), before);
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), head);
+}
+
+#[test]
+fn worktree_commit_rejects_selected_unresolved_conflict_without_changing_index() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "conflict.txt", "base\n", "init");
+    r.git(&["branch", "side"]);
+    common::commit(&r.path, "conflict.txt", "main\n", "main edit");
+    r.git(&["switch", "-q", "side"]);
+    common::commit(&r.path, "conflict.txt", "side\n", "side edit");
+    r.git(&["switch", "-q", "main"]);
+    let merge = std::process::Command::new("git")
+        .args(["merge", "side"])
+        .current_dir(&r.path)
+        .output()
+        .unwrap();
+    assert!(!merge.status.success());
+    let before = r.git(&["ls-files", "--stage"]);
+    let head = r.git(&["rev-parse", "HEAD"]);
+
+    let error = commit_worktree(&r.open(), &["conflict.txt"], false).unwrap_err();
+    assert!(error.to_string().contains("unresolved index stages"));
+    assert_eq!(r.git(&["ls-files", "--stage"]), before);
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), head);
+}
+
+#[test]
+fn empty_worktree_amend_rewords_head_and_preserves_staged_index() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "head.txt", "head\n", "init");
+    r.write("staged.txt", "staged\n");
+    r.git(&["add", "staged.txt"]);
+    let before = r.git(&["ls-files", "--stage"]);
+    let tree = r.git(&["rev-parse", "HEAD^{tree}"]);
+
+    commit_worktree(&r.open(), &[], true).unwrap();
+    assert_eq!(
+        r.git(&["show", "-s", "--format=%s", "HEAD"]),
+        "worktree selection"
+    );
+    assert_eq!(r.git(&["rev-parse", "HEAD^{tree}"]), tree);
+    assert_eq!(r.git(&["ls-files", "--stage"]), before);
+}
+
+#[cfg(unix)]
+fn install_post_commit_hook(r: &TestRepo, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let hook = r.path.join(".git/hooks/post-commit");
+    std::fs::write(&hook, format!("#!/bin/sh\nset -eu\n{script}\n")).unwrap();
+    let mut permissions = std::fs::metadata(&hook).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&hook, permissions).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_commit_reports_locked_index_after_head_advances() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "selected.txt", "head\n", "init");
+    r.write("selected.txt", "new\n");
+    install_post_commit_hook(&r, "touch .git/index.lock");
+
+    let (id, warning) = commit_worktree_outcome(&r.open(), &["selected.txt"], false).unwrap();
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), id);
+    assert_eq!(r.git(&["show", "HEAD:selected.txt"]), "new");
+    assert!(warning.unwrap().contains("git reset selected paths"));
+    std::fs::remove_file(r.path.join(".git/index.lock")).unwrap();
+    assert_eq!(r.git(&["show", ":selected.txt"]), "head");
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_commit_preserves_concurrent_staging_in_selected_path() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "selected.txt", "head\n", "init");
+    r.write("selected.txt", "committed\n");
+    install_post_commit_hook(
+        &r,
+        "unset GIT_INDEX_FILE\nprintf 'concurrent\\n' > selected.txt\ngit add -- selected.txt",
+    );
+
+    let (id, warning) = commit_worktree_outcome(&r.open(), &["selected.txt"], false).unwrap();
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), id);
+    assert_eq!(r.git(&["show", "HEAD:selected.txt"]), "committed");
+    assert_eq!(r.git(&["show", ":selected.txt"]), "concurrent");
+    assert!(warning.unwrap().contains("selected.txt"));
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_commit_resets_unchanged_paths_while_preserving_concurrent_staging() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "changed.txt", "head\n", "init");
+    common::commit(&r.path, "unchanged.txt", "head\n", "init 2");
+    r.write("changed.txt", "committed\n");
+    r.write("unchanged.txt", "committed\n");
+    install_post_commit_hook(
+        &r,
+        "unset GIT_INDEX_FILE\nprintf 'concurrent\\n' > changed.txt\ngit add -- changed.txt",
+    );
+
+    let (id, warning) =
+        commit_worktree_outcome(&r.open(), &["changed.txt", "unchanged.txt"], false).unwrap();
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), id);
+    assert_eq!(r.git(&["show", ":changed.txt"]), "concurrent");
+    assert_eq!(r.git(&["show", ":unchanged.txt"]), "committed");
+    assert_eq!(r.git(&["diff", "--cached", "--name-only"]), "changed.txt");
+    assert!(warning.unwrap().contains("changed.txt"));
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_commit_reports_post_commit_index_read_failure() {
+    let r = TestRepo::new();
+    common::commit(&r.path, "selected.txt", "head\n", "init");
+    r.write("selected.txt", "committed\n");
+    install_post_commit_hook(&r, "mv .git/index .git/index.saved\nmkdir .git/index");
+
+    let (id, warning) = commit_worktree_outcome(&r.open(), &["selected.txt"], false).unwrap();
+    assert_eq!(r.git(&["rev-parse", "HEAD"]), id);
+    assert_eq!(r.git(&["show", "HEAD:selected.txt"]), "committed");
+    assert!(warning.unwrap().contains("git ls-files after commit"));
+    std::fs::remove_dir(r.path.join(".git/index")).unwrap();
+    std::fs::rename(r.path.join(".git/index.saved"), r.path.join(".git/index")).unwrap();
+    assert_eq!(r.git(&["show", ":selected.txt"]), "head");
+}
 
 #[test]
 fn selected_commit_preserves_unselected_index_and_partial_worktree_changes() {

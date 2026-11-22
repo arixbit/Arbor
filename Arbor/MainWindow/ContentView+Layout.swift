@@ -65,6 +65,8 @@ extension ContentView {
             WorkspaceSplitLayout(
                 persistedSidebarWidth: $savedWorkspaceSidebarWidth,
                 selectedToolWindow: projectWorkspace.toolWindowMode,
+                projectOpen: projectPanelExpanded,
+                logOpen: showsLogWorkspace,
                 // Rebased keeps the selected Git tool window on the left and
                 // opens Git Log in the editor workspace on the right. Log is
                 // therefore a second workspace, not a replacement for the
@@ -75,7 +77,8 @@ extension ContentView {
                     projectWorkspace.toolWindowMode = mode
                     toolWindowExpanded = true
                     if mode == .log {
-                        projectPanelExpanded = false
+                        projectPanelExpanded = true
+                        toolWindowExpanded = false
                         // Git Log is an editor-like workspace, not a narrow
                         // tool-window table. Clear file context so the main
                         // workspace can own the history graph and inspector.
@@ -120,14 +123,7 @@ extension ContentView {
             .background(Design.Colors.workspaceFrame)
 
             RebasedStatusBar(
-                branch: currentBranchName,
-                headID: repositoryStatus.headId,
-                changedCount: repositoryStatus.entries.filter {
-                    $0.staged != .unchanged
-                        || ($0.unstaged != .unchanged && $0.unstaged != .ignored)
-                }.count,
                 projectPath: projectWorkspace.path,
-                onBranch: { branchWorkspace.showPopover = true },
                 feedbackCenter: feedbackCenter,
                 syncStatus: currentSyncStatus,
                 hasUnfetchedIncoming: currentBranchHasUnfetchedIncoming,

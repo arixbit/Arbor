@@ -11,7 +11,6 @@ struct CommitActionFeedback: Equatable {
 // MARK: - 提交详情（日志模式）
 
 struct CommitDetailView: View {
-    @Environment(\.locale) private var locale
     let repo: Repository?
     let commit: CommitInfo?
     let remotes: [RemoteInfo]
@@ -48,6 +47,9 @@ struct CommitDetailView: View {
     @State private var detailsTask: Task<Void, Never>?
     @State private var diffTask: Task<Void, Never>?
     @State private var collapsedChangeFolders: Set<String> = []
+    @State private var containingBranches: [String] = []
+    @State private var showsAllContainingBranches = false
+    @State private var detailsActionsHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,6 +59,9 @@ struct CommitDetailView: View {
                         compactCommitHeader(commit)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .task(id: commit.id) {
+                        await loadContainingBranches(for: commit)
                     }
                 } else if showsMetadata {
                     // MainFrame's right side is a details splitter: the
@@ -159,10 +164,13 @@ struct CommitDetailView: View {
                     Menu {
                         inspectorActionButtons(commit)
                     } label: {
-                        Image(systemName: "ellipsis")
+                        verticalEllipsisIcon()
                     }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                     .fixedSize()
+                    .opacity(detailsActionsHovered ? 1 : 0)
+                    .onHover { detailsActionsHovered = $0 }
                     .accessibilityLabel("Commit Actions")
                 }
             }
@@ -170,32 +178,82 @@ struct CommitDetailView: View {
                 Text(commit.messageBody)
                     .textSelection(.enabled)
             }
-            Text("\(commit.id.prefix(8)) \(commit.authorName)")
+            (Text("\(commit.id.prefix(8)) \(commit.authorName) ")
+                + Text("<\(commit.authorEmail)>").foregroundColor(.accentColor)
+                + Text(" \(detailsDatePhrase(commit.time))"))
                 .textSelection(.enabled)
-            (Text("<\(commit.authorEmail)>").foregroundColor(.accentColor)
-                + Text(" · \(Design.Typography.commitDate(commit.time, locale: locale))"))
-                .textSelection(.enabled)
-            let refs = commit.refs + commit.tagRefs + commit.remoteRefs
-            if !refs.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "tag").foregroundStyle(.green)
-                    Text(refs.joined(separator: ", "))
-                }
-                    .textSelection(.enabled)
-            }
-            DisclosureGroup("Commit Details") {
-                VStack(alignment: .leading, spacing: 6) {
-                    infoRow("Commit", commit.id)
-                    infoRow("Committer", "\(commit.committerName) <\(commit.committerEmail)>")
-                    infoRow("Parents", commit.parentIds.isEmpty ? "None" : commit.parentIds.joined(separator: "\n"))
-                    if commit.hasSignature { infoRow("Signature", signatureBadge) }
-                }
-                .textSelection(.enabled)
-                .padding(.top, 4)
+            if !containingBranches.isEmpty {
+                containingBranchLine(containingBranches)
             }
             feedbackRow
         }
         .font(Design.Typography.interface(13))
+    }
+
+    /// Rebased writes `on 03/01/24 at 5:00 PM` under the subject. The graph
+    /// keeps its own shorter date; only this line inserts "on" and "at".
+    private func detailsDatePhrase(_ timestamp: Int64) -> String {
+        let formatted = Design.Typography.commitDate(timestamp, locale: .current)
+        guard let space = formatted.firstIndex(of: " ") else { return "on \(formatted)" }
+        let day = formatted[..<space]
+        let time = formatted[formatted.index(after: space)...]
+        return "on \(day) at \(time)"
+    }
+
+    @ViewBuilder
+    private func containingBranchLine(_ names: [String]) -> some View {
+        let title = names.count == 1 ? "In 1 branch" : "In \(names.count) branches"
+        let full = names.joined(separator: ", ")
+        if showsAllContainingBranches || full.count <= 28 {
+            Text("\(title): \(full)")
+                .textSelection(.enabled)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(title): \(truncatedBranchPreview(names))")
+                    .lineLimit(1)
+                Button("Show all") { showsAllContainingBranches = true }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+    }
+
+    private func truncatedBranchPreview(_ names: [String]) -> String {
+        var used = ""
+        for name in names {
+            let next = used.isEmpty ? name : "\(used), \(name)"
+            if next.count > 24 {
+                let room = max(0, 24 - (used.isEmpty ? 0 : used.count + 2))
+                let clipped = String(name.prefix(room))
+                return used.isEmpty ? "\(clipped)..." : "\(used), \(clipped)..."
+            }
+            used = next
+        }
+        return used
+    }
+
+    private func loadContainingBranches(for commit: CommitInfo) async {
+        showsAllContainingBranches = false
+        containingBranches = []
+        guard let repo else { return }
+        let commitId = commit.id
+        let markHead = commit.isHead
+        let loaded = await Task.detached {
+            let names = (try? repo.commitContainingBranches(commitId: commitId)) ?? []
+            let current = (try? repo.branchList())?.first(where: \.isCurrent)?.name
+            return (names, current)
+        }.value
+        guard commit.id == commitId else { return }
+        var names = loaded.0
+        if let current = loaded.1, let index = names.firstIndex(of: current) {
+            names.remove(at: index)
+            names.insert(current, at: 0)
+        }
+        if markHead || loaded.1.map({ names.contains($0) }) == true {
+            names.removeAll { $0 == "HEAD" }
+            names.insert("HEAD", at: 0)
+        }
+        containingBranches = names
     }
 
     @ViewBuilder

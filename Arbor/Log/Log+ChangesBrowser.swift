@@ -59,7 +59,7 @@ struct LogMultiMetadataView: View {
 
 
 struct LogChangeNode: Identifiable {
-    let name: String
+    var name: String
     let path: String
     var record: LogChangeRecord?
     var children: [LogChangeNode] = []
@@ -430,7 +430,7 @@ struct LogChangesBrowserView: View {
                     let parts = record.change.path.split(separator: "/")
                     group.insert(components: Array(parts), record: record)
                 }
-                return group.sortedByName()
+                return compactDirectoryChains(group.sortedByName())
             }
         }
 
@@ -452,7 +452,7 @@ struct LogChangesBrowserView: View {
                     let parts = record.change.path.split(separator: "/")
                     group.insert(components: Array(parts), record: record)
                 }
-                return group.sortedByName()
+                return compactDirectoryChains(group.sortedByName())
             }
         }
 
@@ -470,7 +470,24 @@ struct LogChangesBrowserView: View {
         }
         return roots
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-            .map { $0.sortedByName() }
+            .map { compactDirectoryChains($0.sortedByName()) }
+    }
+
+    /// Rebased folds a directory that only contains another directory, so
+    /// `src/Core` is one row instead of two nested folders.
+    func compactDirectoryChains(_ node: LogChangeNode) -> LogChangeNode {
+        var node = node
+        node.children = node.children.map(compactDirectoryChains)
+        guard node.record == nil,
+              !node.path.hasPrefix("commit:"),
+              !node.path.hasPrefix("parent:"),
+              node.children.count == 1,
+              let child = node.children.first,
+              child.record == nil,
+              !child.children.isEmpty else { return node }
+        var merged = child
+        merged.name = "\(node.name)/\(child.name)"
+        return merged
     }
 
     var flatChangeTree: [LogChangeNode] {
@@ -485,15 +502,11 @@ struct LogChangesBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // The shared Log tab band lives above this split. Changes actions
+            // stay on this row so they line up with the log filter bar.
+            HStack(spacing: 8) {
             ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                Text("Changes")
-                    .font(.headline)
-                Text(activeFilter == nil && !(showsOnlyAffectedChanges && hasAffectedPathFilter)
-                     ? "\(rows.count) files"
-                     : "\(rows.count)/\(records.count) files")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 if showsOnlyAffectedChanges, !affectedPathSelections.isEmpty {
                     Text("Affected: \(logPathFilterSummary(affectedPathSelections))")
                         .font(.caption2)
@@ -564,29 +577,38 @@ struct LogChangesBrowserView: View {
                     .disabled(isLoading || records.isEmpty)
                     .help("Show the complete changeset of this revision with the followed file highlighted")
                 }
-                Spacer()
                 Button {
                     guard let selectedRecord, selectedRecords.count == 1 else { return }
                     openStandaloneDiff(selectedRecord)
                 } label: {
-                    Image(systemName: "doc.text.magnifyingglass")
+                    showDiffIcon()
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Show Diff")
                 .accessibilityLabel("Show Diff")
                 .disabled(selectedRecords.count != 1)
-                if canApplySelectedChanges {
-                    Button {
-                        onApplySelectedChanges(selectedRecords, true)
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Revert Selected Changes")
-                    .accessibilityLabel("Revert Selected Changes")
+                Button {
+                    onApplySelectedChanges(selectedRecords, true)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
                 }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Revert Selected Changes")
+                .accessibilityLabel("Revert Selected Changes")
+                .disabled(!canApplySelectedChanges)
+                Button {
+                    guard let record = selectedRecord, selectedRecords.count == 1 else { return }
+                    onShowFileHistoryForRevision(record.commit, record.change.path)
+                } label: {
+                    Image(systemName: "clock")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Show History for Revision")
+                .accessibilityLabel("Show History for Revision")
+                .disabled(selectedRecords.count != 1)
                 if canEditSelectedChanges, let commit = commits.first {
                     Text("\(selectedRecords.count) selected")
                         .font(.caption2)
@@ -739,38 +761,44 @@ struct LogChangesBrowserView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    eyeMenuIcon()
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .foregroundStyle(.secondary)
                 .help("View Options")
                 .accessibilityLabel("View Options")
                 .accessibilityIdentifier("changes-browser-view-options")
-                Button {
-                    collapsedChangeNodes = []
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Expand All")
-                .accessibilityLabel("Expand All")
-                .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.isEmpty)
-                Button {
-                    collapsedChangeNodes = Set(collapsibleChangeNodeIDs)
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Collapse All")
-                .accessibilityLabel("Collapse All")
-                .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.count == collapsibleChangeNodeIDs.count)
             }
-            .padding(.horizontal, 12)
+            .padding(.leading, 12)
             }
             .scrollIndicators(.hidden)
-            .frame(height: 34)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Rebased pins Expand All / Collapse All to the trailing edge of
+            // the Changes toolbar, not beside View Options.
+            Button {
+                collapsedChangeNodes = []
+            } label: {
+                Image(systemName: "chevron.up.chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Expand All")
+            .accessibilityLabel("Expand All")
+            .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.isEmpty)
+            Button {
+                collapsedChangeNodes = Set(collapsibleChangeNodeIDs)
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Collapse All")
+            .accessibilityLabel("Collapse All")
+            .disabled(collapsibleChangeNodeIDs.isEmpty || collapsedChangeNodes.count == collapsibleChangeNodeIDs.count)
+            .padding(.trailing, 12)
+            }
+            .frame(height: 40)
             .overlay(alignment: .bottom) { Divider() }
 
             if let loadError {
@@ -790,7 +818,7 @@ struct LogChangesBrowserView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if rows.isEmpty && filteredOutRecords.isEmpty && pendingFilterRecords.isEmpty {
                 Text(commits.isEmpty
-                     ? "Select a commit to view Changes"
+                     ? "Select commit to view changes"
                      : (showsOnlyAffectedChanges && hasAffectedPathFilter
                         ? "No changes affect the selected path"
                         : (activeFilter == nil ? "No changed files" : "No files remain after filtering")))
@@ -863,6 +891,8 @@ struct LogChangesBrowserView: View {
         return List {
             ForEach(groupByDirectory ? changeTree : flatChangeTree) { node in
                 changeNode(node, depth: 0, selection: selection)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
             }
             if !pendingFilterRecords.isEmpty {
                 DisclosureGroup {
@@ -930,10 +960,16 @@ struct LogChangesBrowserView: View {
                 ? "Selected Changes"
                 : "Change"
             let row = HStack(spacing: 7) {
-                Image(systemName: repositoryFileSymbol(for: record.change.path))
-                    .font(Design.Typography.interface(13))
-                    .foregroundStyle(repositoryFileIconColor(for: record.change.path))
-                    .frame(width: 16)
+                Group {
+                    if isMarkdownFile(record.change.path) {
+                        markdownFileIcon()
+                    } else {
+                        Image(systemName: repositoryFileSymbol(for: record.change.path))
+                            .foregroundStyle(repositoryFileIconColor(for: record.change.path))
+                    }
+                }
+                .font(Design.Typography.interface(13))
+                .frame(width: 16)
                 Text(node.name)
                     .font(Design.Typography.interface(13))
                     .foregroundStyle(record.change.kind == .added ? Color.green : .primary)
@@ -1039,11 +1075,6 @@ struct LogChangesBrowserView: View {
         } else {
             let groupRecords = node.leafRecords
             let groupIDs = Set(groupRecords.map(\.id))
-            let groupFullySelected = !groupIDs.isEmpty
-                && groupIDs.isSubset(of: selectedRecordIDs)
-            let groupPartiallySelected = !groupIDs.isEmpty
-                && !groupFullySelected
-                && !groupIDs.isDisjoint(with: selectedRecordIDs)
             let group = DisclosureGroup(isExpanded: Binding(
                 get: { !collapsedChangeNodes.contains(node.id) },
                 set: { expanded in
@@ -1062,21 +1093,22 @@ struct LogChangesBrowserView: View {
                         isFilteredOut: isFilteredOut,
                         isPending: isPending
                     )
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
                 }
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: groupFullySelected
-                          ? "checkmark.square.fill"
-                          : groupPartiallySelected
-                            ? "minus.square"
-                            : "square")
-                        .foregroundStyle(groupFullySelected || groupPartiallySelected
-                                         ? Design.Colors.accent
-                                         : .secondary)
-                    Label(node.name, systemImage: node.record == nil ? "folder" : "doc.text")
+                let fileCount = node.leafRecords.count
+                HStack(spacing: 6) {
+                    Image(systemName: node.record == nil ? "folder" : "doc.text")
+                        .foregroundStyle(.secondary)
+                    Text(node.name)
+                        .foregroundStyle(.primary)
+                    if node.record == nil {
+                        Text(fileCount == 1 ? "1 file" : "\(fileCount) files")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(Design.Typography.interface(13))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         guard !isFilteredOut, !isPending else { return }

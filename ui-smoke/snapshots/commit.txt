@@ -2,177 +2,168 @@
 window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
     group	—	0,0 1642×1015 [Disabled]
       menubutton	<fixture>	<varies>
-      button	Update	324,16 10×10
-      button	Push	358,16 10×10
-      button	main	392,14 68×16
-      button	Search	1561,14 14×15
-      menubutton	Settings	1594,12 37×18
-      button	Commit	3,47 34×34
-      button	Move	12,108 17×14
-      menubutton	More	2,139 35×16
-      button	Terminal	12,907 18×14
-      button	Git	13,949 14×14
-      splitgroup	—	40,43 1562×942 [Disabled]
-        group	—	40,43 582×942 [Disabled]
-          button	Commit	56,49 64×28
-          button	Stash	136,55 34×16
-          menubutton	Options	542,55 35×16
-          button	Hide Commit Tool Window	590,62 11×2
-          splitgroup	—	40,84 582×425 [Disabled]
-            group	—	40,84 582×284 [Disabled]
-              button	Show changes preview	58,100 18×11
-              button	Refresh	96,98 12×14
-              button	Stage tracked changes	131,100 12×10
-              button	Stash changes silently	164,98 16×15
-              menubutton	View Options	195,96 36×17
-              button	Expand All	554,102 12×6
-              button	Collapse All	590,102 12×6
-              scrollview	—	40,126 582×242 [Disabled]
-                other	—	52,126 558×100
+      button	Update	325,16 10×10
+      button	Push	359,16 10×10
+      button	main	391,14 65×16
+      button	Search	1574,14 14×15
+      menubutton	Settings	1607,12 24×18
+      button	Commit	6,47 28×28
+      button	Project	6,92 28×28
+      menubutton	More tool windows	9,127 22×16
+      button	Terminal	12,917 18×14
+      button	Git	13,953 14×14
+      splitgroup	—	40,43 1562×943 [Disabled]
+        group	—	40,43 522×943 [Disabled]
+          button	Commit	56,49 66×28
+          button	Stash	138,55 34×16
+          menubutton	Options	495,55 22×16
+          button	Hide	530,62 11×2
+          splitgroup	—	40,84 522×429 [Disabled]
+            group	—	40,84 522×312 [Disabled]
+              button	Refresh	59,98 16×14
+              button	Rollback…	91,99 12×12 [Disabled]
+              button	Show Diff	119,97 16×16 [Disabled]
+              button	Shelve Silently	150,98 16×15
+              menubutton	View Options	175,96 26×18
+              button	Select Opened File in Changes View	220,97 16×16 [Disabled]
+              button	Expand All	254,98 9×13
+              button	Collapse All	283,100 10×10
+              scrollview	—	40,126 522×270 [Disabled]
+                other	—	52,126 498×100
                   button	Changes	58,138 8×5
-                  checkbox	Stage group: Changes	74,132 16×16
+                  checkbox	Include group: Changes	74,132 16×16
                   statictext	—	96,132 56×16
                   statictext	—	158,132 34×15
-                  checkbox	Stage src/App.swift	60,156 16×16
+                  checkbox	Include src/App.swift	60,156 16×16
                   image	swift	83,158 14×13
                   statictext	—	104,156 57×16
                   statictext	—	167,158 15×13
-                  checkbox	Stage src/Core/Engine.swift	60,180 16×16
+                  checkbox	Include src/Core/Engine.swift	60,180 16×16
                   image	swift	83,182 14×13
                   statictext	—	104,180 74×16
                   statictext	—	184,182 41×13
                   button	Unversioned Files	60,210 5×8
-                  checkbox	Stage group: Unversioned Files	74,206 16×16
+                  checkbox	Include group: Unversioned Files	74,206 16×16
                   statictext	—	96,206 108×16
                   statictext	—	210,206 26×15
-            splitter	—	40,368 582×1 [Disabled]
-            group	—	40,369 582×140 [Disabled]
-              checkbox	Amend	56,388 65×16
-              statictext	—	129,389 60×13
-              menubutton	Commit Message History	196,387 36×17
-              statictext	—	554,389 52×13
-              statictext	—	63,422 108×16
-              scrollview	—	58,418 546×30 [Disabled]
-                textview	—	58,418 546×30 [Disabled]
-                scrollbar	—	586,416 19×32 [Disabled]
-              button	Commit	52,464 72×28 [Disabled]
-              button	Commit and Push…	132,464 142×28 [Disabled]
-              menubutton	Show Commit Options	574,468 37×18
-          other	Resize Commit and Project panels	40,509 582×7
-          group	Collapse panel	40,516 582×32
-            button	Project	52,524 378×15
-            button	New File or Directory…	439,526 11×11
-            button	Select Opened File	460,524 16×16 [Disabled]
-            button	Expand Selected	488,529 12×6 [Disabled]
-            button	Collapse All	510,529 12×6
-            button	Select Opened File in Changes View	532,526 13×14 [Disabled]
-            menubutton	Options	554,524 35×16
-            button	Hide Project Tool Window	598,532 11×2
-          scrollview	—	40,548 582×437 [Disabled]
-            outline	—	39,547 584×439
-              outlinerow	—	40,548 582×24 [Disabled]
-                cell	—	40,548 582×24 [Keyboard Focused]
-                  statictext	<fixture>, ~/Library/Containers/com.arbor.smoke.ArborUISmokeUITests.xctrunner/Data<path>	<varies>
-                  disclosuretriangle	—	41,547 14×26
-              outlinerow	—	40,572 582×24 [Disabled]
-                cell	—	40,572 582×24 [Keyboard Focused]
-                  statictext	build	80,576 53×16
-                  disclosuretriangle	—	54,571 14×26
-              outlinerow	—	40,596 582×24 [Disabled]
-                cell	—	40,596 582×24 [Keyboard Focused]
-                  statictext	docs	80,600 52×16
-                  disclosuretriangle	—	54,595 14×26
-              outlinerow	—	40,620 582×24 [Disabled]
-                cell	—	40,620 582×24 [Keyboard Focused]
-                  statictext	src	80,624 42×16
-                  disclosuretriangle	—	54,619 14×26
-              outlinerow	—	40,644 582×24 [Disabled]
-                cell	—	40,644 582×24 [Keyboard Focused]
-                  button	.gitignore	79,648 534×16
-              outlinerow	—	40,668 582×24 [Disabled]
-                cell	—	40,668 582×24 [Keyboard Focused]
-                  button	debug.log	79,672 534×16
-              outlinerow	—	40,692 582×24 [Disabled]
-                cell	—	40,692 582×24 [Keyboard Focused]
-                  button	README.md	79,696 534×16
-              tablecolumn	—	40,548 582×437 [Disabled]
-        splitter	—	622,43 6×942 [Disabled]
-        group	—	628,43 974×942 [Disabled]
-          splitgroup	—	628,43 974×942 [Disabled]
-            group	—	628,43 688×942 [Disabled]
-              button	Log	636,47 62×28
-              menubutton	More	706,53 35×16
-              group	—	638,83 667×28
-                scrollview	—	638,83 606×28 [Disabled]
-                  textfield	Filter commits	647,88 161×18
-                  button	Regex	823,85 26×24
-                  button	Match Case	855,85 26×24
-                  menubutton	Branch	913,88 64×18
-                  button	User	1009,89 42×16
-                  button	Date	1058,89 42×16
-                  menubutton	Paths	1148,88 55×18
-                checkbox	Follow current branch	1250,91 36×16
-                button	Refresh log	1293,92 12×14
-              button	Branches	614,119 50×866
-              scrollview	—	651,119 665×866 [Disabled]
-                scrollview	—	651,119 665×866 [Disabled]
-                  other	—	651,119 665×156
-                    statictext	—	707,124 115×16
-                    image	Tag	927,126 12×12
-                    statictext	—	944,124 64×15
-                    statictext	—	1014,124 99×16
-                    statictext	—	1194,124 112×16
+            splitter	—	40,396 522×1 [Disabled]
+            group	—	40,397 522×116 [Disabled]
+              checkbox	Amend	56,404 65×16
+              button	last commit	129,405 68×13
+              button	Commit Message History	208,406 12×12
+              statictext	—	63,438 108×16
+              scrollview	—	58,434 486×30 [Disabled]
+                textview	—	58,434 486×30 [Disabled]
+                scrollbar	—	526,432 19×32 [Disabled]
+              button	Commit	52,480 72×28 [Disabled]
+              button	Commit and Push…	132,480 142×28 [Disabled]
+              button	Show Commit Options	531,486 14×14
+          other	Resize Commit and Project panels	40,513 522×7
+          group	Project	40,520 522×32
+            statictext	—	40,520 522×32
+          scrollview	—	40,552 522×434 [Disabled]
+            outline	—	39,551 524×436
+              outlinerow	—	40,552 522×29 [Disabled]
+                cell	—	40,552 522×29 [Keyboard Focused]
+                  button	<fixture>, ~/Library/Containers/com.arbor.smoke.ArborUISmokeUITests.xctrunner/Data<path>	<varies>
+              outlinerow	—	40,581 522×24 [Disabled]
+                cell	—	40,581 522×24 [Keyboard Focused]
+                  statictext	build	67,585 53×16
+                  disclosuretriangle	—	41,580 14×26
+              outlinerow	—	40,605 522×24 [Disabled]
+                cell	—	40,605 522×24 [Keyboard Focused]
+                  statictext	docs	67,609 52×16
+                  disclosuretriangle	—	41,604 14×26
+              outlinerow	—	40,629 522×24 [Disabled]
+                cell	—	40,629 522×24 [Keyboard Focused]
+                  statictext	src	67,633 42×16
+                  disclosuretriangle	—	41,628 14×26
+              outlinerow	—	40,653 522×24 [Disabled]
+                cell	—	40,653 522×24 [Keyboard Focused]
+                  button	.gitignore	66,657 487×16
+              outlinerow	—	40,677 522×24 [Disabled]
+                cell	—	40,677 522×24 [Keyboard Focused]
+                  button	debug.log	66,681 487×16
+              outlinerow	—	40,701 522×24 [Disabled]
+                cell	—	40,701 522×24 [Keyboard Focused]
+                  button	README.md	66,705 487×16
+              tablecolumn	—	40,552 522×434 [Disabled]
+        splitter	—	562,43 6×943 [Disabled]
+        group	—	568,43 1034×943 [Disabled]
+          button	Log	576,47 56×28
+          menubutton	—	1573,53 22×16
+          splitgroup	—	568,79 1034×907 [Disabled]
+            group	—	568,79 733×907 [Disabled]
+              group	—	587,85 702×28
+                button	Show Branches	587,94 6×10
+                textfield	Filter commits	627,90 186×18
+                image	Filter commits	612,94 11×11
+                button	Regex	824,87 26×24
+                button	Match Case	852,87 26×24
+                menubutton	Branch	884,90 64×18
+                button	User	962,91 42×16
+                button	Date	1009,91 42×16
+                menubutton	Paths	1056,90 55×18
+                menubutton	Graph Options	1132,90 26×18
+                button	Open New Git Log Tab	1174,91 16×16
+                button	Refresh log	1213,92 16×14
+                button	Cherry-Pick	1231,91 16×16 [Disabled]
+                menubutton	View Options	1248,90 26×18
+                button	Go To Hash/Branch/Tag	1276,92 13×14
+              button	Branches	568,119 22×867
+              scrollview	—	591,119 710×867 [Disabled]
+                scrollview	—	591,119 710×867 [Disabled]
+                  other	—	591,119 710×156
+                    statictext	—	647,124 115×16
+                    image	Tag	932,126 12×12
+                    statictext	—	948,124 64×15
+                    statictext	—	1019,124 99×16
+                    statictext	—	1137,124 112×16
                     button	Select commit <hash>	<varies>
-                    statictext	—	707,150 111×16
-                    image	Tag	917,152 12×12
-                    statictext	—	934,150 74×15
-                    statictext	—	1014,150 99×16
-                    statictext	—	1194,150 112×16
+                    statictext	—	647,150 111×16
+                    image	Tag	922,152 12×12
+                    statictext	—	938,150 74×15
+                    statictext	—	1019,150 99×16
+                    statictext	—	1137,150 112×16
                     button	Select commit <hash>	<varies>
-                    statictext	—	707,176 148×16
-                    image	Triangle Arrow Right	911,180 9×9
-                    statictext	—	924,176 33×15
-                    image	Tag	964,178 12×12
-                    statictext	—	980,176 28×15
-                    statictext	—	1014,176 99×16
-                    statictext	—	1194,176 112×16
+                    statictext	—	647,176 148×16
+                    image	Tag	962,178 12×12
+                    image	Tag	969,178 12×12
+                    statictext	—	986,176 28×15
+                    statictext	—	1019,176 99×16
+                    statictext	—	1137,176 112×16
                     button	Select commit <hash>	<varies>
-                    statictext	—	707,202 132×16
-                    statictext	—	1014,202 99×16
-                    statictext	—	1194,202 112×16
+                    statictext	—	647,202 132×16
+                    statictext	—	1019,202 99×16
+                    statictext	—	1137,202 112×16
                     button	Select commit <hash>	<varies>
-                    statictext	—	707,228 102×16
-                    statictext	—	1014,228 99×16
-                    statictext	—	1194,228 112×16
+                    statictext	—	647,228 102×16
+                    image	Tag	1000,230 12×12
+                    statictext	—	1019,228 99×16
+                    statictext	—	1137,228 112×16
                     button	Select commit <hash>	<varies>
-                    statictext	—	707,254 84×16
-                    statictext	—	1014,254 99×16
-                    statictext	—	1196,254 110×16
+                    statictext	—	647,254 84×16
+                    statictext	—	1019,254 99×16
+                    statictext	—	1137,254 110×16
                     button	Select commit <hash>	<varies>
-            splitter	—	1316,43 6×942 [Disabled]
-            group	—	1322,43 280×942 [Disabled]
-              splitgroup	—	1322,43 280×942 [Disabled]
-                group	—	1322,43 280×660 [Disabled]
-                  scrollview	—	1322,51 280×18 [Disabled]
-                    statictext	—	1334,52 57×16
-                    statictext	—	1399,54 30×13
-                    button	Show Diff	1454,52 14×16 [Disabled]
-                    menubutton	View Options	1474,52 35×16
-                    button	Expand All	1518,57 12×6 [Disabled]
-                    button	Collapse All	1540,57 12×6 [Disabled]
-                  statictext	—	1358,382 208×16
-                splitter	—	1322,702 280×1 [Disabled]
-                group	—	1322,704 280×282 [Disabled]
-                  statictext	—	1414,836 96×16
+            splitter	—	1301,79 6×907 [Disabled]
+            group	—	1307,79 295×907 [Disabled]
+              splitgroup	—	1307,79 295×907 [Disabled]
+                group	—	1307,79 295×635 [Disabled]
+                  scrollview	—	1307,91 241×16 [Disabled]
+                    button	Show Diff	1319,91 16×16 [Disabled]
+                    button	Revert Selected Changes	1344,93 12×12 [Disabled]
+                    button	Show History for Revision	1368,92 14×14 [Disabled]
+                    menubutton	View Options	1389,90 26×18
+                  button	Expand All	1558,92 9×13 [Disabled]
+                  button	Collapse All	1578,94 11×11 [Disabled]
+                  statictext	—	1357,408 195×16
+                splitter	—	1307,714 295×1 [Disabled]
+                group	—	1307,715 295×271 [Disabled]
+                  statictext	—	1408,842 94×16
       button	Notifications	1614,56 16×18
-      button	main	15,996 42×13
-      statictext	—	86,996 33×13
-      button	Operation Log	134,996 90×13
-      statictext	—	238,996 51×13
-      image	Selected	319,997 10×10
-      statictext	—	336,996 74×13
-      statictext	—	884,996 686×13
-      statictext	—	1584,996 44×13
+      button	Operation Log	15,996 90×13
+      statictext	—	942,996 686×13
     button	—	12,14 16×16
     button	—	52,14 16×16
       group	—	53,14 14×14 [Disabled]

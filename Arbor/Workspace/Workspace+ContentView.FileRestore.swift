@@ -96,6 +96,44 @@ func presentLogSelectedChangesRestoreConflict(rootPath: String) {
     }
 }
 
+/// Commit toolbar Rollback: one confirmation, then restore every selected
+/// path in both the index and the working tree.
+func rollbackLocalChanges(_ paths: [String]) {
+    guard let repo, !paths.isEmpty else { return }
+    let alert = NSAlert()
+    alert.messageText = String(localized: "Rollback changes?")
+    alert.informativeText = paths.count == 1
+        ? String(localized: "This restores \(paths[0]) in both the index and working tree.")
+        : String(localized: "This restores \(paths.count) files in both the index and working tree.")
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "Rollback")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    beginFeedbackOperation("Rollback changes")
+    let targets = paths
+    Task.detached(priority: .userInitiated) {
+        do {
+            for path in targets {
+                try repo.restoreFile(path: path, revision: nil)
+            }
+            await MainActor.run {
+                self.fileWorkspace.selection = nil
+                self.fileWorkspace.previewPath = nil
+                self.feedbackCenter.success("Changes rolled back")
+                self.refreshAll(showFeedback: false)
+            }
+        } catch {
+            await MainActor.run {
+                self.feedbackCenter.error(
+                    "Rollback failed",
+                    detail: errorMessage(error),
+                    nextStep: "Check the selected files and retry."
+                )
+            }
+        }
+    }
+}
+
 /// Restore is a tree action in GitStagePanel, not a global toolbar action.
 /// Keep the selected-file wrapper for keyboard/legacy callers, but let the
 /// tree context menu pass its path directly so a context-menu click cannot

@@ -57,8 +57,11 @@ extension ContentView {
             branchWorkspace.showPopover = true
         } label: {
             HStack(spacing: 7) {
-                Label(currentBranchName, systemImage: "arrow.triangle.branch")
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    branchMarkIcon()
+                    Text(currentBranchName)
+                        .lineLimit(1)
+                }
                 if incomingOutgoingInfoEnabled,
                    let sync = currentSyncStatus, sync.trackingExists,
                    sync.ahead > 0 || sync.behind > 0 {
@@ -661,6 +664,45 @@ struct BranchPopupSizeKey: PreferenceKey {
         let next = nextValue()
         if next != .zero { value = next }
     }
+}
+
+func verticalEllipsisIcon() -> Image {
+    let size = NSSize(width: 14, height: 14)
+    let image = NSImage(size: size, flipped: false) { _ in
+        NSColor.secondaryLabelColor.setFill()
+        for y in [2.5, 6.0, 9.5] as [CGFloat] {
+            NSBezierPath(ovalIn: NSRect(x: 5.5, y: y, width: 3, height: 3)).fill()
+        }
+        return true
+    }
+    return Image(nsImage: image)
+}
+
+func branchMarkIcon() -> Image {
+    let size = NSSize(width: 14, height: 14)
+    let image = NSImage(size: size, flipped: false) { _ in
+        NSColor.black.setStroke()
+        let stem = NSBezierPath()
+        stem.lineWidth = 1.25
+        stem.lineCapStyle = .round
+        stem.lineJoinStyle = .round
+        stem.move(to: NSPoint(x: 4, y: 1.5))
+        stem.line(to: NSPoint(x: 4, y: 8))
+        stem.move(to: NSPoint(x: 4, y: 5.5))
+        stem.curve(to: NSPoint(x: 9.5, y: 8),
+                   controlPoint1: NSPoint(x: 4, y: 7.2),
+                   controlPoint2: NSPoint(x: 7, y: 8))
+        stem.stroke()
+        let top = NSBezierPath(ovalIn: NSRect(x: 1.6, y: 8, width: 4.8, height: 4.8))
+        top.lineWidth = 1.25
+        top.stroke()
+        let side = NSBezierPath(ovalIn: NSRect(x: 7.4, y: 5.6, width: 4.4, height: 4.4))
+        side.lineWidth = 1.25
+        side.stroke()
+        return true
+    }
+    image.isTemplate = true
+    return Image(nsImage: image)
 }
 
 struct BranchPopupAnchorKey: PreferenceKey {

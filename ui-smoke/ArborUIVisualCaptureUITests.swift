@@ -58,9 +58,9 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         let layoutArguments = [
             "-arbor.toolWindowExpanded", "YES",
             "-arbor.projectPanelExpanded.v3", "YES",
-            "-arbor.workspaceSidebarWidth.v12", "582",
-            "-arbor.toolWindowHeight.v3", "466",
-            "-arbor.logGraphWidth.v8", "688",
+            "-arbor.workspaceSidebarWidth.v12", "522",
+            "-arbor.toolWindowHeight.v3", "470",
+            "-arbor.logGraphWidth.v8", "733",
             "-arbor.log.showDetails.v1", "YES",
             "-arbor.log.branches.visible.v1", "NO",
         ]
@@ -116,8 +116,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         )
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.extraLaunchArguments = [
-            "-arbor.workspaceSidebarWidth.v12", "582",
-            "-arbor.logGraphWidth.v8", "688",
+            "-arbor.workspaceSidebarWidth.v12", "522",
+            "-arbor.logGraphWidth.v8", "733",
             "-arbor.log.branches.visible.v1", "NO",
             "-arbor.log.alignLabels.v1", "NO",
         ]
@@ -168,8 +168,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
 
         let session = ArborUISession(fixture: fixture, toolWindow: "log", screenshotSink: { self.add($0) })
         session.extraLaunchArguments = [
-            "-arbor.workspaceSidebarWidth.v12", "582",
-            "-arbor.logGraphWidth.v8", "688",
+            "-arbor.workspaceSidebarWidth.v12", "522",
+            "-arbor.logGraphWidth.v8", "733",
         ]
         session.launch()
         defer { session.terminate() }
@@ -193,7 +193,6 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(achievedWidth, min(width, 900), "the window stayed at \(achievedWidth)pt for a \(width)pt request")
             XCTAssertGreaterThanOrEqual(bar.frame.width, 399, "the Log column collapsed at \(achievedWidth)pt")
             for control in [
-                session.window.checkBoxes["Follow current branch"],
                 session.window.buttons["Refresh log"],
             ] {
                 XCTAssertTrue(control.isHittable, "\(control.label) is not usable at \(width)pt")
@@ -385,6 +384,7 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
             XCTAssertFalse(bar.exists, "the covered graph must not remain in the accessibility tree")
             XCTAssertTrue(session.window.staticTexts["Initial commit"].firstMatch.isHittable)
             let actions = session.window.descendants(matching: .any)["Commit Actions"].firstMatch
+            actions.hover()
             XCTAssertTrue(actions.isHittable)
             actions.click()
             for label in ["Revert Commit", "Cherry-pick", "Create Branch from Commit"] {
@@ -392,10 +392,11 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
                 XCTAssertTrue(action.isHittable, "\(label) is clipped at \(size)")
             }
             session.dismissTransientSurface()
-            XCTAssertTrue(session.window.staticTexts["Changes"].firstMatch.isHittable)
+            XCTAssertTrue(session.window.descendants(matching: .any)["log-changes-tree"].firstMatch.isHittable)
             capture(window: session.window, named: "log-details-\(Int(size.width))")
 
             // The compact inspector shares the normal dialog presenter.
+            actions.hover()
             actions.click()
             session.app.menuItems["Create Branch from Commit"].firstMatch.click()
             let sheet = session.window.sheets.firstMatch
@@ -424,9 +425,9 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
                        savedBarOffset, accuracy: 2)
         XCTAssertEqual(session.window.staticTexts.matching(identifier: "Initial commit").count, 2)
 
-        // Commit mode retains the same readable Log alongside staging.
-        let commitButton = try XCTUnwrap(session.railButton("slider.horizontal.3"))
-        commitButton.click()
+        let commitRail = session.window.buttons["slider.horizontal.3"].firstMatch
+        XCTAssertTrue(commitRail.waitForExistence(timeout: 5))
+        commitRail.click()
         resize(session.window, to: CGSize(width: 980, height: 1015), label: "commit-log-columns")
         XCTAssertGreaterThanOrEqual(bar.frame.width, 519)
         XCTAssertTrue(openInspector.isHittable)

@@ -149,5 +149,5 @@ window	Arbor Settings	0,0 492×450 [Disabled]
     statictext	—	82,8 99×16
   window	Arbor Settings	0,0 492×450 [Disabled]
       window	Arbor Settings	0,0 492×450 [Disabled]
-      window	Arbor	-539,-204 1642×1015 [Disabled]
+      window	Arbor	-539,-202 1642×1015 [Disabled]
         window	Arbor Settings	0,0 492×450 [Disabled]

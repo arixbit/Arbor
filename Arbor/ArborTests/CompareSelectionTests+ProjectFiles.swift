@@ -564,6 +564,16 @@ extension CompareSelectionTests {
             projectTreeDirectoryShouldExpand(directoryPath: "Docs", isRoot: false, command: expand)
         )
 
+        let expandAll = ProjectTreeExpansionCommand(token: 4, kind: .expandAll)
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "Docs", isRoot: false, command: expandAll),
+            true
+        )
+        XCTAssertEqual(
+            projectTreeDirectoryShouldExpand(directoryPath: "", isRoot: true, command: expandAll),
+            true
+        )
+
         let collapse = ProjectTreeExpansionCommand(token: 3, kind: .collapseAll)
         XCTAssertEqual(
             projectTreeDirectoryShouldExpand(directoryPath: "Sources", isRoot: false, command: collapse),

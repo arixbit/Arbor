@@ -350,12 +350,14 @@ struct BranchCommitComparisonView: View {
 struct LogFileDiffView: View {
     let record: LogChangeRecord
     let source: LogDiffSource
+    var stashLabel: String? = nil
     let repositoryForCommit: (CommitInfo) -> Repository?
     var siblings: [LogChangeRecord] = []
     var onSelectFile: ((LogChangeRecord) -> Void)?
     var onClose: (() -> Void)?
     var onSelectPrevious: (() -> Void)?
     var onSelectNext: (() -> Void)?
+    var onJumpToSource: (() -> Void)?
 
     @State var fileDiff: FileDiff?
     @State var fullFile: FullFileDiff?
@@ -369,6 +371,7 @@ struct LogFileDiffView: View {
     @State var selectedLines: Set<SelectedDiffLine> = []
     @State var showsPatch = false
     @State var showsLineNumbers = true
+    @State var usesSoftWraps = false
     @State var showsProperties = false
     @State var showsDimensions = false
     @State var showsBlame = false
@@ -415,9 +418,15 @@ struct LogFileDiffView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-            Divider()
-            revisionHeader
+            if let stashLabel {
+                compactStashToolbar
+                Divider()
+                compactStashVersionHeader(stashLabel)
+            } else {
+                toolbar
+                Divider()
+                revisionHeader
+            }
             Divider()
             content
         }
@@ -477,6 +486,126 @@ struct LogFileDiffView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Design.Colors.chrome)
+    }
+
+    /// Rebased keeps a stash file's diff controls on one row. The options
+    /// from the regular Log diff toolbar remain available in the gear menu.
+    var compactStashToolbar: some View {
+        HStack(spacing: 7) {
+            previousDifferenceButton
+            nextDifferenceButton
+            Button(action: onJumpToSource ?? {}) {
+                Image(systemName: "pencil")
+                    .frame(width: 22, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(onJumpToSource == nil)
+            .help("Jump to Source")
+            .keyboardShortcut(.downArrow, modifiers: .command)
+            .accessibilityIdentifier("stash-diff-jump-to-source")
+            toolbarSeparator
+            previousFileButton
+            fileMenu
+            nextFileButton
+            Spacer(minLength: 0)
+            differenceCountLabel
+                .font(Design.Typography.interface(11))
+                .padding(.trailing, 8)
+            Button { presentationMode = .sideBySide } label: {
+                Image(systemName: "rectangle.split.2x1")
+                    .frame(width: 28, height: 26)
+                    .background(
+                        presentationMode == .sideBySide ? Design.Colors.selection : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Side-by-side")
+            .accessibilityIdentifier("stash-diff-side-by-side")
+            Button {
+                presentationMode = .unified
+                selectionMode = false
+            } label: {
+                Image(systemName: "rectangle")
+                    .frame(width: 28, height: 26)
+                    .background(
+                        presentationMode == .unified ? Design.Colors.selection : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 4)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Unified")
+            .accessibilityIdentifier("stash-diff-unified")
+            Menu {
+                Toggle("Ignore Whitespace", isOn: $ignoreWhitespace)
+                Toggle("Word Differences", isOn: $wordDiff)
+                Toggle("CRLF Sensitive", isOn: $crlfSensitive)
+                Toggle("Selection Mode", isOn: Binding(
+                    get: { selectionMode },
+                    set: { enabled in
+                        selectionMode = enabled
+                        if enabled { presentationMode = .sideBySide }
+                    }
+                ))
+                Toggle("Patch", isOn: $showsPatch)
+                Toggle("Use Soft Wraps", isOn: $usesSoftWraps)
+                Divider()
+                Button("External Diff", action: openExternalDiff)
+                    .disabled(fullFile == nil)
+                Button("Compare with Clipboard", action: compareWithClipboard)
+                    .disabled(fullFile?.newLines == nil)
+                Button("File Properties") { showsProperties = true }
+                Button("Blame") { showsBlame = true }
+                Button("Dimensions") { showsDimensions = true }
+                Divider()
+                Button("Three-version Compare") { }.disabled(true)
+                Button("Workspace") { }.disabled(true)
+                Button("Staged") { }.disabled(true)
+            } label: {
+                Image(systemName: "gearshape")
+                    .frame(width: 28, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Diff Settings")
+            .accessibilityLabel("Diff Settings")
+            .accessibilityIdentifier("stash-diff-settings")
+            .popover(isPresented: $showsProperties, arrowEdge: .bottom) {
+                LogDiffPropertiesView(
+                    record: record,
+                    source: source,
+                    fullFile: fullFile,
+                    differenceCount: differenceCount,
+                    isBinary: fileDiff?.binary ?? false
+                )
+            }
+            .popover(isPresented: $showsDimensions, arrowEdge: .bottom) {
+                Toggle("Line Numbers", isOn: $showsLineNumbers)
+                    .toggleStyle(.checkbox)
+                    .padding(12)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 48)
+        .background(Design.Colors.chrome)
+    }
+
+    func compactStashVersionHeader(_ stashLabel: String) -> some View {
+        HStack(spacing: 6) {
+            Text("Current version")
+                .foregroundStyle(.secondary)
+            Text(record.change.path)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Image(systemName: "lock")
+                .foregroundStyle(.secondary)
+            Text(stashLabel)
+        }
+        .font(Design.Typography.interface(11))
+        .padding(.horizontal, 10)
+        .frame(height: 25)
     }
 
     var pathLabel: some View {
@@ -547,7 +676,7 @@ struct LogFileDiffView: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text("1 file")
+                Text(siblings.count == 1 ? "1 file" : "\(siblings.count) files")
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .semibold))
             }
@@ -894,7 +1023,8 @@ struct LogFileDiffView: View {
                     fileDiff: fileDiff,
                     fullFile: fullFile,
                     activeDifference: activeDifference,
-                    showsLineNumbers: showsLineNumbers
+                    showsLineNumbers: showsLineNumbers,
+                    wrapsLines: stashLabel == nil || usesSoftWraps
                 )
             } else {
                 SideBySideDiffView(
@@ -904,7 +1034,8 @@ struct LogFileDiffView: View {
                     selectedLines: selectedLines,
                     onToggleLine: toggleSelectedLine,
                     activeDifference: activeDifference,
-                    showsLineNumbers: showsLineNumbers
+                    showsLineNumbers: showsLineNumbers,
+                    wrapsLines: stashLabel == nil || usesSoftWraps
                 )
             }
         } else {

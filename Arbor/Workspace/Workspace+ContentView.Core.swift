@@ -22,12 +22,9 @@ func handleContentViewAppear() {
         repositoryPath: projectWorkspace.path,
         code: projectWorkspace.path == nil ? "launch-no-project" : "launch-with-project"
     )
-    // Rebased keeps the Log workspace paired directly with Commit/Stash. The
-    // Project surface is opened from the activity rail, so it must not steal
-    // vertical space from the left Git workspace on launch.
-    if projectWorkspace.toolWindowMode == .log {
-        projectPanelExpanded = false
-    }
+    // Rebased keeps Commit/Stash and the Project tree on screen together
+    // while the Log occupies the centre. Do not collapse Project just because
+    // the window opened in Log mode.
     commitWorkspace.beforeCommitCommands = loadBeforeCommitCommands()
     loadMergeDialogSettings(for: projectWorkspace.path)
     loadRebaseDialogSettings(for: projectWorkspace.path)

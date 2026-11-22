@@ -106,9 +106,9 @@ final class ArborUIParityUITests: XCTestCase {
         let layout = [
             "-arbor.toolWindowExpanded", "YES",
             "-arbor.projectPanelExpanded.v3", "YES",
-            "-arbor.workspaceSidebarWidth.v12", "582",
-            "-arbor.toolWindowHeight.v3", "466",
-            "-arbor.logGraphWidth.v8", "688",
+            "-arbor.workspaceSidebarWidth.v12", "522",
+            "-arbor.toolWindowHeight.v3", "470",
+            "-arbor.logGraphWidth.v8", "733",
             "-arbor.log.showDetails.v1", "YES",
             "-arbor.log.branches.visible.v1", "NO",
         ]
@@ -144,7 +144,11 @@ final class ArborUIParityUITests: XCTestCase {
                 opened = session.openBranchesPopover()
                 if !opened { Thread.sleep(forTimeInterval: 1.5) }
             }
-            XCTAssertTrue(opened, "the branch chip did not open the branches popover")
+            guard opened else {
+                XCTFail("the branch chip did not open the branches popover")
+                session.terminate()
+                return
+            }
             let panel = session.app.descendants(matching: .any)["branches-popover-panel"].firstMatch
             XCTAssertTrue(panel.waitForExistence(timeout: 10),
                           "the branches popover has no container identity")

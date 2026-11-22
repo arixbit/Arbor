@@ -17,9 +17,11 @@ extension ContentView {
                 untrackedEntries: untrackedEntries,
                 ignoredRules: repositoryStatus.ignoredRules,
                 stashes: stashUI.stashes,
+                selectedStashID: $stashUI.selectedListStashID,
                 shelves: activeShelfList,
                 deletedShelves: activeDeletedShelfList,
                 shelfChangeLists: activeShelfChangeLists,
+                tab: $commitWorkspace.selectedToolTab,
                 showShelfRequestID: shelfWorkspace.tabRequestID,
                 onWorkspaceTabChange: { shelfWorkspace.isWorkspaceTabActive = $0 },
                 onHideToolWindow: {
@@ -40,6 +42,10 @@ extension ContentView {
                 isLoading: repositoryStatus.isLoading,
                 isShowingCachedStatusSnapshot: repositoryStatus.isShowingCachedStatusSnapshot,
                 hasStaged: hasStaged,
+                includedCommitPaths: commitWorkspace.includedPaths(for: repo?.workdir()),
+                onToggleCommitPath: { path, included in
+                    commitWorkspace.setIncluded(included, path: path, in: repo?.workdir())
+                },
                 commitFeedback: commitWorkspace.feedback,
                 operationState: operationRecovery.operation,
                 operationFeedback: operationRecovery.feedback,
@@ -52,6 +58,13 @@ extension ContentView {
                 commitMessage: $commitWorkspace.message,
                 amendMode: $commitWorkspace.amendMode,
                 skipHooks: $commitWorkspace.skipHooks,
+                signOff: Binding(
+                    get: { gitSettings.identitySignOff },
+                    set: { enabled in
+                        gitSettings.identitySignOff = enabled
+                        GitSignOffCommitSettings.saveProjectValue(enabled, for: projectWorkspace.path)
+                    }
+                ),
                 onStage: stagePath,
                 onStageWithoutContent: stageWithoutContent,
                 onStageWithoutContentAll: stageWithoutContentAll,
@@ -83,7 +96,9 @@ extension ContentView {
                 onMovePathsToChangeList: movePathsToChangeList,
                 onTemplate: loadTemplate,
                 onBeforeCommitSettings: { commitWorkspace.showBeforeCommitSettings = true },
+                onIdentitySettings: { gitSettings.showIdentitySettings = true },
                 onCommit: { doCommit() },
+                onCommitStaged: { doCommit(stagedOnly: true) },
                 onCommitAll: commitAllTrackedChanges,
                 onCommitAndRebase: { doCommit(rebaseAfterCommit: true) },
                 autoSquashCommitKind: rebaseWorkspace.pendingAutoSquash?.kind,
@@ -102,12 +117,18 @@ extension ContentView {
                 onStash: presentStashDialog,
                 onStashPaths: { paths in showStashFiles(paths: paths) },
                 onStashSilently: stashSilently,
+                onShelveSilently: shelveSilently,
+                onRollbackPaths: rollbackLocalChanges,
+                onSelectOpenedFileInChanges: selectProjectFileInChanges,
+                canSelectOpenedFileInChanges: projectFileHasChanges,
                 onApplyStash: { stashID, restoreIndex in stashApply(stashID: stashID, restoreIndex: restoreIndex) },
                 onPopStash: { stashID, restoreIndex in stashPop(stashID: stashID, restoreIndex: restoreIndex) },
                 onDropStash: stashDrop(stashID:),
                 onStashBranch: stashBranch(stashID:),
                 onUnstashAs: presentUnstashAsDialog,
                 onStashDiffPreview: showStashPreviewFor(stashID:),
+                onStashDiffInNewTab: { id in openStashDiffInNewTab(stashID: id) },
+                onOpenStashFileDiff: openStashFileDiffInNewTab(stashID:path:),
                 stashDiffText: stashUI.previewText,
                 stashPreviewStashID: $stashUI.previewStashID,
                 isStashPreviewVisible: $stashUI.showPreview,
@@ -448,7 +469,10 @@ extension ContentView {
             let resizeHandleHeight: CGFloat = 7
             let minimumToolHeight: CGFloat = projectWorkspace.toolWindowMode == .commit ? 280 : 220
             let minimumProjectHeight: CGFloat = 140
-            let bothExpanded = toolWindowExpanded && projectPanelExpanded
+            // Rebased's Log window leaves the Commit tool window closed, so
+            // Project is the only left-hand panel.
+            let hidesCommitTool = projectWorkspace.toolWindowMode == .log
+            let bothExpanded = toolWindowExpanded && projectPanelExpanded && !hidesCommitTool
             let separatorHeight = bothExpanded ? resizeHandleHeight : 1
             let maximumToolHeight = max(
                 minimumToolHeight,
@@ -465,6 +489,7 @@ extension ContentView {
             }()
             let projectPanelHeight: CGFloat = {
                 if !projectPanelExpanded { return headerHeight }
+                if hidesCommitTool { return panelHeight }
                 if toolWindowExpanded {
                     return max(headerHeight, panelHeight - toolPanelHeight - separatorHeight)
                 }
@@ -478,7 +503,7 @@ extension ContentView {
                 // add a second generic tool-window title above that row;
                 // doing so shifts the entire left workspace down and makes
                 // the Commit/Stash surface structurally different.
-                if toolWindowExpanded || projectWorkspace.toolWindowMode == .log {
+                if toolWindowExpanded && !hidesCommitTool {
                     activeToolWindowContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -493,117 +518,9 @@ extension ContentView {
                         }
                     )
                 }
-            } else if projectWorkspace.toolWindowMode == .log {
-                // The activity-rail folder is the Project tool-window
-                // switch in Rebased. Keep the Log workspace on the right,
-                // while replacing the left Commit/Stash surface with the
-                // project tree until the folder button is pressed again.
-                VStack(spacing: 0) {
-                    WorkspacePanelHeader(
-                        title: "Project",
-                        systemImage: "folder",
-                        isExpanded: true,
-                        onToggle: { projectPanelExpanded = false },
-                        trailing: AnyView(
-                            HStack(spacing: 8) {
-                                Button { showNewProjectEntry = true } label: {
-                                    Image(systemName: "plus")
-                                }
-                                .buttonStyle(.plain)
-                                .help("New File or Directory…")
-                                .accessibilityLabel("New File or Directory…")
-                                .disabled(repo == nil)
-                                Button(action: revealOpenedProjectFile) {
-                                    Image(systemName: "scope")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Select Opened File")
-                                .accessibilityLabel("Select Opened File")
-                                .disabled(openedProjectRelativePath() == nil)
-                                Button(action: expandSelectedProjectDirectory) {
-                                    Image(systemName: "chevron.down")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Expand Selected")
-                                .accessibilityLabel("Expand Selected")
-                                .disabled(!canExpandSelectedProjectDirectory)
-                                Button(action: collapseProjectTree) {
-                                    Image(systemName: "chevron.up")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Collapse All")
-                                .accessibilityLabel("Collapse All")
-                                .disabled(repo == nil)
-                                Button(action: selectProjectFileInChanges) {
-                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Select Opened File in Changes View")
-                                .accessibilityLabel("Select Opened File in Changes View")
-                                .accessibilityIdentifier("select-opened-file-in-changes")
-                                .disabled(!projectFileHasChanges)
-                                Menu {
-                                    Button("Open Project", action: showOpenPanel)
-                                    if repo != nil {
-                                        Button("Reveal Project Root in Finder") {
-                                            if let repo { showInFinder(repo) }
-                                        }
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                }
-                                .menuStyle(.borderlessButton)
-                                .fixedSize()
-                                .help("Options")
-                                .accessibilityLabel("Options")
-                                .accessibilityIdentifier("project-tool-window-options")
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.16)) {
-                                        projectPanelExpanded = false
-                                    }
-                                } label: {
-                                    Image(systemName: "minus")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Hide Project Tool Window")
-                                .accessibilityLabel("Hide Project Tool Window")
-                            }
-                        )
-                    )
-                    ProjectTreePane(
-                        repo: repo,
-                        projectPath: projectWorkspace.path,
-                        entries: repositoryStatus.entries,
-                        selection: Binding(
-                            get: { fileWorkspace.fileSelection },
-                            set: selectProjectFile
-                        ),
-                        onOpen: showOpenPanel,
-                        onReveal: { if let repo { showInFinder(repo) } },
-                        onCopyPath: copyRepositoryRelativePath,
-                        onCompareWithReference: openFileReferenceComparison,
-                        onCompareWithSameVersion: openFileSameVersionComparison,
-                        onCompareWithSelectedRevision: openFileSelectedRevisionComparison,
-                        onShowFileHistory: { path in
-                            showFileHistory(path, rootPath: repo?.workdir())
-                        },
-                        onShowCurrentRevision: showCurrentRevision,
-                        onAnnotate: annotateProjectFile,
-                        onCheckin: beginFileCheckin,
-                        onAdd: stageProjectTreePath,
-                        onRevert: restoreProjectTreePath,
-                        onDelete: { path in requestDeletePaths([path]) },
-                        onResolveConflicts: openConflictFromStage,
-                        resolvedConflictPaths: operationRecovery.resolvedConflictPaths,
-                        onRevertResolved: revertResolvedPath,
-                        showHeader: false,
-                        expansionCommand: projectTreeExpansion,
-                        reloadToken: projectTreeReloadToken
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
             } else {
                 VStack(spacing: 0) {
+                    if !hidesCommitTool {
                     VStack(spacing: 0) {
                     if !toolWindowExpanded || projectWorkspace.toolWindowMode == .operations {
                         WorkspacePanelHeader(
@@ -635,83 +552,33 @@ extension ContentView {
                 } else {
                     Divider()
                 }
+                    }
 
                 VStack(spacing: 0) {
                     WorkspacePanelHeader(
                         title: "Project",
-                        systemImage: "folder",
+                        systemImage: "",
                         isExpanded: projectPanelExpanded,
+                        showsDisclosure: false,
                         onToggle: {
                             withAnimation(.easeInOut(duration: 0.16)) {
                                 projectPanelExpanded.toggle()
                             }
                         },
                         trailing: AnyView(
-                            HStack(spacing: 8) {
-                                Button { showNewProjectEntry = true } label: {
-                                    Image(systemName: "plus")
-                                }
-                                .buttonStyle(.plain)
-                                .help("New File or Directory…")
-                                .accessibilityLabel("New File or Directory…")
-                                .disabled(repo == nil)
-                                Button(action: revealOpenedProjectFile) {
-                                    Image(systemName: "scope")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Select Opened File")
-                                .accessibilityLabel("Select Opened File")
-                                .disabled(openedProjectRelativePath() == nil)
-                                Button(action: expandSelectedProjectDirectory) {
-                                    Image(systemName: "chevron.down")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Expand Selected")
-                                .accessibilityLabel("Expand Selected")
-                                .disabled(!canExpandSelectedProjectDirectory)
-                                Button(action: collapseProjectTree) {
-                                    Image(systemName: "chevron.up")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Collapse All")
-                                .accessibilityLabel("Collapse All")
-                                .disabled(repo == nil)
-                                Button(action: selectProjectFileInChanges) {
-                                    Image(systemName: "arrow.down.right.and.arrow.up.left")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Select Opened File in Changes View")
-                                .accessibilityLabel("Select Opened File in Changes View")
-                                .accessibilityIdentifier("select-opened-file-in-changes")
-                                .disabled(!projectFileHasChanges)
-                                Menu {
-                                    Button("Open Project", action: showOpenPanel)
-                                    if repo != nil {
-                                        Button("Reveal Project Root in Finder") {
-                                            if let repo { showInFinder(repo) }
-                                        }
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                }
-                                .menuStyle(.borderlessButton)
-                                .fixedSize()
-                                .help("Options")
-                                .accessibilityLabel("Options")
-                                .accessibilityIdentifier("project-tool-window-options")
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.16)) {
-                                        projectPanelExpanded = false
-                                    }
-                                } label: {
-                                    Image(systemName: "minus")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Hide Project Tool Window")
-                                .accessibilityLabel("Hide Project Tool Window")
-                            }
+                            projectToolWindowToolbar
+                                .opacity(projectHeaderHovered ? 1 : 0)
+                                .allowsHitTesting(projectHeaderHovered)
                         )
                     )
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        if case .active = phase {
+                            projectHeaderHovered = true
+                        } else {
+                            projectHeaderHovered = false
+                        }
+                    }
                     if projectPanelExpanded {
                         ProjectTreePane(
                             repo: repo,
@@ -758,6 +625,97 @@ extension ContentView {
         }
     }
 
+    /// Live Rebased Project header is only the title at rest. New, Select
+    /// Opened File, Expand All, Collapse All, Options, and Hide appear on hover.
+    var projectToolWindowToolbar: some View {
+        HStack(spacing: 2) {
+            Menu {
+                Button("New File or Directory…") { showNewProjectEntry = true }
+                    .disabled(repo == nil)
+            } label: {
+                Image(systemName: "plus")
+                    .font(Design.Typography.interface(12, weight: .medium))
+                    .frame(width: 18, height: 18)
+                    .rebasedMenuCorner()
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(repo == nil)
+            .help("New")
+            .accessibilityLabel("New")
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.18))
+                .frame(width: 1, height: 14)
+                .padding(.horizontal, 3)
+
+            projectHeaderButton("scope", help: "Select Opened File", action: revealOpenedProjectFile)
+                .disabled(openedProjectRelativePath() == nil)
+            projectHeaderButton("chevron.up.chevron.down", help: "Expand All", action: expandAllProjectDirectories)
+                .disabled(repo == nil)
+            projectHeaderButton("xmark", help: "Collapse All", action: collapseProjectTree)
+                .disabled(repo == nil)
+
+            Menu {
+                Button("New File or Directory…") { showNewProjectEntry = true }
+                    .disabled(repo == nil)
+                Button("Select Opened File", action: revealOpenedProjectFile)
+                    .disabled(openedProjectRelativePath() == nil)
+                Button("Expand Selected", action: expandSelectedProjectDirectory)
+                    .disabled(!canExpandSelectedProjectDirectory)
+                Button("Expand All", action: expandAllProjectDirectories)
+                    .disabled(repo == nil)
+                Button("Collapse All", action: collapseProjectTree)
+                    .disabled(repo == nil)
+                Button("Select Opened File in Changes View", action: selectProjectFileInChanges)
+                    .disabled(!projectFileHasChanges)
+                Divider()
+                Button("Open Project", action: showOpenPanel)
+                if repo != nil {
+                    Button("Reveal Project Root in Finder") {
+                        if let repo { showInFinder(repo) }
+                    }
+                }
+                Divider()
+                Button("Hide Project Tool Window") {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        projectPanelExpanded = false
+                    }
+                }
+            } label: {
+                verticalEllipsisIcon()
+                    .frame(width: 18, height: 18)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Options")
+            .accessibilityLabel("Options")
+            .accessibilityIdentifier("project-tool-window-options")
+
+            projectHeaderButton("minus", help: "Hide Project Tool Window") {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    projectPanelExpanded = false
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .fixedSize()
+    }
+
+    func projectHeaderButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(Design.Typography.interface(11, weight: .medium))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+
     /// Commit and Log both use history as the default editor. Explicit file
     /// selections open a diff or source view in that same editor area.
     var showsLogWorkspace: Bool {
@@ -777,7 +735,10 @@ extension ContentView {
         VStack(spacing: 0) {
             if repo != nil, let path = workspaceEditorPath {
                 HStack(spacing: 12) {
-                    Button(action: closeWorkspaceFile) {
+                    Button {
+                        closeWorkspaceFile()
+                        showLogTab()
+                    } label: {
                         Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
                             .frame(height: 26)
                             .contentShape(Rectangle())
@@ -786,12 +747,35 @@ extension ContentView {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("workspace-return-to-log")
 
+                    if let tab = logSelectionState.fileDiffTab {
+                        Button {
+                            closeWorkspaceFile()
+                            showLogFileDiffTab()
+                        } label: {
+                            Text(tab.displayTitle)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(height: 26)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .accessibilityIdentifier("workspace-show-diff-tab")
+                    }
+
                     HStack(spacing: 6) {
                         Image(systemName: repositoryFileSymbol(for: path))
                         Text((path as NSString).lastPathComponent)
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Button(action: closeWorkspaceFile) {
+                        Button {
+                            if logSelectionState.sourceTabPath == path {
+                                closeStashSourceTab()
+                            } else {
+                                closeWorkspaceFile()
+                            }
+                        } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10))
                                 .frame(width: 20, height: 20)

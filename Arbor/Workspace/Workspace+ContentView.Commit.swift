@@ -24,11 +24,26 @@ func beginFileCheckin(_ path: String) {
     fileWorkspace.selectionModePath = nil
 }
 
-func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
+func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, stagedOnly: Bool = false) {
     guard let repo, !commitWorkspace.message.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    let operationRootPath = repo.workdir() ?? ""
+    let included = commitWorkspace.includedPaths(for: operationRootPath)
+    let selectedEntries = repositoryStatus.entries.filter {
+        included.contains($0.path)
+            && $0.staged != .conflicted
+            && $0.unstaged != .conflicted
+            && $0.unstaged != .ignored
+    }
+    let selectedPaths = Array(Set(selectedEntries.flatMap { entry in
+        [entry.path] + (entry.oldPath.map { [$0] } ?? [])
+    })).sorted()
+    let hasStagedEntries = repositoryStatus.entries.contains {
+        $0.staged != .unchanged && $0.staged != .conflicted
+    }
+    guard stagedOnly ? hasStagedEntries : (!selectedPaths.isEmpty || commitWorkspace.amendMode) else { return }
     let isRebaseEditAmend = commitWorkspace.amendMode && rebaseEditPauseAllowsAmend(operationRecovery.operation)
     guard operationRecovery.operation == nil || isRebaseEditAmend else { return }
-    beginFeedbackOperation(commitWorkspace.amendMode ? "Amend commit" : "Commit")
+    beginFeedbackOperation(stagedOnly ? "Commit staged changes" : (commitWorkspace.amendMode ? "Amend commit" : "Commit"))
     let msg = commitWorkspace.message
     let isAmend = commitWorkspace.amendMode
     let hooks = GitCommitHooksSettings.effectiveSkipHooks(requested: self.commitWorkspace.skipHooks)
@@ -41,7 +56,6 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
     let coAuthors = parseCoAuthors(gitSettings.identityCoAuthors)
     let pendingRebase = rebaseAfterCommit ? rebaseWorkspace.pendingAutoSquash : nil
     let operationProjectPath = projectWorkspace.path
-    let operationRootPath = repo.workdir() ?? ""
     let operationRootLabel = operationRootPath.isEmpty
         ? ""
         : URL(fileURLWithPath: operationRootPath).lastPathComponent
@@ -53,11 +67,15 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
     Task.detached(priority: .userInitiated) {
         do {
             // COMMIT-001 内置检查:身份缺失/未解决冲突(阻塞),大文件/CRLF/detached(警告)
-            let builtin = try repo.commitChecksWithLargeFileLimit(
-                maxFileSizeBytes: GitCommitWarningSettings.largeFileLimitBytes(
-                    for: operationProjectPath
+            let maxFileSizeBytes = GitCommitWarningSettings.largeFileLimitBytes(for: operationProjectPath)
+            let builtin = if stagedOnly {
+                try repo.commitChecksWithLargeFileLimit(maxFileSizeBytes: maxFileSizeBytes)
+            } else {
+                try repo.commitChecksWithLargeFileLimitForPaths(
+                    maxFileSizeBytes: maxFileSizeBytes,
+                    paths: selectedPaths
                 )
-            )
+            }
             let blocking = builtin.filter { $0.blocking }
             if !blocking.isEmpty {
                 await MainActor.run {
@@ -114,11 +132,10 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
             if !forceChecks {
                 try runBeforeCommitChecks(repo: repo, commands: checks)
             }
-            let identity = (try? repo.gitIdentity())
-            let hasOverrides = !authorName.isEmpty || !authorEmail.isEmpty || !committerName.isEmpty || !committerEmail.isEmpty || signOff || !coAuthors.isEmpty
-            let id = if identity?.signCommits == true || hasOverrides {
-                try withArborPinentrySession {
-                    try repo.commitWithOptions(
+            let identity = try? repo.gitIdentity()
+            let result: (id: String, indexWarning: String?) = try withArborPinentrySession {
+                if stagedOnly {
+                    let id = try repo.commitWithOptions(
                         message: msg,
                         skipHooks: hooks,
                         authorName: authorName.isEmpty ? nil : authorName,
@@ -130,20 +147,50 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                         coAuthors: coAuthors,
                         amend: isAmend
                     )
+                    return (id, nil)
                 }
-            } else if isAmend {
-                try repo.amend(message: msg, skipHooks: hooks)
-            } else {
-                try repo.commit(message: msg, skipHooks: hooks)
+                let outcome = try repo.commitWithOptionsWorktreePaths(
+                    message: msg,
+                    paths: selectedPaths,
+                    skipHooks: hooks,
+                    authorName: authorName.isEmpty ? nil : authorName,
+                    authorEmail: authorEmail.isEmpty ? nil : authorEmail,
+                    committerName: committerName.isEmpty ? nil : committerName,
+                    committerEmail: committerEmail.isEmpty ? nil : committerEmail,
+                    signKey: identity?.signingKey,
+                    signOff: signOff,
+                    coAuthors: coAuthors,
+                    amend: isAmend
+                )
+                return (outcome.id, outcome.indexReconciliationWarning)
             }
-            let st = try repo.status(); let hid = repo.headCommitId()
+            let id = result.id
+            // HEAD has advanced at this point. A locked index can prevent the
+            // status read; treat it as a refresh warning, never as a failed commit.
+            let st = try? repo.status()
+            let hid = repo.headCommitId()
             let repositoryPath = repo.workdir()
             let recent = (try? repo.recentCommitMessages(limit: 10)) ?? []
             let staging = try? repo.stagingModel()
             let branchList = (try? repo.branchList()) ?? []
             let syncStatuses = (try? repo.syncStatus()) ?? []
             await MainActor.run {
-                self.repositoryStatus.entries = st; self.repositoryStatus.headId = hid
+                guard self.projectWorkspace.repository === repo else {
+                    self.commitWorkspace.pendingCommitAndPush = false
+                    self.feedbackCenter.warning(
+                        "Commit completed in another repository",
+                        detail: "\(operationRootLabel): \(String(id.prefix(7)))",
+                        nextStep: "Open the original repository to review the commit."
+                    )
+                    return
+                }
+                if let st {
+                    self.repositoryStatus.entries = st
+                    self.commitWorkspace.retainChangedPaths(Set(st.map(\.path)), in: operationRootPath)
+                } else {
+                    self.refreshAll(showFeedback: false)
+                }
+                self.repositoryStatus.headId = hid
                 self.repositoryStatus.stagingModel = staging
                 self.repositoryStatus.lastIndexRevision = staging?.indexRevision
                 self.branchWorkspace.branches = branchList
@@ -157,6 +204,10 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                 }
                 self.commitWorkspace.recentMessages = recent
                 self.commitWorkspace.message = ""
+                let integrityWarnings = [
+                    result.indexWarning,
+                    st == nil ? "Git status could not be refreshed after the commit." : nil
+                ].compactMap { $0 }
                 if isRebaseEditAmend {
                     self.refreshAll(showFeedback: false)
                     let recoveryActions = repositoryPath.flatMap { rootPath in
@@ -178,6 +229,13 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                         notificationGroup: .standard,
                         localized: false
                     )
+                    if !integrityWarnings.isEmpty {
+                        self.feedbackCenter.warning(
+                            "Commit completed; review index",
+                            detail: integrityWarnings.joined(separator: "\n"),
+                            nextStep: "Refresh Changes and inspect staging before continuing the rebase."
+                        )
+                    }
                     return
                 }
                 let shouldOpenPushDialog = self.commitWorkspace.pendingCommitAndPush
@@ -195,14 +253,21 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                     additionalActions: rewordAction.map { [$0] } ?? [],
                     notificationID: repositoryPath.map(self.commitNotificationID)
                 )
-                if shouldOpenPushDialog, let repositoryPath {
+                if !integrityWarnings.isEmpty {
+                    self.feedbackCenter.warning(
+                        "Commit completed; review index",
+                        detail: integrityWarnings.joined(separator: "\n"),
+                        nextStep: "Refresh Changes and inspect staging before another commit or push."
+                    )
+                }
+                if shouldOpenPushDialog, let repositoryPath, integrityWarnings.isEmpty {
                     self.beginSingleRootPushAfterCommit(rootPath: repositoryPath)
                 }
                 if let pendingRebase {
-                    let hasResidualChanges = st.contains {
+                    let hasResidualChanges = !integrityWarnings.isEmpty || (st?.contains {
                         $0.staged != .unchanged
                             || $0.unstaged != .unchanged
-                    }
+                    } ?? true)
                     if hasResidualChanges {
                         self.commitWorkspace.feedback = "已提交；为保护未提交改动，未自动变基"
                         self.feedbackCenter.warning(
@@ -221,6 +286,14 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
             }
         } catch {
             await MainActor.run {
+                guard self.projectWorkspace.repository === repo else {
+                    self.commitWorkspace.pendingCommitAndPush = false
+                    self.feedbackCenter.warning(
+                        "Commit failed in another repository",
+                        detail: "\(operationRootLabel): \(errorMessage(error))"
+                    )
+                    return
+                }
                 if let checkError = error as? BeforeCommitCheckError {
                     self.feedbackCenter.warning(
                         "Commit checks failed",
@@ -233,7 +306,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
                     alert.addButton(withTitle: String(localized: "Commit Anyway"))
                     alert.addButton(withTitle: String(localized: "Cancel"))
                     if alert.runModal() == .alertFirstButtonReturn {
-                        self.doCommit(forceChecks: true, rebaseAfterCommit: rebaseAfterCommit)
+                        self.doCommit(forceChecks: true, rebaseAfterCommit: rebaseAfterCommit, stagedOnly: stagedOnly)
                     } else {
                         self.commitWorkspace.pendingCommitAndPush = false
                     }
@@ -257,38 +330,24 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false) {
     }
 }
 
-/// IntelliJ's Git.Stage.ToggleCommitAll path: when nothing is staged, commit
-/// all tracked worktree changes without adding untracked files implicitly.
-/// The explicit Stage All action remains available for users who also want to
-/// include untracked files.
+/// Commit all tracked worktree changes through the inclusion model without
+/// changing Git's index before the commit. Untracked files require an explicit
+/// inclusion choice in the Changes tree.
 func commitAllTrackedChanges() {
     guard let repo,
-          !commitWorkspace.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-          repositoryStatus.entries.contains(where: {
-              $0.staged != .conflicted
-                  && $0.unstaged != .conflicted
-                  && $0.unstaged != .unchanged
-                  && $0.unstaged != .untracked
-                  && $0.unstaged != .ignored
-          }) else { return }
-    beginFeedbackOperation("Commit all tracked changes")
-    Task.detached(priority: .userInitiated) {
-        do {
-            try repo.stageTracked()
-            await MainActor.run {
-                self.refreshAll(showFeedback: false)
-                self.doCommit()
-            }
-        } catch {
-            await MainActor.run {
-                self.feedbackCenter.error(
-                    "Commit All failed",
-                    detail: errorMessage(error),
-                    nextStep: "Check the tracked changes and retry."
-                )
-            }
-        }
+          !commitWorkspace.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    let tracked = repositoryStatus.entries.filter {
+        $0.staged != .conflicted
+            && $0.unstaged != .conflicted
+            && $0.unstaged != .untracked
+            && $0.unstaged != .ignored
+            && ($0.staged != .unchanged || $0.unstaged != .unchanged)
     }
+    guard !tracked.isEmpty else { return }
+    for entry in tracked {
+        commitWorkspace.setIncluded(true, path: entry.path, in: repo.workdir())
+    }
+    doCommit()
 }
 
 func rememberCommitAuthor(name: String, email: String, projectPath: String?) {

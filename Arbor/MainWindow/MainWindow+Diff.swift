@@ -220,45 +220,54 @@ struct SideBySideDiffView: View {
     /// and the view scrolls to it when the ordinal changes.
     var activeDifference: Int? = nil
     var showsLineNumbers = true
+    var wrapsLines = true
 
     var body: some View {
         let items = sideBySideDisplayItems(fileDiff: fileDiff, fullFile: fullFile)
         let ordinals = sideBySideDifferenceOrdinals(items)
         GeometryReader { proxy in
             ScrollViewReader { scroller in
-                ScrollView([.vertical, .horizontal]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(items.indices, id: \.self) { index in
-                            switch items[index] {
-                            case let .hunkHeader(hunkIndex):
-                                HunkHeaderView(
-                                    hunk: fileDiff.hunks[hunkIndex],
-                                    actions: hunkActions,
-                                    actionsDisabled: hunkActionsDisabled,
-                                    onAction: { action in onHunkAction(action, hunkIndex) }
-                                )
-                                .frame(minWidth: proxy.size.width, alignment: .leading)
-                            case let .row(row, hunkIndex):
-                                DiffRowView(row: row, hunkIndex: hunkIndex,
-                                            selectionMode: selectionMode,
-                                            isOldSelected: isOldSelected(hunkIndex, row),
-                                            selectedLines: selectedLines,
-                                            onToggleLine: onToggleLine,
-                                            isActiveDifference: ordinals[index] == activeDifference,
-                                            showsLineNumbers: showsLineNumbers)
-                                    // A short hunk must still occupy the viewport so
-                                    // the two diff columns stay anchored left/top.
-                                    .frame(minWidth: proxy.size.width, alignment: .leading)
-                                    .id(diffRowAnchorID(index))
+                Group {
+                    if !wrapsLines, fullFile != nil,
+                       !items.contains(where: { if case .hunkHeader = $0 { true } else { false } }) {
+                        unwrappedFullFile(items: items, ordinals: ordinals, size: proxy.size)
+                    } else {
+                        ScrollView([.vertical, .horizontal]) {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                ForEach(items.indices, id: \.self) { index in
+                                    switch items[index] {
+                                    case let .hunkHeader(hunkIndex):
+                                        HunkHeaderView(
+                                            hunk: fileDiff.hunks[hunkIndex],
+                                            actions: hunkActions,
+                                            actionsDisabled: hunkActionsDisabled,
+                                            onAction: { action in onHunkAction(action, hunkIndex) }
+                                        )
+                                        .frame(minWidth: proxy.size.width, alignment: .leading)
+                                    case let .row(row, hunkIndex):
+                                        DiffRowView(row: row, hunkIndex: hunkIndex,
+                                                    selectionMode: selectionMode,
+                                                    isOldSelected: isOldSelected(hunkIndex, row),
+                                                    selectedLines: selectedLines,
+                                                    onToggleLine: onToggleLine,
+                                                    isActiveDifference: ordinals[index] == activeDifference,
+                                                    showsLineNumbers: showsLineNumbers,
+                                                    wrapsLines: wrapsLines)
+                                            // A short hunk must still occupy the viewport so
+                                            // the two diff columns stay anchored left/top.
+                                            .frame(minWidth: proxy.size.width, alignment: .leading)
+                                            .id(diffRowAnchorID(index))
+                                    }
+                                }
                             }
+                            .font(.system(.body, design: .monospaced))
+                            // ScrollView otherwise sizes this stack only to its intrinsic
+                            // content and can center short diffs in both axes.
+                            .frame(minWidth: proxy.size.width,
+                                   minHeight: proxy.size.height,
+                                   alignment: .topLeading)
                         }
                     }
-                    .font(.system(.body, design: .monospaced))
-                    // ScrollView otherwise sizes this stack only to its intrinsic
-                    // content and can center short diffs in both axes.
-                    .frame(minWidth: proxy.size.width,
-                           minHeight: proxy.size.height,
-                           alignment: .topLeading)
                 }
                 .frame(width: proxy.size.width,
                        height: proxy.size.height,
@@ -274,6 +283,146 @@ struct SideBySideDiffView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .scrollContentBackground(.hidden)
+    }
+
+    /// Each file scrolls horizontally within its own half. The enclosing
+    /// vertical scroller keeps corresponding lines aligned in both halves.
+    private func unwrappedFullFile(
+        items: [SideBySideDisplayItem], ordinals: [Int?], size: CGSize
+    ) -> some View {
+        let paneWidth = max(1, (size.width - 1) / 2)
+        let contentHeight = max(size.height, CGFloat(items.count) * 20)
+        return ScrollView(.vertical) {
+            HStack(alignment: .top, spacing: 0) {
+                unwrappedPane(items: items, ordinals: ordinals,
+                              isOld: true, width: paneWidth, height: contentHeight)
+                Rectangle()
+                    .fill(Color(nsColor: .separatorColor))
+                    .frame(width: 1)
+                unwrappedPane(items: items, ordinals: ordinals,
+                              isOld: false, width: paneWidth, height: contentHeight)
+            }
+            .frame(minHeight: size.height, alignment: .topLeading)
+        }
+    }
+
+    private func unwrappedPane(
+        items: [SideBySideDisplayItem], ordinals: [Int?],
+        isOld: Bool, width: CGFloat, height: CGFloat
+    ) -> some View {
+        let gutterWidth: CGFloat = showsLineNumbers || selectionMode ? 44 : 0
+        let textWidth = max(1, width - gutterWidth)
+        let contentWidth = unwrappedContentWidth(items: items, isOld: isOld, minWidth: textWidth)
+        return HStack(spacing: 0) {
+            if !isOld && gutterWidth > 0 {
+                unwrappedGutter(items: items, ordinals: ordinals,
+                                isOld: false, height: height)
+            }
+            ScrollView(.horizontal) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(items.indices, id: \.self) { index in
+                        if case let .row(row, hunkIndex) = items[index] {
+                            let cell = DiffRowView(
+                                row: row, hunkIndex: hunkIndex,
+                                selectionMode: false,
+                                isOldSelected: isOldSelected(hunkIndex, row),
+                                selectedLines: selectedLines,
+                                isActiveDifference: ordinals[index] == activeDifference,
+                                showsLineNumbers: false,
+                                wrapsLines: false
+                            )
+                            Group {
+                                if isOld { cell.oldCell } else { cell.newCell }
+                            }
+                            .frame(width: contentWidth, height: 20, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                guard selectionMode else { return }
+                                if isOld, let line = row.old,
+                                   line.kind == .deletion, line.oldLine > 0 {
+                                    onToggleLine(SelectedDiffLine(hunkIndex: hunkIndex,
+                                                                  oldLine: line.oldLine))
+                                } else if !isOld, let line = row.new,
+                                          line.kind == .addition, line.newLine > 0 {
+                                    onToggleLine(SelectedDiffLine(hunkIndex: hunkIndex,
+                                                                  oldLine: 0, newLine: line.newLine))
+                                }
+                            }
+                            .id(isOld && gutterWidth == 0 ? diffRowAnchorID(index) : "diff-text-\(isOld)-\(index)")
+                        }
+                    }
+                }
+                .frame(width: contentWidth, height: height, alignment: .topLeading)
+            }
+            .frame(width: textWidth, height: height)
+            if isOld && gutterWidth > 0 {
+                unwrappedGutter(items: items, ordinals: ordinals,
+                                isOld: true, height: height)
+            }
+        }
+        .frame(width: width, height: height)
+        .font(.system(.body, design: .monospaced))
+    }
+
+    private func unwrappedContentWidth(
+        items: [SideBySideDisplayItem], isOld: Bool, minWidth: CGFloat
+    ) -> CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let textWidth = items.reduce(CGFloat.zero) { widest, item in
+            guard case let .row(row, _) = item,
+                  let text = (isOld ? row.old : row.new)?.text else { return widest }
+            return max(widest, (text as NSString).size(withAttributes: attributes).width)
+        }
+        return max(minWidth, textWidth + 16)
+    }
+
+    private func unwrappedGutter(
+        items: [SideBySideDisplayItem], ordinals: [Int?],
+        isOld: Bool, height: CGFloat
+    ) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(items.indices, id: \.self) { index in
+                if case let .row(row, hunkIndex) = items[index] {
+                    let line = isOld ? row.old : row.new
+                    let cell = DiffRowView(
+                        row: row, hunkIndex: hunkIndex,
+                        selectionMode: selectionMode,
+                        isOldSelected: isOldSelected(hunkIndex, row),
+                        selectedLines: selectedLines,
+                        isActiveDifference: ordinals[index] == activeDifference
+                    )
+                    Group {
+                        if selectionMode && line?.kind == (isOld ? .deletion : .addition) {
+                            Text(isOld ? (cell.isOldSelected ? "✓" : " ")
+                                       : (cell.isNewSelected ? "✓" : " "))
+                                .foregroundStyle(Design.Colors.accent)
+                                .frame(width: 44, alignment: .center)
+                        } else {
+                            cell.lineNumberText(isOld ? (line?.oldLine ?? 0) : (line?.newLine ?? 0),
+                                                side: isOld ? "old" : "new")
+                        }
+                    }
+                    .frame(width: 44, height: 20)
+                    .background(isOld
+                        ? cell.oldBackground(isDeletion: line?.kind == .deletion)
+                        : cell.newBackground(isAddition: line?.kind == .addition))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard selectionMode, let line else { return }
+                        if isOld, line.kind == .deletion, line.oldLine > 0 {
+                            onToggleLine(SelectedDiffLine(hunkIndex: hunkIndex,
+                                                          oldLine: line.oldLine))
+                        } else if !isOld, line.kind == .addition, line.newLine > 0 {
+                            onToggleLine(SelectedDiffLine(hunkIndex: hunkIndex,
+                                                          oldLine: 0, newLine: line.newLine))
+                        }
+                    }
+                    .id(isOld ? diffRowAnchorID(index) : "diff-new-gutter-\(index)")
+                }
+            }
+        }
+        .frame(width: 44, height: height, alignment: .topLeading)
     }
 
     func isOldSelected(_ hindex: Int, _ row: DiffRow) -> Bool {
@@ -437,6 +586,7 @@ struct DiffRowView: View {
     var onToggleLine: (SelectedDiffLine) -> Void = { _ in }
     var isActiveDifference = false
     var showsLineNumbers = true
+    var wrapsLines = true
 
     var body: some View {
         HStack(spacing: 0) {
@@ -456,6 +606,8 @@ struct DiffRowView: View {
         HStack(spacing: 8) {
             Text(highlightedText(line))
                 .foregroundStyle(.primary)
+                .lineLimit(wrapsLines ? nil : 1)
+                .fixedSize(horizontal: !wrapsLines, vertical: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if selectionMode && isDeletion {
                 // 选择标记列（IntelliJ 式，替代行号）
@@ -520,6 +672,8 @@ struct DiffRowView: View {
             }
             Text(highlightedText(line))
                 .foregroundStyle(.primary)
+                .lineLimit(wrapsLines ? nil : 1)
+                .fixedSize(horizontal: !wrapsLines, vertical: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 8)

@@ -120,9 +120,36 @@ func matchingLogCommitID(
     })?.id
 }
 
+func persistedLogRowSelectionKey(rootPath: String) -> String {
+    let url = URL(fileURLWithPath: canonicalExternalLogPath(rootPath))
+    let canonical = (try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath) ?? url.path
+    return "arbor.log.selectedCommit." + canonical
+}
+
+func persistedLogRowSelection(rootPath: String, defaults: UserDefaults = .standard) -> String? {
+    let value = defaults.string(forKey: persistedLogRowSelectionKey(rootPath: rootPath))?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return value.isEmpty ? nil : value
+}
+
+func storePersistedLogRowSelection(
+    _ id: String?,
+    rootPath: String,
+    defaults: UserDefaults = .standard
+) {
+    let key = persistedLogRowSelectionKey(rootPath: rootPath)
+    let trimmed = id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if trimmed.isEmpty {
+        defaults.removeObject(forKey: key)
+    } else {
+        defaults.set(trimmed, forKey: key)
+    }
+}
+
 /// Keep an explicit Log selection when the reloaded rows still contain it.
 /// Opening or refreshing the Log does not invent a selection: the Changes
-/// and details panes stay empty until the user picks a row.
+/// and details panes stay empty until the user picks a row. A row the user
+/// already picked is restored from the per-root default.
 func retainedLogSelection(
     previousSelection: String?,
     previousSelections: Set<String>,

@@ -40,18 +40,22 @@ HStack(spacing: 10) {
     Button {
         logList.viewMode = .graph
     } label: {
-        Label("Log", systemImage: "point.3.connected.trianglepath.dotted")
-            .font(Design.Typography.interface(12, weight: .medium))
+        HStack(spacing: 5) {
+            branchMarkIcon()
+            Text("Log")
+        }
+        .font(Design.Typography.interface(12, weight: .medium))
     }
-    .buttonStyle(RebasedTabButtonStyle(isSelected: true))
+    .buttonStyle(RebasedTabButtonStyle(isSelected: true, tinted: false))
 
     if externalLogWindow {
         externalLogRootsMenu
     }
 
-    logGraphGearMenu
-
     Spacer(minLength: 0)
+    // The header spans the graph and the Changes browser. Rebased puts this
+    // menu on that shared band's trailing edge, next to the window bell.
+    logGraphGearMenu
 }
 .padding(.horizontal, 8)
 .frame(height: 36)

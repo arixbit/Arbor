@@ -36,6 +36,8 @@ final class LogSelectionState: ObservableObject {
     /// 与 `fileDiffTab` 分开保存：切回 Log 只改变当前页签，diff tab 仍然
     /// 保留在 tab 条上，与 IntelliJ 的编辑器页签一致。
     @Published var fileDiffTabActive = false
+    /// Jump to Source keeps the worktree file tab beside the diff tab.
+    @Published var sourceTabPath: String?
 
     // MARK: - Tab
 

@@ -802,8 +802,11 @@ final class FeedbackCenter: ObservableObject {
         dismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            guard self?.toast?.id == id else { return }
-            self?.toast = nil
+            // The toast and the status-bar line are the same message. A plain
+            // success such as "Project opened" must leave the bar, matching
+            // Rebased, which does not keep that text in the status line.
+            if self?.toast?.id == id { self?.toast = nil }
+            if self?.current?.id == id { self?.current = nil }
         }
     }
 }

@@ -9,6 +9,38 @@ func cherryPickFromLog(_ commit: CommitInfo) {
     cherryPickCommitsFromLog([commit])
 }
 
+/// Log toolbar counterpart of Rebased's Go To Hash/Branch/Tag. Loaded history
+/// is searched by hash prefix; a branch or tag name selects its tip when that
+/// commit is already in the graph.
+func goToHashBranchOrTag() {
+    let alert = NSAlert()
+    alert.messageText = String(localized: "Go To Hash/Branch/Tag")
+    alert.informativeText = String(localized: "Enter a commit hash, branch, or tag shown in this log.")
+    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+    alert.accessoryView = field
+    alert.addButton(withTitle: "Go")
+    alert.addButton(withTitle: "Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    let query = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return }
+    let needle = query.lowercased()
+    let match = logList.entries.first { commit in
+        commit.id.lowercased().hasPrefix(needle)
+            || commit.shortId.lowercased() == needle
+            || (commit.refs + commit.tagRefs + commit.remoteRefs).contains { $0.lowercased() == needle }
+    }
+    guard let match else {
+        feedbackCenter.error(
+            "Revision not in the loaded log",
+            detail: query,
+            nextStep: "Load more history or check the name, then try again."
+        )
+        return
+    }
+    logSelectionState.selection = logCommitIdentity(match)
+    logSelectionState.selectedIDs = [logCommitIdentity(match)]
+}
+
 func revertFromLog(_ commit: CommitInfo) {
     revertCommitsFromLog([commit])
 }

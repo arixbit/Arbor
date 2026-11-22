@@ -131,20 +131,21 @@ struct ContentView: View {
     // 传 -arbor.appearance light|dark 就能固定，不再依赖采集时的系统设置。
     @AppStorage("arbor.appearance") var appearanceOverride = ""
     @AppStorage("arbor.projectPanelExpanded.v3") var projectPanelExpanded = true
+    @State var projectHeaderHovered = false
     @State var projectTreeExpansion = ProjectTreeExpansionCommand()
     @State var projectTreeReloadToken = 0
     @State var showNewProjectEntry = false
-    // With both tool windows expanded the Commit surface takes the upper half,
-    // matching the reference split; the divider stays draggable.
-    @AppStorage("arbor.toolWindowHeight.v3") var toolWindowHeight: Double = 466
-    // 40pt activity rail + 582pt panel + 6pt divider = 628pt at the
-    // matched reference size. The new key adopts this round's geometry.
-    @AppStorage("arbor.workspaceSidebarWidth.v12") var savedWorkspaceSidebarWidth: Double = 582
+    // With both tool windows expanded the Commit surface starts at the live
+    // Rebased split; the divider stays draggable.
+    @AppStorage("arbor.toolWindowHeight.v3") var toolWindowHeight: Double = 470
+    // The live Rebased Log window uses a 40pt rail, roughly 522pt Project
+    // panel, and a 6pt divider at the matched 1642pt window size.
+    @AppStorage("arbor.workspaceSidebarWidth.v12") var savedWorkspaceSidebarWidth: Double = 522
     // The Log editor has its own graph/details splitter. Its graph/table side
     // is the dominant column in the reference frame; the details inspector is
     // the narrower right-hand column.
-    // At 1642pt this leaves a 280pt inspector beside the dominant Log table.
-    @AppStorage("arbor.logGraphWidth.v8") var savedLogGraphWidth: Double = 688
+    // At 1642pt this puts the Changes divider at the reference position.
+    @AppStorage("arbor.logGraphWidth.v8") var savedLogGraphWidth: Double = 733
     // These are the persistent Log presentation properties exposed by
     // rebased's VcsLog UI actions. They are deliberately state, not layout
     // hacks: changing them must not reload or replace the selected commit.

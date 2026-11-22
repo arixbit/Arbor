@@ -36,21 +36,30 @@ func tokenizeGitCommandLine(_ value: String) -> [String] {
 
 struct RebasedActivityRail: View {
     let selectedMode: ToolWindowMode
+    var projectOpen = false
+    var logOpen = false
     let onSelect: (ToolWindowMode) -> Void
     let onOpenProject: () -> Void
 
     var body: some View {
         VStack(spacing: 8) {
-            railButton("slider.horizontal.3", mode: .commit, help: "Commit")
+            // The live Log window still keeps Commit above Project. It stays
+            // unselected while Log is open, with a divider under it.
+            railButton("slider.horizontal.3", mode: .commit, help: "Commit", commitMark: true)
             Divider().padding(.horizontal, 6)
             Button(action: onOpenProject) {
                 Image(systemName: "folder")
                     .font(.system(size: 15, weight: .medium))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        projectOpen ? Color.primary.opacity(0.08) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 7)
+                    )
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Project")
+            .accessibilityLabel("Project")
             // SwiftUI only derives an AX identifier from the symbol name on
             // newer systems, so state it explicitly for the UI smoke suite.
             .accessibilityIdentifier("folder")
@@ -68,12 +77,24 @@ struct RebasedActivityRail: View {
                     .frame(width: 34, height: 34)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .foregroundStyle(.secondary)
             .help("More tool windows")
+            .accessibilityLabel("More tool windows")
+            .accessibilityIdentifier("activity-rail-more")
 
             Spacer()
             railButton("terminal", mode: .operations, help: "Terminal")
-            railButton("arrow.triangle.branch", mode: .log, help: "Git")
+            // The Log editor is the main surface, not a selected tool window.
+            // Rebased leaves this Git button plain while Log is open.
+            railButton(
+                "arrow.triangle.branch",
+                mode: .log,
+                help: "Git",
+                branchMark: true,
+                highlighted: false,
+                emphasizeSelection: false
+            )
         }
         .padding(.top, 4)
         .padding(.bottom, 12)
@@ -81,20 +102,30 @@ struct RebasedActivityRail: View {
         .background(Design.Colors.workspaceFrame)
     }
 
-    func railButton(_ image: String, mode: ToolWindowMode, help: String) -> some View {
-        Button { onSelect(mode) } label: {
-            Image(systemName: image)
-                .font(.system(size: 15, weight: .medium))
-                .frame(width: 34, height: 34)
-                .background(
-                    selectedMode == mode
-                        ? Color.primary.opacity(0.12)
-                        : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 7)
-                )
+    func railButton(_ image: String, mode: ToolWindowMode, help: String, commitMark: Bool = false, branchMark: Bool = false, highlighted: Bool = false, emphasizeSelection: Bool = true) -> some View {
+        let selected = emphasizeSelection && selectedMode == mode
+        let chip = selected || highlighted
+        return Button { onSelect(mode) } label: {
+            Group {
+                if commitMark {
+                    commitRailMark()
+                } else if branchMark {
+                    branchMarkIcon()
+                } else {
+                    Image(systemName: image)
+                        .font(.system(size: 15, weight: .medium))
+                }
+            }
+            .frame(width: 28, height: 28)
+            .foregroundStyle(selected && commitMark ? Color.white : (selected ? Color.primary : Color.secondary))
+            .background(
+                chip
+                    ? (selected && commitMark ? Color.accentColor : Color.primary.opacity(selected ? 0.12 : 0.08))
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
         }
         .buttonStyle(.plain)
-        .foregroundStyle(selectedMode == mode ? .primary : .secondary)
         .help(help)
         // Matches the identifier SwiftUI derives from the symbol name on newer
         // systems; on older ones nothing is derived and the smoke suite cannot
@@ -102,6 +133,25 @@ struct RebasedActivityRail: View {
         .accessibilityIdentifier(image)
         .accessibilityLabel(LocalizedStringKey(help))
         .accessibilityAddTraits(selectedMode == mode ? .isSelected : [])
+    }
+
+    func commitRailMark() -> some View {
+        Canvas { context, size in
+            let midY = size.height / 2
+            var line = Path()
+            line.move(to: CGPoint(x: 1, y: midY))
+            line.addLine(to: CGPoint(x: size.width - 1, y: midY))
+            context.stroke(line, with: .foreground, lineWidth: 1.3)
+            let radius: CGFloat = 4
+            let circle = Path(ellipseIn: CGRect(
+                x: size.width / 2 - radius,
+                y: midY - radius,
+                width: radius * 2,
+                height: radius * 2
+            ))
+            context.stroke(circle, with: .foreground, lineWidth: 1.3)
+        }
+        .frame(width: 22, height: 16)
     }
 }
 
@@ -411,6 +461,42 @@ struct RebasedTopBar<BranchMenu: View>: View {
         self.branchMenu = branchMenu()
     }
 
+    private func projectInitials(_ name: String) -> String {
+        let parts = name.split { !$0.isLetter && !$0.isNumber }
+        let letters: [Character]
+        if parts.count >= 2 {
+            letters = parts.prefix(2).compactMap(\.first)
+        } else {
+            letters = Array(name.filter { $0.isLetter || $0.isNumber }.prefix(2))
+        }
+        let text = String(letters).uppercased()
+        return text.isEmpty ? "\u{2022}" : text
+    }
+
+    private func projectBadge(_ name: String) -> Image {
+        let initials = projectInitials(name)
+        let size = NSSize(width: 22, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor(calibratedRed: 0.55, green: 0.73, blue: 0.45, alpha: 1).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 9, weight: .semibold),
+                .foregroundColor: NSColor.white,
+            ]
+            let string = initials as NSString
+            let textSize = string.size(withAttributes: attributes)
+            string.draw(
+                at: NSPoint(
+                    x: (rect.width - textSize.width) / 2,
+                    y: (rect.height - textSize.height) / 2
+                ),
+                withAttributes: attributes
+            )
+            return true
+        }
+        return Image(nsImage: image)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Menu {
@@ -425,8 +511,8 @@ struct RebasedTopBar<BranchMenu: View>: View {
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "square.stack.3d.up.fill")
-                        .foregroundStyle(.blue)
+                    projectBadge(projectName)
+                        .accessibilityHidden(true)
                     Text(projectName)
                         .font(Design.Typography.interface(13, weight: .medium))
                         .lineLimit(1)
@@ -481,6 +567,7 @@ struct RebasedTopBar<BranchMenu: View>: View {
                     .frame(width: 28, height: 28)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .foregroundStyle(.secondary)
             .accessibilityLabel("Settings")
             .help("Settings")
@@ -512,18 +599,28 @@ struct RebasedTopBar<BranchMenu: View>: View {
 
 struct RebasedTabButtonStyle: ButtonStyle {
     let isSelected: Bool
+    var tinted = true
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Design.Typography.interface(13))
+            .font(Design.Typography.interface(13, weight: isSelected ? .semibold : .regular))
             .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             .padding(.horizontal, 8)
             .frame(height: 28)
-            .background(isSelected ? Color.primary.opacity(0.06) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 5))
+            .background(
+                isSelected
+                    ? (tinted ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.08))
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 5)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(isSelected ? Color.primary.opacity(0.12) : Color.clear, lineWidth: 1)
+                    .strokeBorder(
+                        isSelected
+                            ? (tinted ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.12))
+                            : Color.clear,
+                        lineWidth: 1
+                    )
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
     }
@@ -600,6 +697,8 @@ struct RebasedChangeGroup: View {
     let statusKind: (FileEntry) -> ChangeKind
     let isChecked: (FileEntry) -> Bool
     let onToggle: (FileEntry, Bool) -> Void
+    var onStagePath: (String) -> Void = { _ in }
+    var onUnstagePath: (String) -> Void = { _ in }
     var onStageWithoutContent: (String) -> Void = { _ in }
     let onSelect: (String) -> Void
     let onPreviewPath: (String) -> Void
@@ -764,21 +863,21 @@ struct RebasedChangeGroup: View {
                     .labelsHidden()
                     .toggleStyle(RebasedCheckboxStyle(
                         labelsHidden: true,
-                        isMixed: entries.contains(where: { $0.staged != .unchanged }) && !entries.allSatisfy(isChecked)
+                        isMixed: entries.contains(where: isChecked) && !entries.allSatisfy(isChecked)
                     ))
-                    .accessibilityLabel("Stage group: \(String(localized: String.LocalizationValue(title)))")
+                    .accessibilityLabel("Include group: \(String(localized: String.LocalizationValue(title)))")
                     .disabled(entries.isEmpty)
                 }
                 Text(LocalizedStringKey(title))
                     .font(Design.Typography.interface(13, weight: title == "Changes" ? .semibold : .regular))
-                Text("\(entries.count) files")
+                Text(entries.count == 1 ? "1 file" : "\(entries.count) files")
                     .font(Design.Typography.interface(12))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
             .frame(height: 24)
             .padding(.horizontal, 4)
-            .background(title == "Changes" ? Color.primary.opacity(0.07) : Color.clear,
+            .background(title == "Changes" ? Design.Colors.selection : Color.clear,
                         in: RoundedRectangle(cornerRadius: 4))
             .padding(.top, 2)
             .onChange(of: expansionCommand) { _, _ in
@@ -864,11 +963,8 @@ struct RebasedChangeGroup: View {
                     set: { onToggle(entry, $0) }
                 ))
                 .labelsHidden()
-                .toggleStyle(RebasedCheckboxStyle(
-                    labelsHidden: true,
-                    isMixed: entry.staged != .unchanged && entry.unstaged != .unchanged
-                ))
-                .accessibilityLabel("Stage \(entry.path)")
+                .toggleStyle(RebasedCheckboxStyle(labelsHidden: true))
+                .accessibilityLabel("Include \(entry.path)")
                 .accessibilityHint(Text(LocalizedStringKey(
                     entry.staged != .unchanged && entry.unstaged != .unchanged ? "Partially staged" : ""
                 )))
@@ -968,7 +1064,7 @@ struct RebasedChangeGroup: View {
                entry.unstaged != .ignored,
                entry.unstaged != .conflicted {
                 Button {
-                    onToggle(entry, true)
+                    onStagePath(entry.path)
                 } label: {
                     Label("Stage", systemImage: "arrow.right.circle")
                 }
@@ -983,7 +1079,7 @@ struct RebasedChangeGroup: View {
             if entry.staged != .unchanged,
                entry.staged != .conflicted {
                 Button {
-                    onToggle(entry, false)
+                    onUnstagePath(entry.path)
                 } label: {
                     Label("Unstage", systemImage: "arrow.left.circle")
                 }
@@ -1121,19 +1217,104 @@ struct RebasedChangeGroup: View {
     }
 }
 
-/// Quiet outlined actions match the reference while retaining native Buttons.
+/// Outlined actions, plus the filled Commit button.
+/// The live reference keeps Commit blue even while the readiness hint is showing.
+/// Rebased's Show Diff mark is a left-pointing arrow stacked above a
+/// right-pointing arrow, not the diagonal expand pair.
+func showDiffIcon() -> Image {
+    let size = NSSize(width: 16, height: 16)
+    let image = NSImage(size: size, flipped: false) { _ in
+        NSColor.black.setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 1.35
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.move(to: NSPoint(x: 13.4, y: 11.4))
+        path.line(to: NSPoint(x: 3.0, y: 11.4))
+        path.move(to: NSPoint(x: 5.6, y: 13.8))
+        path.line(to: NSPoint(x: 2.8, y: 11.4))
+        path.line(to: NSPoint(x: 5.6, y: 9.0))
+        path.move(to: NSPoint(x: 2.6, y: 4.4))
+        path.line(to: NSPoint(x: 13.0, y: 4.4))
+        path.move(to: NSPoint(x: 10.4, y: 6.8))
+        path.line(to: NSPoint(x: 13.2, y: 4.4))
+        path.line(to: NSPoint(x: 10.4, y: 2.0))
+        path.stroke()
+        return true
+    }
+    image.isTemplate = true
+    return Image(nsImage: image)
+}
+
+func eyeMenuIcon() -> Image {
+    let size = NSSize(width: 18, height: 16)
+    let image = NSImage(size: size, flipped: false) { _ in
+        let symbol = NSImage(systemSymbolName: "eye", accessibilityDescription: nil)
+        let configured = symbol?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        )
+        configured?.draw(
+            in: NSRect(x: 0, y: 1.5, width: 15, height: 12),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+        let mark = NSBezierPath()
+        mark.move(to: NSPoint(x: 12.6, y: 4.4))
+        mark.line(to: NSPoint(x: 17.2, y: 0.6))
+        mark.line(to: NSPoint(x: 12.6, y: 0.6))
+        mark.close()
+        NSColor.secondaryLabelColor.setFill()
+        mark.fill()
+        return true
+    }
+    image.isTemplate = false
+    return Image(nsImage: image)
+}
+
+extension View {
+    /// IntelliJ icon menus keep a tiny corner triangle instead of a separate chevron.
+    func rebasedMenuCorner() -> some View {
+        overlay(alignment: .bottomTrailing) {
+            Image(systemName: "arrowtriangle.down.fill")
+                .font(.system(size: 5.5))
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 1)
+                .padding(.bottom, 1)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
 struct RebasedActionButtonStyle: ButtonStyle {
+    var prominent = false
+    var dimsWhenDisabled = true
+    var height: CGFloat = 28
+    var minWidth: CGFloat? = nil
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Design.Typography.interface(13))
+            .font(Design.Typography.interface(13, weight: prominent ? .medium : .regular))
+            .foregroundStyle(prominent ? Color.white : Color.primary)
             .padding(.horizontal, 12)
-            .frame(height: 28)
-            .background(configuration.isPressed ? Color.primary.opacity(0.06) : Color.clear,
+            .frame(minWidth: minWidth)
+            .frame(height: height)
+            .background(background(isPressed: configuration.isPressed),
                         in: RoundedRectangle(cornerRadius: 4))
-            .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 1) }
-            .opacity(isEnabled ? 1 : 0.45)
+            .overlay {
+                if !prominent {
+                    RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 1)
+                }
+            }
+            .opacity(prominent || isEnabled || !dimsWhenDisabled ? 1 : 0.45)
+    }
+
+    private func background(isPressed: Bool) -> Color {
+        if prominent {
+            return Design.Colors.accent.opacity(isPressed ? 0.85 : 1)
+        }
+        return isPressed ? Color.primary.opacity(0.06) : Color.clear
     }
 }
 

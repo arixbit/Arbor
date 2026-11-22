@@ -14,6 +14,8 @@ import SwiftUI
 @MainActor
 final class StashWorkspaceState: ObservableObject {
     @Published var stashes: [StashInfo] = []
+    /// Retain the selected stash while the Project panel opens or closes.
+    @Published var selectedListStashID: String?
 
     // MARK: - 创建 stash
 

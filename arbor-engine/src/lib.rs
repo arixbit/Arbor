@@ -88,10 +88,10 @@ pub use repo::{
     ExternalMergeToolSettings, FileContent, ForcePushedBranchUpdateOutcome, GitCommandResult,
     GitContentTransformMode, GitIdentity, LocalChangesRestoreInfo, LocalChangesSavePolicy,
     PatchApplyMemberResult, PatchApplyResult, PatchApplyStatus, Repository, ResetMode,
-    ResetRecoveryInfo, ResetRecoveryTarget, RevertMainline, RevisionEntry, SshAuthMethod,
-    SshConnectionSettings, SshHostKeyPolicy, StagingFileVersions, StagingVersionContent,
-    SubmoduleAddUndoTarget, SubmoduleChange, SubmoduleInfo, SubmoduleRemoveUndoTarget,
-    SubmoduleState, WorkspaceEntry, WorktreeInfo,
+    ResetRecoveryInfo, ResetRecoveryTarget, RevertMainline, RevisionEntry,
+    SelectedWorktreeCommitOutcome, SshAuthMethod, SshConnectionSettings, SshHostKeyPolicy,
+    StagingFileVersions, StagingVersionContent, SubmoduleAddUndoTarget, SubmoduleChange,
+    SubmoduleInfo, SubmoduleRemoveUndoTarget, SubmoduleState, WorkspaceEntry, WorktreeInfo,
 };
 pub use roots::{
     discover_git_roots, keep_multi_root_reset_recovery, list_multi_root_branches,

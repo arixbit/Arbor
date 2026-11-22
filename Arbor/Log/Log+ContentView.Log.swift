@@ -8,9 +8,23 @@ extension ContentView {
 @ViewBuilder
 var logWorkspace: some View {
     VStack(spacing: 0) {
-        if let diffTab = logSelectionState.fileDiffTab {
-            logFileDiffTabBar(diffTab)
+        if logSelectionState.fileDiffTab != nil || logSelectionState.sourceTabPath != nil {
+            logFileDiffTabBar(logSelectionState.fileDiffTab)
             Divider()
+        }
+        if !showsLogFileDiffTab {
+            // Rebased draws one tab band across the graph and the Changes
+            // browser, with the options mark at the far right beside the bell.
+            logGraphHeader
+            if logSelectionState.tabs.count > 1 {
+                LogTabBar(
+                    tabs: logSelectionState.tabs,
+                    activeID: currentLogTabID,
+                    onSelect: switchLogTab,
+                    onClose: closeLogTab,
+                    onNew: openAnotherLogTab
+                )
+            }
         }
         ZStack {
             // The Log tab keeps its graph, changes browser and selection

@@ -59,6 +59,13 @@ func projectEntryRelativePath(parentRelativePath: String, name: String) -> Strin
     return normalizedRepositoryRelativePath(combined)
 }
 
+func resolvedProjectPath(_ path: String) -> String {
+    let canonical = try? URL(fileURLWithPath: path)
+        .resourceValues(forKeys: [.canonicalPathKey])
+        .canonicalPath
+    return canonical ?? path
+}
+
 func projectEntryDestination(rootPath: String, relativePath: String) -> URL? {
     guard let relative = normalizedRepositoryRelativePath(relativePath) else { return nil }
     let root = URL(fileURLWithPath: rootPath).standardizedFileURL
@@ -104,6 +111,7 @@ func createProjectEntry(
 
 enum ProjectTreeExpansionKind: Equatable {
     case collapseAll
+    case expandAll
     case reveal(String)
     case expandSelected(String)
 }
@@ -121,6 +129,8 @@ func projectTreeDirectoryShouldExpand(
     switch command.kind {
     case .collapseAll:
         return isRoot ? true : false
+    case .expandAll:
+        return true
     case .reveal(let target):
         if isRoot { return true }
         if target == directoryPath || target.hasPrefix(directoryPath + "/") {
@@ -321,6 +331,7 @@ struct ProjectFileTreeStatusIndex: Equatable {
     private struct Aggregate: Equatable {
         var hasConflict = false
         var notable: ChangeKind?
+        var ignored = false
     }
 
     private var exact: [String: Aggregate] = [:]
@@ -331,9 +342,13 @@ struct ProjectFileTreeStatusIndex: Equatable {
             let kinds = [entry.staged, entry.unstaged]
             let hasConflict = kinds.contains(.conflicted)
             let notable = kinds.first { $0 != .unchanged && $0 != .ignored }
-            merge(into: &exact, key: entry.path, hasConflict: hasConflict, notable: notable)
-            merge(into: &subtree, key: entry.path, hasConflict: hasConflict, notable: notable)
-            // Directory rows aggregate every changed descendant.
+            let ignored = kinds.contains(.ignored)
+            let fileNotable = notable ?? (ignored ? ChangeKind.ignored : nil)
+            merge(into: &exact, key: entry.path, hasConflict: hasConflict, notable: fileNotable, ignored: ignored)
+            merge(into: &subtree, key: entry.path, hasConflict: hasConflict, notable: notable, ignored: ignored)
+            // Directory rows aggregate every changed descendant. Ignored is
+            // the weakest colour: a folder stays brown only when nothing
+            // stronger, such as a modification, is inside it.
             var directory = entry.path
             while let slash = directory.lastIndex(of: "/") {
                 directory = String(directory[directory.startIndex..<slash])
@@ -341,7 +356,8 @@ struct ProjectFileTreeStatusIndex: Equatable {
                     into: &subtree,
                     key: directory,
                     hasConflict: hasConflict,
-                    notable: notable
+                    notable: notable,
+                    ignored: ignored
                 )
             }
         }
@@ -351,17 +367,21 @@ struct ProjectFileTreeStatusIndex: Equatable {
         guard let aggregate = isDirectory ? subtree[path] : exact[path] else {
             return nil
         }
-        return aggregate.hasConflict ? .conflicted : aggregate.notable
+        if aggregate.hasConflict { return .conflicted }
+        if let notable = aggregate.notable { return notable }
+        return aggregate.ignored ? .ignored : nil
     }
 
     private func merge(
         into table: inout [String: Aggregate],
         key: String,
         hasConflict: Bool,
-        notable: ChangeKind?
+        notable: ChangeKind?,
+        ignored: Bool = false
     ) {
         var aggregate = table[key] ?? Aggregate()
         aggregate.hasConflict = aggregate.hasConflict || hasConflict
+        aggregate.ignored = aggregate.ignored || ignored
         if aggregate.notable == nil, let notable {
             aggregate.notable = notable
         }
@@ -441,7 +461,37 @@ struct ProjectFileTreeView: View {
                 } else {
                     ScrollViewReader { proxy in
                     List(selection: $selection) {
-                        DisclosureGroup(isExpanded: $rootExpanded) {
+                        Button {
+                            rootExpanded.toggle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: rootExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 12)
+                                Image(systemName: "folder")
+                                    .foregroundStyle(.secondary)
+                                Text(repo.displayName())
+                                    .fontWeight(.semibold)
+                                    .lineLimit(1)
+                                if let workdir = repo.workdir() {
+                                    Text((resolvedProjectPath(workdir) as NSString).abbreviatingWithTildeInPath)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                            }
+                            .font(Design.Typography.interface(12))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(repo.workdir().map(resolvedProjectPath) ?? repo.displayName())
+                        .listRowSeparator(.hidden)
+                        if rootExpanded {
                             ForEach(rootEntries, id: \.path) { entry in
                                 FileTreeNodeView(
                                     repo: repo,
@@ -469,24 +519,7 @@ struct ProjectFileTreeView: View {
                                 )
                                 .listRowSeparator(.hidden)
                             }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "folder")
-                                    .foregroundStyle(.secondary)
-                                Text(repo.displayName())
-                                    .fontWeight(.semibold)
-                                    .lineLimit(1)
-                                if let workdir = repo.workdir() {
-                                    Text((workdir as NSString).abbreviatingWithTildeInPath)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                            }
-                            .font(Design.Typography.interface(12))
-                            .help(repo.workdir() ?? repo.displayName())
                         }
-                        .listRowSeparator(.hidden)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -678,20 +711,44 @@ private struct FileTreeNodeView: View {
 
     private func treeLabel(systemImage: String, name: String, isDirectory: Bool) -> some View {
         let kind = statusKind
+        let showsMark = !isDirectory && (kind == .modified || kind == .added || kind == .deleted)
+        // Rebased keeps ordinary and untracked names black, and paints ignored
+        // names brown. Modified files stay black and carry a coloured mark.
+        let nameColor: Color = {
+            if showsMark { return .primary }
+            if kind == .ignored { return statusColor(kind) ?? .primary }
+            return .primary
+        }()
+        let iconColor: Color = {
+            if kind == .ignored { return statusColor(kind) ?? Design.Colors.secondary }
+            if isDirectory { return Design.Colors.secondary }
+            return repositoryFileIconColor(for: name)
+        }()
         return HStack(spacing: Design.Spacing.sm) {
-            Image(systemName: systemImage)
-                .foregroundStyle(isDirectory ? Design.Colors.secondary : repositoryFileIconColor(for: name))
-                .frame(width: 16)
+            Group {
+                if !isDirectory && isMarkdownFile(name) {
+                    markdownFileIcon()
+                } else {
+                    Image(systemName: systemImage)
+                        .foregroundStyle(iconColor)
+                }
+            }
+            .frame(width: 16)
+            if showsMark, let kind {
+                HStack(spacing: 0) {
+                    Text(ChangeBadge.label(kind))
+                    Image(systemName: statusArrow)
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(statusColor(kind) ?? Design.Colors.info)
+                .accessibilityLabel("Git status: \(ChangeBadge.label(kind))")
+            }
             Text(name)
                 .font(Design.Typography.interface(13))
-                .foregroundStyle(statusColor(kind) ?? .primary)
-                .opacity(name.hasPrefix(".") ? 0.62 : 1)
+                .foregroundStyle(nameColor)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            if !isDirectory, let kind {
-                StatusBadge(kind: kind)
-                    .accessibilityLabel("Git status: \(ChangeBadge.label(kind))")
-            }
         }
         .contextMenu {
             Button("Copy Relative Path") {
@@ -812,6 +869,17 @@ private struct FileTreeNodeView: View {
         statusIndex.kind(path: entry.path, isDirectory: entry.isDir)
     }
 
+    /// Rebased puts a down arrow on worktree changes and an up arrow on index-only changes.
+    private var statusArrow: String {
+        guard let file = entries.first(where: { $0.path == entry.path }) else {
+            return "arrow.down"
+        }
+        let staged = file.staged != .unchanged && file.staged != .ignored
+        let unstaged = file.unstaged != .unchanged && file.unstaged != .ignored
+        if staged && !unstaged { return "arrow.up" }
+        return "arrow.down"
+    }
+
     private func statusColor(_ kind: ChangeKind?) -> Color? {
         switch kind {
         case .added, .untracked:
@@ -824,6 +892,8 @@ private struct FileTreeNodeView: View {
             return Design.Colors.keyword
         case .conflicted:
             return .red
+        case .ignored:
+            return Color(red: 0.58, green: 0.40, blue: 0.16)
         default:
             return nil
         }
@@ -1011,9 +1081,41 @@ func repositoryFileIconColor(for path: String) -> Color {
     (path as NSString).pathExtension.lowercased() == "swift" ? .red : .secondary
 }
 
+func isMarkdownFile(_ path: String) -> Bool {
+    let ext = (path as NSString).pathExtension.lowercased()
+    return ext == "md" || ext == "rst"
+}
+
+/// Rebased draws Markdown files as a blue M with a small arrow, not a document.
+func markdownFileIcon() -> Image {
+    let size = NSSize(width: 16, height: 16)
+    let image = NSImage(size: size, flipped: false) { _ in
+        let color = NSColor(calibratedRed: 0.27, green: 0.45, blue: 0.91, alpha: 1)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .bold),
+            .foregroundColor: color,
+        ]
+        ("M" as NSString).draw(at: NSPoint(x: 0.5, y: 2), withAttributes: attributes)
+        let arrow = NSBezierPath()
+        arrow.lineWidth = 1.15
+        arrow.lineCapStyle = .round
+        arrow.lineJoinStyle = .round
+        color.setStroke()
+        arrow.move(to: NSPoint(x: 12.2, y: 10))
+        arrow.line(to: NSPoint(x: 12.2, y: 3.2))
+        arrow.move(to: NSPoint(x: 9.8, y: 5.6))
+        arrow.line(to: NSPoint(x: 12.2, y: 3.2))
+        arrow.line(to: NSPoint(x: 14.6, y: 5.6))
+        arrow.stroke()
+        return true
+    }
+    image.isTemplate = false
+    return Image(nsImage: image)
+}
+
 func repositoryFileSymbol(for path: String) -> String {
     let name = (path as NSString).lastPathComponent
-    if name == ".gitignore" { return "slash.circle" }
+    if name == ".gitignore" { return "nosign" }
     switch (name as NSString).pathExtension.lowercased() {
     case "swift": return "swift"
     case "rs", "py", "js", "ts", "tsx", "jsx", "c", "h", "cpp", "cc", "java", "go":

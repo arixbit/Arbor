@@ -44,13 +44,17 @@ final class ProjectFileTreeStatusIndexTests: XCTestCase {
         XCTAssertNil(index.kind(path: "Docs", isDirectory: true))
     }
 
-    func testIgnoredAndUnchangedEntriesDoNotColourARow() {
+    func testIgnoredDirectoryIsColouredWhileUnchangedFilesStayPlain() {
         let index = ProjectFileTreeStatusIndex(entries: [
             entry("build", staged: .ignored, unstaged: .ignored),
+            entry("src/App.swift", unstaged: .modified),
+            entry("src/debug.log", unstaged: .ignored),
             entry("README.md", unstaged: .unchanged),
         ])
 
-        XCTAssertNil(index.kind(path: "build", isDirectory: true))
+        XCTAssertEqual(index.kind(path: "build", isDirectory: true), .ignored)
+        XCTAssertEqual(index.kind(path: "src/debug.log", isDirectory: false), .ignored)
+        XCTAssertEqual(index.kind(path: "src", isDirectory: true), .modified)
         XCTAssertNil(index.kind(path: "README.md", isDirectory: false))
     }
 
