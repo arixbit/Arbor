@@ -36,6 +36,9 @@ decrementarrow	—	712,152 0×0 [Disabled]
 button	—	720,422 6×106 [Disabled]
 button	—	720,154 6×0 [Disabled]
 menubutton	Actions	402,548 81×22
+button	Hide	530,62 11×2
+scrollbar	—	526,432 19×32 [Disabled]
+button	Show Commit Options	531,486 14×14
 button	Show Branches	587,94 6×10
 image	Filter commits	612,94 11×11
 statictext	—	647,254 84×16
