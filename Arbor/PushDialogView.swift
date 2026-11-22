@@ -473,6 +473,7 @@ struct PushDialogView: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("\(commit.shortId) \(commit.summary)")
                         }
                     }
                     .padding(8)

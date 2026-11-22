@@ -562,6 +562,7 @@ struct ProjectFileTreeView: View {
             rootExpanded = true
             if let repo { loadRoot(repo) }
         }
+        .accessibilityIdentifier("project-file-tree")
     }
 
     private func scrollRevealedFile(using proxy: ScrollViewProxy) {
@@ -690,6 +691,8 @@ private struct FileTreeNodeView: View {
             }
             .buttonStyle(.plain)
             .id(entry.path)
+            .accessibilityIdentifier(entry.name)
+            .accessibilityLabel(entry.name)
             .listRowSeparator(.hidden)
             .listRowBackground(selection == entry.path ? Design.Colors.selection : .clear)
         }

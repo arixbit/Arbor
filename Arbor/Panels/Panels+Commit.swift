@@ -1728,6 +1728,14 @@ struct RebasedCommitWorkspace: View {
                 guard let stash = selectedStashForActions else { return }
                 onOpenStashFileDiff(stash.id, row.path)
             }
+            // UI automation delivers a double click as one AppKit event.
+            // SwiftUI's timed double-tap can miss it, so honor clickCount too.
+            .simultaneousGesture(TapGesture().onEnded {
+                guard NSApp.currentEvent?.clickCount == 2,
+                      let stash = selectedStashForActions else { return }
+                selectedStashFilePath = row.path
+                onOpenStashFileDiff(stash.id, row.path)
+            })
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(stashChangeKinds[row.path].map {
                 "\(stashChangeDescription($0)) \(row.name)"

@@ -544,15 +544,19 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try git("commit", "-m", "Journey pick me")
         try git("switch", "main")
         launch(log: true)
-        let source = session.window.staticTexts["Journey pick me"].firstMatch
-        XCTAssertTrue(source.waitForExistence(timeout: 10))
-        source.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
+        XCTAssertTrue(session.selectLogCommit(containing: "Journey pick me"))
+        let source = session.window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Journey pick me")
+        ).firstMatch
+        source.rightClick()
         click(session.app.menuItems["Cherry-pick"].firstMatch)
         try eventually("cherry-pick") { try self.git("log", "-1", "--format=%s") == "Journey pick me" }
         XCTAssertEqual(try git("rev-parse", "HEAD^"), initial)
         XCTAssertEqual(try String(contentsOf: repo.appendingPathComponent("picked.txt"), encoding: .utf8), "picked content\n")
         // Inspect the selected historical commit before reversing it.
-        click(session.window.staticTexts["Journey pick me"].firstMatch)
+        click(session.window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Journey pick me")
+        ).firstMatch)
         // A narrow window shows the compact log, which keeps the commit
         // inspector closed until asked for it.
         let details = session.window.descendants(matching: .any)["log-open-inspector"].firstMatch
@@ -572,7 +576,9 @@ final class ArborUIUserFlowUITests: XCTestCase {
         // different one; return to the Log before opening the row menu.
         let closeInspector = session.window.descendants(matching: .any)["log-close-inspector"].firstMatch
         if closeInspector.exists { click(closeInspector) }
-        session.window.staticTexts["Journey pick me"].firstMatch
+        session.window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Journey pick me")
+        ).firstMatch
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
         click(session.app.menuItems["Revert Commit"].firstMatch)
         click(session.app.buttons["Revert"].firstMatch)

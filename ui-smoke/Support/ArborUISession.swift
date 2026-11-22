@@ -198,6 +198,13 @@ final class ArborUISession {
         if initialToolWindow == "log" {
             args.append("--log")
         }
+        // The Git add/remove confirmation policies persist in the user's
+        // defaults. A UI journey must not inherit "ask" and block on a
+        // dialog that the test did not open.
+        args.append(contentsOf: [
+            "-arbor.git.vfsListener.addAction.v1", "ignore",
+            "-arbor.git.vfsListener.removeAction.v1", "ignore",
+        ])
         args.append(contentsOf: extraLaunchArguments)
         // Force the interface language so accessibility labels are stable.
         args.append(contentsOf: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
@@ -674,23 +681,40 @@ extension ArborUISession {
         }
     }
 
+    /// The current activity rail. Commit and Git stay visible; Log and the
+    /// Operation Log are reachable from More tool windows.
+    func activityRailButton(_ identifier: String) -> XCUIElement? {
+        switch identifier {
+        case "list.bullet.rectangle":
+            return railButton("terminal")
+        case "clock":
+            return railButton("arrow.triangle.branch")
+        default:
+            return railButton(identifier)
+        }
+    }
+
     @discardableResult
     func openProjectTree() -> Bool {
+        // Log keeps Project open. The rail button toggles, so clicking it
+        // again would hide the tree the test is about to use.
+        let tree = window.descendants(matching: .any)["project-file-tree"].firstMatch
+        if tree.exists { return waitForStableState(timeout: 5) }
         guard let button = railButton("folder") else { return false }
         button.click()
-        return waitForStableState(timeout: 15)
+        return tree.waitForExistence(timeout: 15) && waitForStableState(timeout: 15)
     }
 
     @discardableResult
     func openOperations() -> Bool {
-        guard let button = railButton("list.bullet.rectangle") else { return false }
+        guard let button = activityRailButton("list.bullet.rectangle") else { return false }
         button.click()
         return waitForStableState(timeout: 15)
     }
 
     @discardableResult
     func openLog() -> Bool {
-        guard let button = railButton("clock") else { return false }
+        guard let button = activityRailButton("clock") else { return false }
         button.click()
         return waitForStableState(timeout: 15)
     }
@@ -710,6 +734,20 @@ extension ArborUISession {
             || app.descendants(matching: .any)["branches-popover-search"].firstMatch.exists
     }
 
+    /// Select a Log row through its dedicated full-row button. Clicking the
+    /// commit message text can miss that button when the graph row is layered.
+    @discardableResult
+    func selectLogCommit(containing message: String, timeout: TimeInterval = 15) -> Bool {
+        // The row button carries both the hash and the subject. The subject
+        // text underneath is not a separate accessibility element.
+        let commit = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", message)
+        ).firstMatch
+        guard commit.waitForExistence(timeout: timeout) else { return false }
+        commit.click()
+        return true
+    }
+
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
@@ -717,19 +755,17 @@ extension ArborUISession {
         if isBranchesPopoverOpen { return waitForStableState(timeout: 15) }
         // Repository loading can finish after the window becomes stable.
         // Wait for its branch chip before searching the candidate buttons.
-        let chip = window.buttons.matching(NSPredicate(format: "label == %@", branch)).firstMatch
-        guard chip.waitForExistence(timeout: 15) else { return false }
-        // The status bar may repeat the branch name. Try matches top-down.
-        let candidates = window.buttons
-            .matching(NSPredicate(format: "label == %@", branch))
-            .allElementsBoundByIndex
-            .sorted { $0.frame.minY < $1.frame.minY }
-        for chip in candidates where chip.exists && chip.isHittable {
-            chip.click()
-            let search = app.descendants(matching: .any)["branches-popover-search"].firstMatch
-            if branchesPopoverContent.waitForExistence(timeout: 3) || search.exists {
-                return waitForStableState(timeout: 15)
-            }
+        let chip = window.descendants(matching: .button)["current-branch"].firstMatch
+        guard chip.waitForExistence(timeout: 15),
+              chip.label == branch || chip.label.hasPrefix("\(branch),")
+                || chip.label.hasPrefix("\(branch)、") else {
+            return false
+        }
+        guard chip.isHittable else { return false }
+        chip.click()
+        let search = app.descendants(matching: .any)["branches-popover-search"].firstMatch
+        if branchesPopoverContent.waitForExistence(timeout: 3) || search.exists {
+            return waitForStableState(timeout: 15)
         }
         recordScreenshot(named: "branches-popover-missing")
         return false

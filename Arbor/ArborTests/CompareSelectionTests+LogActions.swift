@@ -384,14 +384,22 @@ extension CompareSelectionTests {
         let suite = "Arbor.LogSelectionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertNil(persistedLogRowSelection(rootPath: "/tmp/visual-fixture", defaults: defaults))
-        storePersistedLogRowSelection("aaad847", rootPath: "/tmp/visual-fixture", defaults: defaults)
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("arbor-log-selection-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rootPath = root.path
+        let linkedPath = rootPath.hasPrefix("/private/tmp/")
+            ? "/tmp/" + rootPath.dropFirst("/private/tmp/".count)
+            : "/private" + rootPath
+        XCTAssertNil(persistedLogRowSelection(rootPath: linkedPath, defaults: defaults))
+        storePersistedLogRowSelection("aaad847", rootPath: linkedPath, defaults: defaults)
         XCTAssertEqual(
-            persistedLogRowSelection(rootPath: "/private/tmp/visual-fixture", defaults: defaults),
+            persistedLogRowSelection(rootPath: rootPath, defaults: defaults),
             "aaad847"
         )
-        storePersistedLogRowSelection(nil, rootPath: "/private/tmp/visual-fixture", defaults: defaults)
-        XCTAssertNil(persistedLogRowSelection(rootPath: "/tmp/visual-fixture", defaults: defaults))
+        storePersistedLogRowSelection(nil, rootPath: rootPath, defaults: defaults)
+        XCTAssertNil(persistedLogRowSelection(rootPath: linkedPath, defaults: defaults))
     }
 
     func testLogCommandMergeKeepsEqualObjectIDsRootQualified() {

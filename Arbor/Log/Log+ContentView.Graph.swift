@@ -599,6 +599,7 @@ VStack(spacing: 0) {
                 }
                 .menuStyle(.borderlessButton)
                 .help("Compare actions")
+                .accessibilityLabel("Compare actions")
             }
             .padding(.horizontal, 8)
             HStack(spacing: 8) {

@@ -121,9 +121,34 @@ func matchingLogCommitID(
 }
 
 func persistedLogRowSelectionKey(rootPath: String) -> String {
-    let url = URL(fileURLWithPath: canonicalExternalLogPath(rootPath))
-    let canonical = (try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath) ?? url.path
-    return "arbor.log.selectedCommit." + canonical
+    "arbor.log.selectedCommit." + canonicalPersistedPath(rootPath)
+}
+
+/// Collapse `/tmp` and `/private/tmp` to one key. `canonicalPath` only works
+/// for an existing path, so resolve the nearest existing ancestor and append
+/// the remaining components when the repository has not been created yet.
+func canonicalPersistedPath(_ path: String) -> String {
+    let url = URL(fileURLWithPath: canonicalExternalLogPath(path))
+    if let canonical = try? url.resourceValues(forKeys: [.canonicalPathKey]).canonicalPath {
+        return canonical
+    }
+    var missing: [String] = []
+    var current = url
+    while current.path != "/" {
+        var isDirectory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: current.path, isDirectory: &isDirectory)
+        if exists && isDirectory.boolValue { break }
+        missing.append(current.lastPathComponent)
+        current.deleteLastPathComponent()
+    }
+    // macOS reports `/tmp` as the standardized form of `/private/tmp`, while
+    // the filesystem link itself points the other way. Persist the link
+    // destination so both spellings use one key.
+    let standardized = (current.path as NSString).standardizingPath
+    let resolved = standardized == "/tmp" ? "/private/tmp" : standardized
+    return missing.reversed().reduce(URL(fileURLWithPath: resolved)) {
+        $0.appendingPathComponent($1)
+    }.path
 }
 
 func persistedLogRowSelection(rootPath: String, defaults: UserDefaults = .standard) -> String? {

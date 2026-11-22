@@ -552,7 +552,7 @@ struct LogGraphView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Select commit \(commit.shortId)")
+            .accessibilityLabel("Select commit \(commit.shortId) \(commit.summary)")
             // Announce the row as selected: VoiceOver users need the current
             // commit, and automation needs to tell "already selected" apart
             // from "clicked and nothing happened".

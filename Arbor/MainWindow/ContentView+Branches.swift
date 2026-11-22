@@ -100,6 +100,8 @@ extension ContentView {
         .buttonStyle(.borderless)
         .disabled(repo == nil)
         .help("Branches: checkout / pull / push / fetch / merge / rebase / stash")
+        .accessibilityLabel(currentBranchName)
+        .accessibilityIdentifier("current-branch")
         // 弹出面板自带搜索、对比、标签、贮藏和工作树，换成 Menu 装不下，所以保留
         // popover；但它必须明确告诉辅助技术这是「打开一个列表」，而不是普通按钮。
         .accessibilityHint("Opens the branches list")

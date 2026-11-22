@@ -46,15 +46,17 @@ final class ArborUISmokeUITests: XCTestCase {
             let types: [XCUIElement.ElementType] = [
                 .button, .menuButton, .checkBox, .textField, .popUpButton, .radioButton,
             ]
+            let observationRoot = surface == "settings" ? (session.observationRoot ?? session.app) : session.window
             for type in types {
-                for element in session.app.descendants(matching: type).allElementsBoundByIndex {
+                for element in observationRoot.descendants(matching: type).allElementsBoundByIndex {
                     let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
                     let title = element.title.trimmingCharacters(in: .whitespacesAndNewlines)
                     // macOS 上菜单按钮常常只有 title 没有 label，两者都算「有名字」。
                     guard label.isEmpty, title.isEmpty else { continue }
-                    // 窗口按钮（关闭/最小化/全屏）和分隔条手柄由系统提供，没有名字是正常的。
+                    // 窗口按钮（关闭/最小化/全屏）、分隔条手柄和系统滚动条没有名字是正常的。
                     if element.identifier.hasPrefix("_XCUI:") { continue }
                     if element.frame.height < 8 || element.frame.width < 8 { continue }
+                    if isSystemScrollChrome(element) { continue }
                     let frame = element.frame
                     offenders.append(String(
                         format: "%@/%@ at %.0f,%.0f %.0fx%.0f",
@@ -125,6 +127,7 @@ final class ArborUISmokeUITests: XCTestCase {
                     guard label.isEmpty, title.isEmpty else { continue }
                     if element.identifier.hasPrefix("_XCUI:") { continue }
                     if element.frame.height < 8 || element.frame.width < 8 { continue }
+                    if isSystemScrollChrome(element) { continue }
                     offenders.append("\(surface)/\(element.identifier.isEmpty ? "«no identifier»" : element.identifier)")
                 }
             }
@@ -142,6 +145,8 @@ final class ArborUISmokeUITests: XCTestCase {
             let session = ArborUISession(fixture: fixture, toolWindow: "commit")
             session.launch()
             defer { session.terminate() }
+            // A previous launch can persist the Commit tool window as collapsed.
+            session.activityRailButton("slider.horizontal.3")?.click()
             let stashTab = session.window.buttons["Stash"].firstMatch
             XCTAssertTrue(stashTab.waitForExistence(timeout: 10), "the commit panel has no Stash tab")
             stashTab.click()
@@ -174,12 +179,13 @@ final class ArborUISmokeUITests: XCTestCase {
 
         var offenders: [String] = []
         for type in [XCUIElement.ElementType.button, .menuButton, .checkBox, .textField, .popUpButton] {
-            for element in session.app.descendants(matching: type).allElementsBoundByIndex {
+            for element in sheet.descendants(matching: type).allElementsBoundByIndex {
                 let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
                 let title = element.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard label.isEmpty, title.isEmpty else { continue }
                 if element.identifier.hasPrefix("_XCUI:") { continue }
                 if element.frame.height < 8 || element.frame.width < 8 { continue }
+                if isSystemScrollChrome(element) { continue }
                 offenders.append("\(element.identifier.isEmpty ? "«no identifier»" : element.identifier)")
             }
         }
@@ -615,9 +621,10 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
 
-        let commit = session.window.staticTexts["Fix beta behaviour"].firstMatch
-        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the fixture commits")
-        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.selectLogCommit(containing: "Fix beta behaviour"),
+            "the Log did not list the fixture commits"
+        )
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
         XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
@@ -702,9 +709,10 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
 
-        let commit = session.window.staticTexts["Revise the fixture guide"].firstMatch
-        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the revised guide commit")
-        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.selectLogCommit(containing: "Revise the fixture guide"),
+            "the Log did not list the revised guide commit"
+        )
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
         XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
@@ -769,9 +777,10 @@ final class ArborUISmokeContractUITests: XCTestCase {
         session.launch()
         defer { session.terminate() }
 
-        let commit = session.window.staticTexts["Fix beta behaviour"].firstMatch
-        XCTAssertTrue(commit.waitForExistence(timeout: 15), "the Log did not list the fixture commits")
-        commit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            session.selectLogCommit(containing: "Fix beta behaviour"),
+            "the Log did not list the fixture commits"
+        )
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
         XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
@@ -860,7 +869,7 @@ final class ArborUISmokeNavigationUITests: XCTestCase {
 
         for identifier in ["list.bullet.rectangle", "folder", "clock"] {
             let before = session.screenState()
-            guard let button = session.railButton(identifier) else {
+            guard let button = session.activityRailButton(identifier) else {
                 XCTFail("the activity rail has no \(identifier) button")
                 continue
             }
@@ -904,7 +913,9 @@ final class ArborUISmokeProjectTreeUITests: XCTestCase {
 
         XCTAssertTrue(session.openProjectTree(), "the project tree did not open")
 
-        let row = session.window.buttons["README.md"].firstMatch
+        let row = session.window.descendants(matching: .button)
+            .matching(NSPredicate(format: "identifier == %@ OR label == %@", "README.md", "README.md"))
+            .firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10), "the project tree does not list README.md")
         row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
 
@@ -1161,4 +1172,11 @@ final class ArborUIConflictUITests: XCTestCase {
         )
         session.recordScreenshot(named: "conflict-resolver")
     }
+}
+
+/// AppKit overlay scrollers, legacy scroll arrows and the scroll corner are
+/// unnamed and at most 16pt on their short side. Toolbar icons start at 18pt.
+private func isSystemScrollChrome(_ element: XCUIElement) -> Bool {
+    let frame = element.frame
+    return min(frame.width, frame.height) <= 16
 }
