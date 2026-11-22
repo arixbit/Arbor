@@ -2,7 +2,7 @@
 
 ## V1 scope
 
-The V1 release line is `1.0.x`; the current patch release is `1.0.38`. The
+The V1 release line is `1.0.x`; the current patch release is `1.0.39`. The
 local release script builds the Rust engine,
 runs the Rust and Swift test suites, creates an arm64 macOS archive, packages
 an app DMG and ZIP, signs the ZIP for Sparkle, and writes `appcast.xml` and
@@ -11,7 +11,7 @@ UniFFI bindings before invoking Xcode, so the command also works from a clean
 clone.
 
 ```sh
-ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.38
+ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.39
 ```
 
 Unsigned artifacts are named `Arbor-VERSION-unsigned-arm64.dmg` and
@@ -48,7 +48,7 @@ ZIP still build, sign with an ad-hoc identity and install normally — only
 artifacts on a machine without the key:
 
 ```sh
-ARBOR_SKIP_TESTS=1 ARBOR_SKIP_APPCAST=1 ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.38
+ARBOR_SKIP_TESTS=1 ARBOR_SKIP_APPCAST=1 ARBOR_UNSIGNED=1 ./scripts/release.sh 1.0.39
 ```
 
 That names the artifacts `Arbor-VERSION-unsigned-arm64.*` and writes
@@ -61,11 +61,11 @@ so a tag build produces the feed without any local setup.
 For a fresh checkout without the release signing key, run:
 
 ```sh
-./scripts/release.sh VERSION --local   # e.g. 1.0.36
+./scripts/release.sh VERSION --local   # e.g. 1.0.39
 ```
 
 This runs the Rust and Swift suites and creates an ad-hoc-signed DMG and ZIP
-plus `SHA256SUMS` under `build/releases/1.0.28-local/`. The filenames include
+plus `SHA256SUMS` under `build/releases/VERSION-local/`. The filenames include
 `local` and no `appcast.xml` is generated. The app retains the supplied version;
 the checked-in version is unchanged. These packages are for manual testing,
 not the public update channel. Existing public release artifacts are kept in
@@ -166,7 +166,7 @@ release containing Sparkle once; later releases can be installed in the app.
 
 ## Public unsigned release checklist
 
-The split between the two workflows: `ci-test.yml` runs the full Rust and
+The split between the two workflows: `ci.yml` runs the full Rust and
 Swift suites on every main push, while `release.yml` packages a tagged commit
 with `ARBOR_SKIP_TESTS=1` (tests already ran) plus a shared Rust cache. Run
 `./scripts/release.sh VERSION` locally without the flag when you want the

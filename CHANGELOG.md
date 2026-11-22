@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.39 - 2026-11-22
+
+The Git workbench follows Rebased more closely, and committing selected files keeps staged changes intact.
+
+- Commit checkboxes choose the worktree changes to include without staging them. Stage and Unstage still modify the Git index explicitly. **Commit Staged Changes** preserves partially staged files.
+- The Log, Commit, Changes, Project, branch strip, and status bar put their daily actions closer to the reference workbench. Log selection remains stable when switching panels, and Follow current branch is available.
+- Stash files open a dedicated diff tab on double-click. **Jump to Source** opens the worktree file while preserving the diff tab; switching and closing either tab leaves the other available. Long lines scroll without wrapping by default, with **Use Soft Wraps** in Diff Settings.
+- Stash diffs include files saved with `git stash -u`. Stash selection survives toggling Project, and **Clear** asks for confirmation before removing entries. Paths containing whitespace and control characters remain intact in the stash file list.
+- Selecting many files for one commit passes paths to Git through a file, so the command does not run out of argument space.
+
 ## 1.0.38 - 2026-11-11
 
 The main window follows the Rebased 1.1.13 workbench: where a control sits, not how it is painted.
