@@ -237,8 +237,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         defer { session.terminate() }
 
         XCTAssertTrue(session.selectLogCommit(containing: "Revise the fixture guide"))
+        XCTAssertTrue(session.revealLogChanges())
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
-        XCTAssertTrue(changesTree.waitForExistence(timeout: 10))
         let file = changesTree.staticTexts["Guide.md"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10))
         file.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
@@ -288,8 +288,8 @@ final class ArborUIVisualCaptureUITests: XCTestCase {
         defer { session.terminate() }
 
         XCTAssertTrue(session.selectLogCommit(containing: "Revise the fixture guide"))
+        XCTAssertTrue(session.revealLogChanges())
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
-        XCTAssertTrue(changesTree.waitForExistence(timeout: 10))
         let file = changesTree.staticTexts["Guide.md"].firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10))
         file.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()

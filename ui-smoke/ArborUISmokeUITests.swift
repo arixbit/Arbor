@@ -625,9 +625,9 @@ final class ArborUISmokeContractUITests: XCTestCase {
             session.selectLogCommit(containing: "Fix beta behaviour"),
             "the Log did not list the fixture commits"
         )
+        XCTAssertTrue(session.revealLogChanges(), "the commit's changes browser did not load")
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
-        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
         let changedFile = changesTree.staticTexts["Fix.swift"].firstMatch
         XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the commit's changed files did not load")
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
@@ -713,9 +713,9 @@ final class ArborUISmokeContractUITests: XCTestCase {
             session.selectLogCommit(containing: "Revise the fixture guide"),
             "the Log did not list the revised guide commit"
         )
+        XCTAssertTrue(session.revealLogChanges(), "the commit's changes browser did not load")
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
-        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
         let changedFile = changesTree.staticTexts["Guide.md"].firstMatch
         XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the changed guide file did not load")
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
@@ -781,9 +781,9 @@ final class ArborUISmokeContractUITests: XCTestCase {
             session.selectLogCommit(containing: "Fix beta behaviour"),
             "the Log did not list the fixture commits"
         )
+        XCTAssertTrue(session.revealLogChanges(), "the commit's changes browser did not load")
 
         let changesTree = session.window.descendants(matching: .any)["log-changes-tree"].firstMatch
-        XCTAssertTrue(changesTree.waitForExistence(timeout: 10), "the commit's changes browser did not load")
         let changedFile = changesTree.staticTexts["Fix.swift"].firstMatch
         XCTAssertTrue(changedFile.waitForExistence(timeout: 10), "the commit's changed files did not load")
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()

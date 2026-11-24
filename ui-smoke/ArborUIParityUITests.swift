@@ -94,10 +94,9 @@ final class ArborUIParityUITests: XCTestCase {
 
     @MainActor
     func testDumpArborTrees() throws {
-        try XCTSkipUnless(
-            NSScreen.main?.visibleFrame.width ?? 0 >= Self.targetSize.width,
-            "the runner display cannot host the comparison layout"
-        )
+        // A narrower CI display cannot host the 1642pt baseline. Still dump:
+        // the window is clamped to the visible frame, and the snapshot check
+        // compares structure only when the canvas size differs.
         let fixture = try ArborUIFixture.create()
         addTeardownBlock { try? FileManager.default.removeItem(at: fixture) }
 

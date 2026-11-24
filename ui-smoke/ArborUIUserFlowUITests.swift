@@ -806,17 +806,19 @@ final class ArborUIUserFlowUITests: XCTestCase {
         try prepare()
         launch(language: "zh-Hans")
         menu("Pull…")
-        let pull = session.app.buttons["Pull"].firstMatch
+        let pullSheet = session.window.sheets.firstMatch
+        XCTAssertTrue(pullSheet.waitForExistence(timeout: 10), "Pull did not open a dialog")
+        let pull = pullSheet.buttons["Pull"].firstMatch
         XCTAssertTrue(pull.waitForExistence(timeout: 10))
-        XCTAssertTrue(session.app.staticTexts["默认"].firstMatch.waitForExistence(timeout: 5))
-        let modify = session.app.descendants(matching: .any)["修改…"].firstMatch
+        XCTAssertTrue(pullSheet.staticTexts["默认"].firstMatch.waitForExistence(timeout: 5))
+        let modify = pullSheet.descendants(matching: .any)["修改…"].firstMatch
         XCTAssertTrue(modify.waitForExistence(timeout: 5))
         click(modify)
         XCTAssertTrue(session.app.menuItems["仅 fast-forward"].firstMatch.waitForExistence(timeout: 5))
         session.recordScreenshot(named: "pull-options-zh-Hans")
         session.app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
-        click(session.app.buttons["取消"].firstMatch)
-        XCTAssertFalse(pull.exists)
+        click(pullSheet.buttons["取消"].firstMatch)
+        XCTAssertTrue(pullSheet.waitForNonExistence(timeout: 10), "Pull sheet did not close")
 
         menu("Push…")
         let pushSheet = session.window.sheets.firstMatch

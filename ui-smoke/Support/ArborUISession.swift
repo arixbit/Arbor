@@ -748,6 +748,19 @@ extension ArborUISession {
         return true
     }
 
+    /// A narrow window keeps the Changes list behind the commit inspector.
+    /// Wide windows already show it, so this only opens the inspector when needed.
+    @discardableResult
+    func revealLogChanges(timeout: TimeInterval = 10) -> Bool {
+        let tree = window.descendants(matching: .any)["log-changes-tree"].firstMatch
+        if tree.exists { return true }
+        let open = window.descendants(matching: .any)["log-open-inspector"].firstMatch
+        if open.waitForExistence(timeout: 3), open.isHittable {
+            open.click()
+        }
+        return tree.waitForExistence(timeout: timeout)
+    }
+
     /// The current-branch chip in the header opens the branches popover.
     @discardableResult
     func openBranchesPopover(branch: String = "main") -> Bool {
