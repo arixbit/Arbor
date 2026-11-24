@@ -2,6 +2,19 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+/// Tracked paths that actually changed. Staging and the include checkbox do not
+/// change the number. Untracked, ignored, and conflicted paths are not "modified".
+func trackedModifiedCount(_ entries: [FileEntry]) -> Int {
+    var paths = Set<String>()
+    paths.reserveCapacity(entries.count)
+    for entry in entries {
+        if entry.staged == .conflicted || entry.unstaged == .conflicted { continue }
+        if entry.unstaged == .untracked || entry.unstaged == .ignored { continue }
+        if entry.staged == .unchanged && entry.unstaged == .unchanged { continue }
+        paths.insert(entry.path)
+    }
+    return paths.count
+}
 
 struct RebasedCommitWorkspace: View {
     let projectPath: String?
@@ -277,7 +290,51 @@ struct RebasedCommitWorkspace: View {
     }
 
     var modifiedCount: Int {
-        includedCommitEntries.filter { $0.unstaged != .untracked }.count
+        trackedModifiedCount(entries)
+    }
+
+    var hasIncludableChanges: Bool {
+        entries.contains { entry in
+            if entry.staged == .conflicted || entry.unstaged == .conflicted { return false }
+            if entry.unstaged == .ignored { return false }
+            return entry.staged != .unchanged || entry.unstaged != .unchanged
+        }
+    }
+
+    /// The one reason Commit cannot run. Empty when the button is ready.
+    func commitActionHelp(commitAndPush: Bool) -> String? {
+        let messageEmpty = commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let nothingIncluded = includedCommitEntries.isEmpty
+        let operationBlocksCommit = operationState != nil && (!canAmendPausedRebase || !amendMode)
+        if commitAndPush {
+            guard repo != nil else { return nil }
+            if operationState != nil { return String(localized: "Finish the Git operation first") }
+            if amendMode { return String(localized: "Turn off Amend to commit and push") }
+            if messageEmpty { return String(localized: "Write a commit message") }
+            if nothingIncluded { return String(localized: "Check the files to include") }
+            return String(localized: "Commit the included files and push")
+        }
+        let disabled = repo == nil
+            || messageEmpty
+            || (nothingIncluded && !amendMode)
+            || operationBlocksCommit
+        guard repo != nil else { return nil }
+        if !disabled {
+            return String(localized: amendMode ? "Amend the last commit" : "Commit the included files")
+        }
+        if operationBlocksCommit { return String(localized: "Finish the Git operation first") }
+        if messageEmpty { return String(localized: "Write a commit message") }
+        if nothingIncluded && !amendMode { return String(localized: "Check the files to include") }
+        return nil
+    }
+
+    /// Shown only after a message is written and nothing is included. The empty
+    /// field already asks for a message; this is the case the placeholder cannot explain.
+    var showsIncludeHint: Bool {
+        guard repo != nil, !amendMode, hasIncludableChanges else { return false }
+        if operationState != nil && !canAmendPausedRebase { return false }
+        let messageEmpty = commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return !messageEmpty && includedCommitEntries.isEmpty
     }
 
     var ignoredEntries: [FileEntry] {
@@ -478,6 +535,7 @@ struct RebasedCommitWorkspace: View {
                     onOpenConflictResolver: onOpenConflictResolver,
                     onOpenConflict: onOpenConflict
                 )
+                .transition(.arborReveal)
             }
 
             if tab == .commit {
@@ -486,6 +544,7 @@ struct RebasedCommitWorkspace: View {
                 stashContent
             }
         }
+        .arborMotion(.reveal, value: operationState != nil)
         .background(rebasedBackground)
         .foregroundStyle(.primary)
         .onAppear {
@@ -780,7 +839,16 @@ struct RebasedCommitWorkspace: View {
                 // staging-mode Git.Stage.Toolbar: Refresh, Rollback, Show
                 // Diff, Shelve Silently, View Options, Select Opened File,
                 // then Expand / Collapse as one cluster.
-                compactButton("arrow.triangle.2.circlepath", help: "Refresh", action: onRefresh)
+                compactButton(
+                    "arrow.triangle.2.circlepath",
+                    help: isLoading
+                        ? String(localized: "Loading changes")
+                        : (isShowingCachedStatusSnapshot
+                            ? String(localized: "Refreshing cached changes")
+                            : String(localized: "Refresh")),
+                    busy: isLoading || isShowingCachedStatusSnapshot,
+                    action: onRefresh
+                )
                 compactButton("arrow.uturn.backward", help: "Rollback…", action: {
                     onRollbackPaths(rollbackPaths)
                 })
@@ -871,14 +939,6 @@ struct RebasedCommitWorkspace: View {
                     treeExpansionCommand += 1
                 })
                 .disabled(!changeTreeExpansion.canCollapse)
-                if isShowingCachedStatusSnapshot {
-                    ProgressView()
-                        .controlSize(.small)
-                        .help("Refreshing cached changes")
-                }
-                if isLoading {
-                    ProgressView().controlSize(.small)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -997,6 +1057,14 @@ struct RebasedCommitWorkspace: View {
                     .toggleStyle(RebasedCheckboxStyle())
                     .font(Design.Typography.interface(13))
                     .disabled(operationState != nil && !canAmendPausedRebase)
+                if modifiedCount > 0 {
+                    Text(String(format: String(localized: "%lld modified"), Int64(modifiedCount)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(modifiedCount)))
+                        .transition(.opacity)
+                }
                 if canAmendPausedRebase {
                     Label("Rebase edit", systemImage: "pencil.line")
                         .font(.caption2)
@@ -1020,13 +1088,17 @@ struct RebasedCommitWorkspace: View {
                     HStack(spacing: 3) {
                         Text(canRestore ? "Restore message" : "last commit")
                             .font(.caption)
-                        Image(systemName: canRestore ? "arrow.uturn.backward" : "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .contentTransition(.symbolEffect(.replace))
+                            .contentTransition(.opacity)
+                        if canRestore {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 8, weight: .bold))
+                                .transition(.opacity)
+                        }
                     }
                     .foregroundStyle(Theme.Palette.accentInk)
+                    .arborMotion(.press, value: canRestore)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArborIconButtonStyle())
                 .disabled(recentMessages.isEmpty && insertedLastCommitMessage == nil)
                 .help(insertedLastCommitMessage != nil && commitMessage == insertedLastCommitMessage
                       ? "Restore the previous message"
@@ -1052,7 +1124,7 @@ struct RebasedCommitWorkspace: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 16, height: 16)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArborIconButtonStyle())
                 .help("Commit Message History")
                 .accessibilityLabel("Commit Message History")
                 .accessibilityIdentifier("commit-message-history")
@@ -1063,6 +1135,7 @@ struct RebasedCommitWorkspace: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
+            .arborMotion(.swap, value: modifiedCount)
 
             TextEditor(text: $commitMessage)
                 .font(.system(.body, design: .monospaced))
@@ -1086,15 +1159,6 @@ struct RebasedCommitWorkspace: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
 
-            if !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && modifiedCount > 0 {
-                Text("\(modifiedCount) modified")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 6)
-            }
-
             HStack(spacing: 8) {
                 Button(amendMode ? "Amend" : "Commit", action: onCommit)
                     .buttonStyle(RebasedActionButtonStyle(prominent: true))
@@ -1104,14 +1168,27 @@ struct RebasedCommitWorkspace: View {
                             || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || (operationState != nil && (!canAmendPausedRebase || !amendMode))
                     )
+                    .help(commitActionHelp(commitAndPush: false) ?? "Commit")
                 Button("Commit and Push…", action: onCommitAndPush)
                     .buttonStyle(RebasedActionButtonStyle())
                     .disabled(operationState != nil || repo == nil || amendMode || includedCommitEntries.isEmpty || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Spacer(minLength: 0)
+                    .help(commitActionHelp(commitAndPush: true) ?? "Commit and Push…")
+                Spacer(minLength: 8)
+                if showsIncludeHint {
+                    Text("Check the files to include")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(-1)
+                        .transition(.opacity)
+                }
                 if skipHooks || alwaysSkipCommitHooks {
                     Text("Skip hooks")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .transition(.opacity)
                 }
                 Button {
                     showsCommitOptions.toggle()
@@ -1150,7 +1227,8 @@ struct RebasedCommitWorkspace: View {
             .controlSize(.regular)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-
+            .arborMotion(.reveal, value: showsIncludeHint)
+            .arborMotion(.reveal, value: skipHooks || alwaysSkipCommitHooks)
         }
     }
 
@@ -3029,18 +3107,27 @@ struct PatchDiffPreviewView: View {
     }
 }
 
-    func compactButton(_ image: String, help: String, action: @escaping () -> Void) -> some View {
-        compactButton(Image(systemName: image), help: help, action: action)
+    func compactButton(_ image: String, help: String, busy: Bool = false, action: @escaping () -> Void) -> some View {
+        compactButton(Image(systemName: image), help: help, busy: busy, action: action)
     }
 
-    func compactButton(_ image: Image, help: String, action: @escaping () -> Void) -> some View {
+    func compactButton(_ image: Image, help: String, busy: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            image
-                .font(Design.Typography.interface(13, weight: .medium))
-                .frame(width: 22, height: 22)
+            ZStack {
+                image
+                    .font(Design.Typography.interface(13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .opacity(busy ? 0 : 1)
+                if busy {
+                    ProgressView()
+                        .controlSize(.small)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .arborMotion(.swap, value: busy)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .buttonStyle(ArborIconButtonStyle())
         // Same reason as the header toolbar: without an explicit label the
         // accessibility label is the SF Symbol name ("Go Down").
         .accessibilityLabel(help)

@@ -462,6 +462,96 @@
         }
       }
     },
+    "%lld modified" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 处修改"
+          }
+        }
+      }
+    },
+    "Amend the last commit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正最近一次提交"
+          }
+        }
+      }
+    },
+    "Check the files to include" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "勾选要包含的文件"
+          }
+        }
+      }
+    },
+    "Commit the included files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交勾选的文件"
+          }
+        }
+      }
+    },
+    "Commit the included files and push" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交勾选的文件并推送"
+          }
+        }
+      }
+    },
+    "Finish the Git operation first" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先完成当前的 Git 操作"
+          }
+        }
+      }
+    },
+    "Loading changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载变更"
+          }
+        }
+      }
+    },
+    "Turn off Amend to commit and push" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先取消 Amend，再提交并推送"
+          }
+        }
+      }
+    },
+    "Write a commit message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先写提交说明"
+          }
+        }
+      }
+    },
     "%lld/%lld files" : {
       "localizations" : {
         "zh-Hans" : {

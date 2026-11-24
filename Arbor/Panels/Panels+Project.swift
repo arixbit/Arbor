@@ -259,71 +259,83 @@ struct RebasedStatusBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Open Git tasks and operation log")
-            if let feedback = feedbackCenter.current {
-                Divider().frame(height: 14)
-                if feedbackCenter.isRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                FeedbackMessageView(
-                    message: feedback,
-                    isCompact: true,
-                    onDetails: { onFeedbackDetails(feedback) }
-                )
-                .font(.caption)
-                .frame(maxWidth: 480, alignment: .leading)
-                if let progress = feedbackCenter.progress {
-                    HStack(spacing: 5) {
-                        if let percentage = progress.percentage {
-                            ProgressView(value: Double(percentage), total: 100)
-                                .frame(width: 72)
-                            Text("\(percentage)%")
-                                .monospacedDigit()
-                                .contentTransition(.numericText())
-                                .arborMotion(.swap, value: percentage)
+            Group {
+                if let feedback = feedbackCenter.current {
+                    HStack(spacing: 8) {
+                        Divider().frame(height: 14)
+                        if feedbackCenter.isRunning {
+                            ProgressView()
+                                .controlSize(.small)
                         }
-                        Text(progress.phase)
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                            .help(progress.detail)
-                        if !progress.rootName.isEmpty {
-                            Text("· \(progress.rootName)")
-                                .lineLimit(1)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .font(.caption2)
-                }
-                if let batchProgress = feedbackCenter.batchProgress {
-                    HStack(spacing: 5) {
-                        ProgressView(
-                            value: Double(batchProgress.completed),
-                            total: Double(max(batchProgress.total, 1))
+                        FeedbackMessageView(
+                            message: feedback,
+                            isCompact: true,
+                            onDetails: { onFeedbackDetails(feedback) }
                         )
-                        .frame(width: 72)
-                        if let percentage = batchProgress.percentage {
-                            Text("\(percentage)%")
-                                .monospacedDigit()
-                        } else {
-                            Text("\(batchProgress.completed)/\(batchProgress.total)")
-                                .monospacedDigit()
+                        .font(.caption)
+                        .frame(maxWidth: 480, alignment: .leading)
+                        if let progress = feedbackCenter.progress {
+                            HStack(spacing: 5) {
+                                if let percentage = progress.percentage {
+                                    ProgressView(value: Double(percentage), total: 100)
+                                        .frame(width: 72)
+                                    Text("\(percentage)%")
+                                        .monospacedDigit()
+                                        .contentTransition(.numericText(value: Double(percentage)))
+                                        .arborMotion(.swap, value: percentage)
+                                }
+                                Text(progress.phase)
+                                    .lineLimit(1)
+                                    .foregroundStyle(.secondary)
+                                    .help(progress.detail)
+                                if !progress.rootName.isEmpty {
+                                    Text("· \(progress.rootName)")
+                                        .lineLimit(1)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .font(.caption2)
                         }
-                        Text(batchProgress.phase)
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                            .help(batchProgress.detail ?? batchProgress.phase)
+                        if let batchProgress = feedbackCenter.batchProgress {
+                            HStack(spacing: 5) {
+                                ProgressView(
+                                    value: Double(batchProgress.completed),
+                                    total: Double(max(batchProgress.total, 1))
+                                )
+                                .frame(width: 72)
+                                if let percentage = batchProgress.percentage {
+                                    Text("\(percentage)%")
+                                        .monospacedDigit()
+                                        .contentTransition(.numericText(value: Double(percentage)))
+                                        .arborMotion(.swap, value: percentage)
+                                } else {
+                                    Text("\(batchProgress.completed)/\(batchProgress.total)")
+                                        .monospacedDigit()
+                                        .contentTransition(.numericText(value: Double(batchProgress.completed)))
+                                        .arborMotion(.swap, value: batchProgress.completed)
+                                }
+                                Text(batchProgress.phase)
+                                    .lineLimit(1)
+                                    .foregroundStyle(.secondary)
+                                    .help(batchProgress.detail ?? batchProgress.phase)
+                            }
+                            .font(.caption2)
+                        }
+                        if feedbackCenter.canCancel {
+                            Button("Cancel") { onCancelOperation() }
+                                .buttonStyle(.borderless)
+                                .controlSize(.small)
+                        }
                     }
-                    .font(.caption2)
+                    .transition(.opacity)
+                } else if let inlineNote {
+                    InlineFeedbackLine(text: inlineNote, tone: inlineTone)
+                        .frame(maxWidth: 480, alignment: .leading)
+                        .transition(.opacity)
                 }
-                if feedbackCenter.canCancel {
-                    Button("Cancel") { onCancelOperation() }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
-                }
-            } else if let inlineNote {
-                InlineFeedbackLine(text: inlineNote, tone: inlineTone)
-                    .frame(maxWidth: 480, alignment: .leading)
             }
+            .arborMotion(.swap, value: feedbackCenter.current?.id)
+            .arborMotion(.reveal, value: inlineNote)
             if let permissionWarning = feedbackCenter.nativeNotificationPermissionWarning {
                 Divider().frame(height: 14)
                 Label(permissionWarning.title, systemImage: "bell.slash")

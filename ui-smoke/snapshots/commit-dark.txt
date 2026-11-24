@@ -49,8 +49,9 @@ window	Arbor	0,0 1642×1015 [Disabled|Keyboard Focused]
             splitter	—	40,396 522×1 [Disabled]
             group	—	40,397 522×116 [Disabled]
               checkbox	Amend	56,404 65×16
-              button	last commit	129,405 68×13
-              button	Commit Message History	208,406 12×12
+              statictext	2 modified	129,405 51×13
+              button	last commit	188,405 56×13
+              button	Commit Message History	255,406 12×12
               statictext	—	63,438 108×16
               scrollview	—	58,434 486×30 [Disabled]
                 textview	—	58,434 486×30 [Disabled]

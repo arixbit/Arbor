@@ -1026,5 +1026,14 @@
   "Sign-off commit": "为提交添加签署信息",
   "Stage tracked changes": "暂存已跟踪变更",
   "Stash changes silently": "静默贮藏变更",
-  "Use Soft Wraps": "使用软换行"
+  "Use Soft Wraps": "使用软换行",
+  "%lld modified": "%lld 处修改",
+  "Amend the last commit": "修正最近一次提交",
+  "Check the files to include": "勾选要包含的文件",
+  "Commit the included files": "提交勾选的文件",
+  "Commit the included files and push": "提交勾选的文件并推送",
+  "Finish the Git operation first": "先完成当前的 Git 操作",
+  "Loading changes": "正在加载变更",
+  "Turn off Amend to commit and push": "先取消 Amend，再提交并推送",
+  "Write a commit message": "先写提交说明"
 }

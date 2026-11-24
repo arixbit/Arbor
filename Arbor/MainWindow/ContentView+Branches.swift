@@ -195,7 +195,7 @@ extension ContentView {
                 .transition(.arborReveal)
             }
         }
-        .animation(Theme.Motion.animation(.reveal), value: branchWorkspace.showPopover)
+        .arborMotion(.reveal, value: branchWorkspace.showPopover)
     }
 
     private func installBranchPopupEscapeMonitor() {

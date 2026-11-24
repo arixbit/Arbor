@@ -1369,7 +1369,7 @@ struct RebasedCheckboxStyle: ToggleStyle {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.white)
-                                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
                         }
                     }
                     .frame(width: 16, height: 16)

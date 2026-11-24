@@ -119,7 +119,7 @@ struct DiffToolbarToggle: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArborIconButtonStyle())
         .fixedSize()
         .accessibilityIdentifier(identifier)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -161,7 +161,7 @@ struct DiffToolbarButton: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArborIconButtonStyle())
         .fixedSize()
         .disabled(!isEnabled)
         .help(help ?? title)
@@ -189,9 +189,9 @@ struct DiffToolbarChoice: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArborIconButtonStyle())
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.45)
+        .arborMotion(.press, value: isSelected)
         .accessibilityIdentifier(identifier)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

@@ -108,10 +108,10 @@ extension ContentView {
                                     .fill(feedbackCenter.current?.level == .error ? Theme.Palette.deletion : Color.orange)
                                     .frame(width: 6, height: 6)
                                     .offset(x: 3, y: 6)
-                                    .transition(.scale.combined(with: .opacity))
+                                    .transition(.opacity)
                             }
                         }
-                        .arborMotion(.emphasis, value: feedbackCenter.current?.level)
+                        .arborMotion(.reveal, value: feedbackCenter.current?.level)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)

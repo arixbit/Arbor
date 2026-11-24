@@ -2,7 +2,7 @@
 
 ## V1 scope
 
-The V1 release line is `1.0.x`; the current patch release is `1.0.40`. The
+The V1 release line is `1.0.x`; the current patch release is `1.0.41`. The
 local release script builds the Rust engine,
 runs the Rust and Swift test suites, creates an arm64 macOS archive, packages
 an app DMG and ZIP, signs the ZIP for Sparkle, and writes `appcast.xml` and

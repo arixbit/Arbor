@@ -334,6 +334,28 @@ extension AnyTransition {
             removal: .opacity
         )
     }
+
+    /// A side panel comes from the edge it belongs to, then fades out.
+    /// A full-width slide of a large card repaints too much and clips the shadow.
+    static var arborPanel: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .offset(x: 12)),
+            removal: .opacity
+        )
+    }
+}
+
+/// Icon buttons share the press: a little smaller, then back. Disabled stays dim.
+struct ArborIconButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(isEnabled ? (configuration.isPressed ? 0.55 : 1) : Theme.Metrics.disabledOpacity)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.94 : 1)
+            .arborMotion(.press, value: configuration.isPressed)
+            .arborMotion(.press, value: isEnabled)
+    }
 }
 
 /// 折叠箭头只旋转，不把两个符号对切。

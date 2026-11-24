@@ -84,6 +84,8 @@ extension ContentView {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .trailing)
+            .arborMotion(.move, value: operationRecovery.showConflictResolver)
+            .arborMotion(.move, value: operationRecovery.showMultiRootConflictResolver)
         }
     }
 
@@ -144,7 +146,7 @@ extension ContentView {
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
-            .transition(.move(edge: .trailing).combined(with: .opacity))
+            .transition(.arborPanel)
             .zIndex(20)
         }
     }
@@ -190,7 +192,7 @@ extension ContentView {
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
-        .transition(.move(edge: .trailing).combined(with: .opacity))
+        .transition(.arborPanel)
         .zIndex(21)
     }
 

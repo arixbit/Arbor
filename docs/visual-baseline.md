@@ -52,7 +52,7 @@ Commit tool window (left top), Project tree (left bottom), Log tool window
 | ~~C4~~ | Ignored files | Fixed: hidden by default; opt in through View Options | Not shown |
 | ~~C5~~ | Untracked files | Fixed: separate collapsed Unversioned Files group with tri-state checkbox | The same structure |
 | C6 | Commit footer | Commit / Commit and Push…; conditional actions and options behind the gear | Commit / Commit and Push…, options behind the gear |
-| C7 | Change counters | N modified: distinct tracked changed paths, independent of staging | `2 modified` beside the Amend row |
+| ~~C7~~ | ~~Change counters~~ | Fixed: `N modified` beside Amend. Distinct tracked paths; staging and the include checkbox do not change it | `2 modified` beside the Amend row |
 | C8 | Row status | coloured square badge `M`/`U`/`I` | coloured letter, no badge |
 | C9 | Tree icons | Existing file-type icons, now with StatusBadge on changed files | file-type icons and a status chip |
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.41 - 2026-11-24
+
+The commit footer explains the one thing that is actually blocking you, and state changes keep the same motion.
+
+- The modified count sits beside Amend and counts tracked changes. Staging a file, or leaving it unchecked, does not change the number, and the line no longer appears under the message and pushes the buttons.
+- After a message is written and no file is checked, Commit says to check the files to include. Hovering Commit or Commit and Push says the one reason it is waiting: a message, Amend, or the Git operation already in progress.
+- **last commit** still fills the last message and press again puts yours back. It no longer wears a menu chevron; the clock is the history.
+- A refresh spinner no longer shifts the Changes toolbar. The operation bar, conflict panel, status note, checkbox, and notification dot arrive and leave instead of popping. Reduce Motion still skips them. Dragging a divider still follows the pointer.
+
 ## 1.0.40 - 2026-11-24
 
 Everyday actions explain themselves, and the same kind of change moves the same way everywhere.
