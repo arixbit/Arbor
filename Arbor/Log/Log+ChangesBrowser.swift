@@ -996,6 +996,12 @@ struct LogChangesBrowserView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { select(record) }
                 .onTapGesture(count: 2) { openStandaloneDiff(record) }
+                // UI automation delivers a double click as one AppKit event.
+                // SwiftUI's timed double-tap can miss it, so honor clickCount too.
+                .simultaneousGesture(TapGesture().onEnded {
+                    guard NSApp.currentEvent?.clickCount == 2 else { return }
+                    openStandaloneDiff(record)
+                })
                 .contextMenu {
                     Button("Show Diff") { openStandaloneDiff(record) }
                     if isSubmodule(record.change) {

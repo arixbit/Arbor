@@ -190,6 +190,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
         } while Date() < deadline
         session.recordScreenshot(named: "blocked-\(label)")
+        let info = session.app.descendants(matching: .button).matching(identifier: "info.circle").firstMatch
+        if info.waitForExistence(timeout: 2), info.isHittable {
+            click(info)
+        }
         print(session.app.debugDescription)
         XCTFail("Git state did not confirm: \(label)")
     }
@@ -611,6 +615,10 @@ final class ArborUIUserFlowUITests: XCTestCase {
         let beforeStatus = try git("status", "--porcelain")
         let beforeIndex = try git("diff", "--cached")
         launch()
+        XCTAssertTrue(
+            session.window.staticTexts["staged.txt"].waitForExistence(timeout: 15),
+            "the staged file must be visible before stashing"
+        )
         menu("Stash…", localChanges: true)
         enter("Journey stash", into: session.app.textFields["Message (optional)"].firstMatch)
         click(session.app.sheets.firstMatch.buttons["Stash"].firstMatch)

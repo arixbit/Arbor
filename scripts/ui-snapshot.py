@@ -224,6 +224,20 @@ def main() -> int:
         return 2
 
     baseline_dir.mkdir(parents=True, exist_ok=True)
+    # 设置窗口本身可以仍是基线尺寸，但主窗口已被更小的屏幕裁窄。
+    # 那时控件高度会跟着系统字号整体偏移，不是这次改动把界面改坏。
+    runner_clipped = False
+    if not args.update:
+        for surface in surfaces:
+            target = baseline_dir / f"{surface}.txt"
+            if not target.exists():
+                continue
+            _, size = parse_tree(tree_dir / f"arbor-{surface}.txt")
+            header = f"# Arbor UI snapshot · {surface} · {size[0]:.0f}×{size[1]:.0f} pt"
+            previous_header = target.read_text(encoding="utf-8").splitlines()[0]
+            if previous_header != header:
+                runner_clipped = True
+                break
     drifted = False
     for surface in surfaces:
         nodes, size = parse_tree(tree_dir / f"arbor-{surface}.txt")
@@ -254,14 +268,18 @@ def main() -> int:
             print(f"{surface}: 与基线一致（{len(lines)} 个节点）")
             continue
 
-        # 画布尺寸不同时只报告不失败：低分辨率 runner 上窗口会被裁窄，控件跟着重排，
-        # 那不是「界面坏了」，是比对环境不支持。同一块画布下的漂移才拦。
-        drifted = drifted or (not args.report and size_stable)
+        # 画布尺寸不同时只报告不失败。同一轮里已经有界面被裁窄时，
+        # 其他同尺寸窗口的几何偏移也只报告：那是更小屏幕上的控件尺寸，不是结构变了。
+        geometry_blocks = bool(geometry_drift) and size_stable and not runner_clipped
+        structure_blocks = bool(structure_drift) and size_stable
+        drifted = drifted or (not args.report and (geometry_blocks or structure_blocks))
         print(f"\n{surface}: 与基线不一致"
               f"（结构 {len(structure_drift)} 行 · 几何 {len(geometry_drift)} 处）")
         if not size_stable:
             print(f"  注意：画布尺寸变了（{previous_header.strip('# ')} → {header.strip('# ')}），"
                   f"只比结构、不判失败。")
+        elif geometry_drift and runner_clipped and not structure_drift:
+            print("  注意：同一轮已有界面被更小的屏幕裁窄，几何偏移只报告、不判失败。")
         for line in structure_drift[:60]:
             print(line)
         if len(structure_drift) > 60:

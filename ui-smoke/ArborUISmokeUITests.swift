@@ -681,9 +681,16 @@ final class ArborUISmokeContractUITests: XCTestCase {
         let returnToLog = session.window.descendants(matching: .any)["log-file-diff-return-to-log"].firstMatch
         XCTAssertTrue(returnToLog.exists, "the diff tab must keep the Log reachable")
         returnToLog.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        XCTAssertTrue(session.window.textFields["log-text-filter"].waitForExistence(timeout: 10))
+        // A wide window shows the graph again. A narrow window keeps the
+        // changes inspector over the graph, so the filter stays hidden.
+        let returnedFile = changesTree.staticTexts["Fix.swift"].firstMatch
+        let logFilter = session.window.textFields["log-text-filter"]
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !returnedFile.exists, !logFilter.exists {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
         XCTAssertTrue(
-            changesTree.staticTexts["Fix.swift"].firstMatch.waitForExistence(timeout: 10),
+            returnedFile.waitForExistence(timeout: 2),
             "returning to Log must keep the loaded Changes list instead of reloading the commit"
         )
         XCTAssertFalse(diffTab.exists)
@@ -793,7 +800,10 @@ final class ArborUISmokeContractUITests: XCTestCase {
             diffTab.waitForExistence(timeout: 2),
             "a single click must not open a diff tab while Show Diff Preview is off"
         )
-        XCTAssertTrue(session.window.textFields["log-text-filter"].exists)
+        XCTAssertTrue(
+            changesTree.exists,
+            "a single click must stay on the changes list while Show Diff Preview is off"
+        )
 
         changedFile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleClick()
         XCTAssertTrue(
