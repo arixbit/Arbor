@@ -5903,6 +5903,26 @@
         }
       }
     },
+    "Git LFS pointer: the file content is not on this Mac yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这是 Git LFS pointer，文件内容还没在这台 Mac 上"
+          }
+        }
+      }
+    },
+    "Git LFS: the file content is on this Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git LFS 文件内容已在这台 Mac 上"
+          }
+        }
+      }
+    },
     "Git" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8224,6 +8244,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有变更文件"
+          }
+        }
+      }
+    },
+    "No changes affect the selected path" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有影响所选路径的变更"
+          }
+        }
+      }
+    },
+    "No files remain after filtering" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过滤后没有剩余文件"
+          }
+        }
+      }
+    },
+    "No previous commit message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有上一次的提交说明"
+          }
+        }
+      }
+    },
+    "No worktrees" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有 worktree"
+          }
+        }
+      }
+    },
+    "Not fetched" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未获取"
           }
         }
       }
@@ -11114,6 +11184,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "恢复…"
+          }
+        }
+      }
+    },
+    "Restore message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复说明"
+          }
+        }
+      }
+    },
+    "Restore the previous message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复刚才写的说明"
           }
         }
       }
@@ -15462,6 +15552,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "上一级"
+          }
+        }
+      }
+    },
+    "Updating the repository" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新仓库"
+          }
+        }
+      }
+    },
+    "Upstream is set, but the remote branch is not on this Mac yet. Use Update to fetch it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已经设置了 upstream，但这台 Mac 上还没有对应的远程分支。用 Update 获取。"
+          }
+        }
+      }
+    },
+    "Use the last commit message" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用上一次的提交说明"
           }
         }
       }
@@ -21943,6 +22063,16 @@
         }
       }
     },
+    "Tracks %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟踪 %@"
+          }
+        }
+      }
+    },
     "Track" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27399,6 +27529,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提交详情"
+          }
+        }
+      }
+    },
+    "Select a commit to see its changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个提交，查看它改了什么"
           }
         }
       }

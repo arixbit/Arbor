@@ -112,7 +112,7 @@ func performUncommit(_ request: RebasedUncommitRequest, targetName: String) {
                 // IntelliJ restores the undone commit's full message into the
                 // Changes workflow so the user can recommit without copying it.
                 self.commitWorkspace.message = restoredCommitMessage
-                self.commitWorkspace.feedback = "已撤销最近一次提交，变更仍保留在暂存区"
+                self.commitWorkspace.setFeedback("已撤销最近一次提交，变更仍保留在暂存区", tone: .success)
                 if self.repo?.workdir() == request.repositoryPath {
                     self.repositoryStatus.changeLists = lists
                     self.refreshAll(showFeedback: false)

@@ -15,13 +15,12 @@ struct RebasedConflictGroup: View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
                 guard !entries.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
+                Theme.Motion.perform(.press) {
                     isExpanded.toggle()
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: entries.isEmpty || !isExpanded ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(isExpanded: !entries.isEmpty && isExpanded, size: 9, weight: .bold)
                     Text("Conflicts")
                         .font(.system(size: 13, weight: .semibold))
                     Text("\(entries.count) files")

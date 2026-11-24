@@ -55,6 +55,7 @@ struct RebasedActivityRail: View {
                         projectOpen ? Color.primary.opacity(0.08) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 7)
                     )
+                    .arborMotion(.press, value: projectOpen)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -124,6 +125,7 @@ struct RebasedActivityRail: View {
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: 7)
             )
+            .arborMotion(.press, value: chip)
         }
         .buttonStyle(.plain)
         .help(help)
@@ -532,6 +534,18 @@ struct RebasedTopBar<BranchMenu: View>: View {
                 toolbarButton("arrow.up.right", title: "Push", action: onPush)
             }
             .disabled(!hasRepository || isLoading)
+            .overlay(alignment: .trailing) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .offset(x: 18)
+                        .help("Updating the repository")
+                        .accessibilityLabel("Updating the repository")
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(Theme.Motion.animation(.swap), value: isLoading)
 
             branchMenu
                 .frame(maxWidth: 260, alignment: .leading)
@@ -623,6 +637,9 @@ struct RebasedTabButtonStyle: ButtonStyle {
                     )
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .arborMotion(.press, value: isSelected)
+            .arborMotion(.press, value: configuration.isPressed)
     }
 }
 
@@ -847,10 +864,11 @@ struct RebasedChangeGroup: View {
             HStack(spacing: 6) {
                 Button {
                     guard !entries.isEmpty else { return }
-                    isExpanded.toggle()
+                    Theme.Motion.perform(.press) {
+                        isExpanded.toggle()
+                    }
                 } label: {
-                    Image(systemName: entries.isEmpty || !isExpanded ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 10))
+                    ArborDisclosureChevron(isExpanded: !entries.isEmpty && isExpanded, size: 10, weight: .regular)
                         .frame(width: 12, height: 24)
                 }
                 .buttonStyle(.plain)
@@ -873,6 +891,8 @@ struct RebasedChangeGroup: View {
                 Text(entries.count == 1 ? "1 file" : "\(entries.count) files")
                     .font(Design.Typography.interface(12))
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .arborMotion(.swap, value: entries.count)
                 Spacer(minLength: 0)
             }
             .frame(height: 24)
@@ -927,7 +947,7 @@ struct RebasedChangeGroup: View {
 
     func folderRow(_ row: TreeRow) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.12)) {
+            Theme.Motion.perform(.press) {
                 if collapsedFolders.contains(row.path) {
                     collapsedFolders.remove(row.path)
                 } else {
@@ -936,9 +956,12 @@ struct RebasedChangeGroup: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: collapsedFolders.contains(row.path) ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .frame(width: 12)
+                ArborDisclosureChevron(
+                    isExpanded: !collapsedFolders.contains(row.path),
+                    size: 9,
+                    weight: .bold
+                )
+                .frame(width: 12)
                 Image(systemName: collapsedFolders.contains(row.path) ? "folder" : "folder.fill")
                     .foregroundStyle(.secondary)
                 Text(row.name)
@@ -1013,8 +1036,8 @@ struct RebasedChangeGroup: View {
                     .padding(.vertical, 1)
                     .background(.quaternary, in: Capsule())
                     .help(isPointer
-                          ? "Git LFS 文件：工作区仍是 pointer，内容尚未下载"
-                          : "Git LFS 文件：内容已在工作区")
+                          ? String(localized: "Git LFS pointer: the file content is not on this Mac yet")
+                          : String(localized: "Git LFS: the file content is on this Mac"))
             }
             if binaryPaths.contains(entry.path) {
                 Text("BIN")
@@ -1041,6 +1064,7 @@ struct RebasedChangeGroup: View {
                 : Color.clear,
             in: RoundedRectangle(cornerRadius: 5)
         )
+        .arborMotion(.press, value: selectedPath == entry.path)
         .contentShape(Rectangle())
         .draggable(entry.path)
         .onTapGesture {
@@ -1307,7 +1331,10 @@ struct RebasedActionButtonStyle: ButtonStyle {
                     RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 1)
                 }
             }
-            .opacity(prominent || isEnabled || !dimsWhenDisabled ? 1 : 0.45)
+            .opacity(isEnabled || !dimsWhenDisabled ? 1 : Theme.Metrics.disabledOpacity)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
+            .arborMotion(.press, value: configuration.isPressed)
+            .arborMotion(.press, value: isEnabled)
     }
 
     private func background(isPressed: Bool) -> Color {
@@ -1342,9 +1369,12 @@ struct RebasedCheckboxStyle: ToggleStyle {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.white)
+                                .transition(.scale(scale: 0.6).combined(with: .opacity))
                         }
                     }
                     .frame(width: 16, height: 16)
+                    .arborMotion(.press, value: configuration.isOn)
+                    .arborMotion(.press, value: isMixed)
                 if !labelsHidden { configuration.label }
             }
             .contentShape(Rectangle())

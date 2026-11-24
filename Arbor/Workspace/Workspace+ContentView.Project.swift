@@ -142,7 +142,7 @@ func openProjectPath(_ projectPath: String) {
     repositoryStatus.isLoading = true
     logList.isLoading = showsLogWorkspace
     repositoryStatus.loadError = nil
-    commitWorkspace.feedback = nil
+    commitWorkspace.setFeedback(nil)
     stashRecovery.popConflictInProgress = false
     stashRecovery.applyConflictInProgress = false
     shelfWorkspace.conflictInProgress = false
@@ -545,7 +545,7 @@ func resetProjectState() {
     branchWorkspace.syncStatuses = []
     tagWorkspace.tags = []
     worktreeWorkspace.worktrees = []
-    worktreeWorkspace.feedback = nil
+    worktreeWorkspace.setFeedback(nil)
     operationRecovery.consoleResult = nil
     reflog.entries = []
     reflog.selection = nil

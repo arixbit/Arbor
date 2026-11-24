@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.40 - 2026-11-24
+
+Everyday actions explain themselves, and the same kind of change moves the same way everywhere.
+
+- Pressing **last commit** fills in that message. Press it again to put back what you were writing. Editing the text, or a newer commit, cancels the restore. The clock still opens older messages.
+- A result is green, amber, or red because of what happened, not because the sentence starts with a particular word. Routine results sit in the status bar, so the commit box does not jump.
+- Update and Push show a spinner while the repository is refreshing, without sliding the rest of the toolbar. A disabled Commit or Commit and Push looks disabled.
+- A branch with an upstream that is not on this Mac yet says **Not fetched**, instead of an orange warning. Push still sets the upstream when there is none.
+- Panels, disclosures, checkboxes, selection, toasts, and the branch list share one set of motions. Dragging a divider still follows the pointer. Reduce Motion turns the motions off. A short window keeps the whole branch list on screen.
+
 ## 1.0.39 - 2026-11-22
 
 The Git workbench follows Rebased more closely, and committing selected files keeps staged changes intact.

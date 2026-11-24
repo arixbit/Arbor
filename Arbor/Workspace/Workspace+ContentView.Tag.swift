@@ -143,7 +143,7 @@ func createTag() {
                 self.tagWorkspace.annotated = false
                 self.tagWorkspace.force = false
                 self.tagWorkspace.repositoryOverride = nil
-                self.tagWorkspace.feedback = "已创建 \(name)"
+                self.tagWorkspace.setFeedback("已创建 \(name)", tone: .success)
                 self.feedbackCenter.success(
                     "Tag created",
                     detail: targetRootPath.map { "\(name) @ \($0)" } ?? name
@@ -153,7 +153,7 @@ func createTag() {
         } catch {
             await MainActor.run {
                 let detail = friendlyRemoteError(error)
-                self.tagWorkspace.feedback = detail
+                self.tagWorkspace.setFeedback(detail, tone: .failure)
                 let signingAction = !signKey.isEmpty
                     || gitCommitSigningFailureNeedsGPGConfiguration(detail)
                     ? [self.gpgAgentSettingsFeedbackAction()]
@@ -187,12 +187,12 @@ func deleteTag(_ name: String) {
             let tags = try repo.tagList()
             await MainActor.run {
                 self.tagWorkspace.tags = tags
-                self.tagWorkspace.feedback = "已删除 \(name)"
+                self.tagWorkspace.setFeedback("已删除 \(name)", tone: .success)
                 self.tagWorkspace.deleteRecovery = TagDeleteRecoveryContext(repo: repo, tag: tag, rootPath: nil)
                 if self.showsLogWorkspace { self.loadLog() }
             }
         } catch {
-            await MainActor.run { self.tagWorkspace.feedback = errorMessage(error) }
+            await MainActor.run { self.tagWorkspace.setFeedback(errorMessage(error), tone: .failure) }
         }
     }
 }

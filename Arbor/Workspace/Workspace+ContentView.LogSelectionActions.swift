@@ -80,7 +80,7 @@ func dropSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                 expectedHead: outcome.headId
             )
             await MainActor.run {
-                self.commitWorkspace.feedback = "已从 \(commit.shortId) 丢弃 \(paths.count) 个文件变更"
+                self.commitWorkspace.setFeedback("已从 \(commit.shortId) 丢弃 \(paths.count) 个文件变更", tone: .success)
                 self.feedbackCenter.success(
                     "Drop Selected Changes",
                     detail: commit.shortId,
@@ -167,7 +167,7 @@ func extractSelectedChangesFromLog(_ commit: CommitInfo, paths: [String]) {
                 expectedHead: outcome.headId
             )
             await MainActor.run {
-                self.commitWorkspace.feedback = "已将 \(paths.count) 个文件变更抽取为新提交"
+                self.commitWorkspace.setFeedback("已将 \(paths.count) 个文件变更抽取为新提交", tone: .success)
                 self.feedbackCenter.success(
                     "Extract Selected Changes",
                     detail: message,

@@ -6,7 +6,7 @@ import SwiftUI
 /// `repositoryOverride` 存在的原因是：tag 对话框可以对某个 root 打开，而
 /// 当前窗口的 `repo` 可能指向另一个 root，创建时必须用被选中的那个句柄。
 @MainActor
-final class TagWorkspaceState: ObservableObject {
+final class TagWorkspaceState: ObservableObject, InlineFeedbackReporting {
     @Published var tags: [TagInfo] = []
 
     // 创建 / 推送对话框输入
@@ -20,6 +20,7 @@ final class TagWorkspaceState: ObservableObject {
     @Published var annotated = false
     @Published var force = false
     @Published var feedback: String?
+    @Published var feedbackTone: InlineFeedbackTone = .failure
 
     /// 当前对话框操作的仓库；nil 表示跟随窗口的默认仓库。
     @Published var repositoryOverride: Repository?

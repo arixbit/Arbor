@@ -462,11 +462,12 @@ struct ProjectFileTreeView: View {
                     ScrollViewReader { proxy in
                     List(selection: $selection) {
                         Button {
-                            rootExpanded.toggle()
+                            Theme.Motion.perform(.press) {
+                                rootExpanded.toggle()
+                            }
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: rootExpanded ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
+                                ArborDisclosureChevron(isExpanded: rootExpanded, size: 10, weight: .semibold)
                                     .foregroundStyle(.secondary)
                                     .frame(width: 12)
                                 Image(systemName: "folder")

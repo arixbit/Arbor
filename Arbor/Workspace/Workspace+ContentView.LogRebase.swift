@@ -116,7 +116,7 @@ func beginAutoSquashCommitFromLog(_ commit: CommitInfo, kind: AutoSquashCommitKi
     projectWorkspace.toolWindowMode = .commit
     toolWindowExpanded = true
     projectPanelExpanded = false
-    commitWorkspace.feedback = nil
+    commitWorkspace.setFeedback(nil)
 }
 
 /// Derive the oldest commit in the original rewritten range. IntelliJ uses

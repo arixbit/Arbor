@@ -130,13 +130,12 @@ struct RebasedIgnoredGroup: View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
                 guard !entries.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
+                Theme.Motion.perform(.press) {
                     isExpanded.toggle()
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: entries.isEmpty || !isExpanded ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(isExpanded: !entries.isEmpty && isExpanded, size: 9, weight: .bold)
                     Text("Ignored Files")
                         .font(.system(size: 13, weight: .semibold))
                     Text("\(entries.count) files")
@@ -219,6 +218,8 @@ struct RebasedStatusBar: View {
     let onOperationLog: () -> Void
     let onCancelOperation: () -> Void
     let onFeedbackDetails: (FeedbackMessage) -> Void
+    var inlineNote: String? = nil
+    var inlineTone: InlineFeedbackTone = .failure
     @AppStorage(GitIncomingOutgoingInfoSettings.key)
     var incomingOutgoingInfoEnabled = GitIncomingOutgoingInfoSettings.defaultValue
 
@@ -228,6 +229,9 @@ struct RebasedStatusBar: View {
                 if syncStatus.trackingExists {
                     HStack(spacing: 3) {
                         Text("↑\(syncStatus.ahead) ↓\(syncStatus.behind)")
+                            .contentTransition(.numericText())
+                            .arborMotion(.swap, value: syncStatus.ahead)
+                            .arborMotion(.swap, value: syncStatus.behind)
                         if hasUnfetchedIncoming {
                             Text("↓?")
                                 .foregroundStyle(.blue)
@@ -237,10 +241,10 @@ struct RebasedStatusBar: View {
                     .foregroundStyle(syncStatus.ahead > 0 || syncStatus.behind > 0 ? .orange : .secondary)
                     .help("Upstream: \(syncStatus.upstream)")
                 } else {
-                    Text("Missing upstream")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.orange)
-                    .help("Upstream tracking branch is missing")
+                    Text("Not fetched")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .help("Upstream is set, but the remote branch is not on this Mac yet. Use Update to fetch it.")
                 }
             } else if incomingOutgoingInfoEnabled, hasUnfetchedIncoming {
                 Text("↓?")
@@ -275,6 +279,8 @@ struct RebasedStatusBar: View {
                                 .frame(width: 72)
                             Text("\(percentage)%")
                                 .monospacedDigit()
+                                .contentTransition(.numericText())
+                                .arborMotion(.swap, value: percentage)
                         }
                         Text(progress.phase)
                             .lineLimit(1)
@@ -314,6 +320,9 @@ struct RebasedStatusBar: View {
                         .buttonStyle(.borderless)
                         .controlSize(.small)
                 }
+            } else if let inlineNote {
+                InlineFeedbackLine(text: inlineNote, tone: inlineTone)
+                    .frame(maxWidth: 480, alignment: .leading)
             }
             if let permissionWarning = feedbackCenter.nativeNotificationPermissionWarning {
                 Divider().frame(height: 14)

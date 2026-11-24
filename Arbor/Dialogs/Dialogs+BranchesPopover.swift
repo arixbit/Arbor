@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 
 struct RebasedBranchesPopover: View {
     var projectPath: String? = nil
+    /// The window can be shorter than the saved panel. Fit inside it without
+    /// writing that temporary size back over the user's preference.
+    var maximumPopupSize: CGSize? = nil
     let branches: [BranchInfo]
     let remoteBranches: [RemoteBranchInfo]
     let recentBranches: [String]
@@ -91,6 +94,14 @@ struct RebasedBranchesPopover: View {
     @State private var selectedBranchTargetID: String?
     @State private var favoriteReferenceIDs: Set<String> = []
     @State private var popupSize = GitBranchesPopupSettings.defaultPopupSize
+
+    private var fittedPopupSize: CGSize {
+        guard let maximumPopupSize else { return popupSize }
+        return CGSize(
+            width: min(popupSize.width, maximumPopupSize.width),
+            height: min(popupSize.height, maximumPopupSize.height)
+        )
+    }
 
     private var filteredBranches: [BranchInfo] {
         branches.filter { branchSearchMatches($0.name, query: query) }
@@ -622,7 +633,7 @@ struct RebasedBranchesPopover: View {
             .controlSize(.small)
         }
         .padding(12)
-        .frame(width: popupSize.width, height: popupSize.height)
+        .frame(width: fittedPopupSize.width, height: fittedPopupSize.height)
         // 面板本身需要一个稳定标识：顶栏那个 1×1 的 presence marker 是叶子节点，
         // 靠它剪子树剪不到内容。children: .contain 保留内部控件自己的标识。
         .accessibilityElement(children: .contain)
@@ -1122,7 +1133,7 @@ struct RebasedBranchesPopover: View {
                 Text(title ?? branch.name)
                     .lineLimit(1)
                 if incomingOutgoingInfoEnabled, let sync {
-                    Text("跟踪本地 \(sync.branch)")
+                    Text(String(format: String(localized: "Tracks %@"), sync.branch))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -1285,9 +1296,7 @@ struct RebasedBranchesPopover: View {
         hasUnfetchedIncoming: Bool = false
     ) -> some View {
         if !sync.trackingExists {
-            Text("Untracked")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.orange)
+            EmptyView()
         } else if sync.ahead > 0 || sync.behind > 0 || hasUnfetchedIncoming {
             HStack(spacing: 5) {
                 if sync.behind > 0 {
@@ -1318,10 +1327,10 @@ struct RebasedBranchesPopover: View {
         hasUnfetchedIncoming: Bool = false
     ) -> some View {
         if !sync.trackingExists {
-            Text("Missing upstream")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.orange)
-                .help("Upstream tracking branch is missing")
+            Text("Not fetched")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .help("Upstream is set, but the remote branch is not on this Mac yet. Use Update to fetch it.")
         } else if sync.ahead > 0 || sync.behind > 0 || hasUnfetchedIncoming {
             HStack(spacing: 5) {
                 if sync.ahead > 0 {

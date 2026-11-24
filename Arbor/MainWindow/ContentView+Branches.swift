@@ -137,7 +137,24 @@ extension ContentView {
                     Color.clear
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("branches-popover")
-                    branchesPopoverContent
+                    branchesPopoverContent(maximumSize: CGSize(
+                        width: max(280, proxy.size.width - 16),
+                        height: max(220, proxy.size.height - 16)
+                    ))
+                        // The panel used to be transparent, so the log graph and
+                        // the commit file list showed through it and read as one
+                        // broken table. Paint a card first, then shadow the card
+                        // as a single layer rather than each row.
+                        .background(
+                            Design.Colors.surface,
+                            in: RoundedRectangle(cornerRadius: Design.Radius.medium, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Design.Radius.medium, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                        }
+                        .compositingGroup()
+                        .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
                         .background(
                             GeometryReader { content in
                                 Color.clear.preference(
@@ -146,7 +163,6 @@ extension ContentView {
                                 )
                             }
                         )
-                        .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
                         .offset(
                             x: max(0, min(
                                 anchor.minX - containerOrigin.x,
@@ -176,8 +192,10 @@ extension ContentView {
                         for: NSApplication.didResignActiveNotification
                     )
                 ) { _ in branchWorkspace.showPopover = false }
+                .transition(.arborReveal)
             }
         }
+        .animation(Theme.Motion.animation(.reveal), value: branchWorkspace.showPopover)
     }
 
     private func installBranchPopupEscapeMonitor() {
@@ -207,10 +225,11 @@ extension ContentView {
     }
 
     @ViewBuilder
-    var branchesPopoverContent: some View {
+    func branchesPopoverContent(maximumSize: CGSize) -> some View {
     if multiRootWorkspace.roots.count > 1 && !multiRootWorkspace.branchSnapshots.isEmpty {
         MultiRootBranchesPopover(
             projectPath: projectWorkspace.path,
+            maximumPopupSize: maximumSize,
             protectedBranchPatterns: effectiveProtectedBranchPatterns,
             snapshots: multiRootWorkspace.branchSnapshots,
             incomingBranches: gitSettings.autoFetchIncomingBranches,
@@ -481,6 +500,7 @@ extension ContentView {
     } else {
         RebasedBranchesPopover(
         projectPath: projectWorkspace.path,
+        maximumPopupSize: maximumSize,
         branches: branchWorkspace.branches,
         remoteBranches: branchWorkspace.remoteBranches,
         recentBranches: branchWorkspace.recentBranches,

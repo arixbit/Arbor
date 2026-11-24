@@ -16,6 +16,9 @@ private struct MultiRootBranchRow: Identifiable {
 struct MultiRootBranchesPopover: View {
     @Environment(\.locale) private var locale
     var projectPath: String? = nil
+    /// The window can be shorter than the saved panel. Fit inside it without
+    /// writing that temporary size back over the user's preference.
+    var maximumPopupSize: CGSize? = nil
     var protectedBranchPatterns: [String] = []
     let snapshots: [GitRootBranchSnapshot]
     var incomingBranches: Set<GitIncomingBranch> = []
@@ -93,6 +96,14 @@ struct MultiRootBranchesPopover: View {
     @State private var selectedBranchTargetID: String?
     @State private var selectedBranchTargetIDs: Set<String> = []
     @State private var popupSize = GitBranchesPopupSettings.defaultMultiRootPopupSize
+
+    private var fittedPopupSize: CGSize {
+        guard let maximumPopupSize else { return popupSize }
+        return CGSize(
+            width: min(popupSize.width, maximumPopupSize.width),
+            height: min(popupSize.height, maximumPopupSize.height)
+        )
+    }
     @State private var branchSelectionAnchorID: String?
     @State private var selectedRemoteGroupIDs: Set<String> = []
     @State private var favoriteReferenceIDs: Set<String> = []
@@ -779,7 +790,7 @@ struct MultiRootBranchesPopover: View {
             }
         }
         .padding(12)
-        .frame(width: popupSize.width, height: popupSize.height)
+        .frame(width: fittedPopupSize.width, height: fittedPopupSize.height)
         .overlay(alignment: .bottomTrailing) {
             BranchesPopupResizeHandle(
                 size: $popupSize,

@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct WorktreePanel: View {
     let worktrees: [WorktreeInfo]
     let feedback: String?
+    var feedbackTone: InlineFeedbackTone = .failure
     let onRefresh: () -> Void
     let onCreate: (String, String, String) -> Void
     let onOpen: (String) -> Void
@@ -65,16 +66,12 @@ struct WorktreePanel: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
-                if let feedback {
-                    Text(feedback)
-                        .font(.caption)
-                        .foregroundStyle(feedback.hasPrefix("已") ? .green : .red)
-                }
+                InlineFeedbackLine(text: feedback, tone: feedbackTone)
             }
             .padding(14)
             Divider()
             if worktrees.isEmpty {
-                ContentUnavailableView("暂无 worktree", systemImage: "square.split.2x1")
+                ContentUnavailableView("No worktrees", systemImage: "square.split.2x1")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 1) {

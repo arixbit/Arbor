@@ -179,6 +179,31 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(Theme.Typography.monospaceSize, 11.5)
     }
 
+    func testMotionUsesOneCurvePerKindAndDropsItWhenMotionIsReduced() {
+        XCTAssertEqual(Theme.Motion.pressDuration, 0.16)
+        XCTAssertEqual(Theme.Motion.revealDuration, 0.24)
+        XCTAssertEqual(Theme.Motion.moveDuration, 0.32)
+        XCTAssertEqual(Theme.Motion.swapDuration, 0.18)
+        XCTAssertEqual(Theme.Motion.emphasisDuration, 0.32)
+        for kind in Theme.Motion.Kind.allCases {
+            XCTAssertNil(Theme.Motion.animation(kind, reduceMotion: true))
+            XCTAssertNotNil(Theme.Motion.animation(kind, reduceMotion: false))
+        }
+    }
+
+    @MainActor
+    func testInlineFeedbackToneIsStoredInsteadOfGuessedFromTheWords() {
+        let commit = CommitWorkspaceState()
+        commit.setFeedback("Commit cancelled", tone: .caution)
+        XCTAssertEqual(commit.feedback, "Commit cancelled")
+        XCTAssertEqual(commit.feedbackTone, .caution)
+        commit.setFeedback("已提交", tone: .success)
+        XCTAssertEqual(commit.feedbackTone, .success)
+        commit.setFeedback(nil)
+        XCTAssertNil(commit.feedback)
+        XCTAssertEqual(commit.feedbackTone, .failure)
+    }
+
     func testAppearanceSettingKeepsItsThreeStates() {
         // 跟随系统是 nil（读系统外观），固定深色 / 亮色不跟系统走。
         XCTAssertNil(Theme.preferredColorScheme(forOverride: Theme.AppearanceOverride.followSystem))

@@ -275,7 +275,7 @@ struct SideBySideDiffView: View {
                 .onChange(of: activeDifference) { _, value in
                     guard let value,
                           let anchor = differenceAnchorID(ordinal: value, ordinals: ordinals) else { return }
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    Theme.Motion.perform(.swap) {
                         scroller.scrollTo(anchor, anchor: .top)
                     }
                 }

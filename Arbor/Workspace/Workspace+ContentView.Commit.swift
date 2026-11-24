@@ -114,7 +114,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, staged
                 guard decision.shouldContinue else {
                     await MainActor.run {
                         self.commitWorkspace.pendingCommitAndPush = false
-                        self.commitWorkspace.feedback = "Commit cancelled"
+                        self.commitWorkspace.setFeedback("Commit cancelled", tone: .caution)
                         self.feedbackCenter.warning(
                             "Commit cancelled",
                             detail: "Review the pre-commit warnings before committing.",
@@ -218,7 +218,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, staged
                             )
                         }
                     } ?? []
-                    self.commitWorkspace.feedback = "已 Amend rebase edit \(String(id.prefix(7)))"
+                    self.commitWorkspace.setFeedback("已 Amend rebase edit \(String(id.prefix(7)))", tone: .success)
                     self.feedbackCenter.success(
                         "Rebase commit amended",
                         detail: "\(String(id.prefix(7)))；请从恢复栏 Continue Rebase。",
@@ -241,9 +241,12 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, staged
                 let shouldOpenPushDialog = self.commitWorkspace.pendingCommitAndPush
                 self.commitWorkspace.pendingCommitAndPush = false
                 self.rebaseWorkspace.pendingAutoSquash = nil
-                self.commitWorkspace.feedback = isAmend
-                    ? "已 Amend \(String(id.prefix(7)))"
-                    : "已提交 \(String(id.prefix(7)))"
+                self.commitWorkspace.setFeedback(
+                    isAmend
+                        ? "已 Amend \(String(id.prefix(7)))"
+                        : "已提交 \(String(id.prefix(7)))",
+                    tone: .success
+                )
                 let rewordAction = repositoryPath.map {
                     self.commitRewordFeedbackAction(rootPath: $0, commitID: id)
                 }
@@ -269,7 +272,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, staged
                             || $0.unstaged != .unchanged
                     } ?? true)
                     if hasResidualChanges {
-                        self.commitWorkspace.feedback = "已提交；为保护未提交改动，未自动变基"
+                        self.commitWorkspace.setFeedback("已提交；为保护未提交改动，未自动变基", tone: .caution)
                         self.feedbackCenter.warning(
                             "Commit completed; rebase skipped",
                             detail: "Uncommitted changes remain after the partial commit.",
@@ -313,7 +316,7 @@ func doCommit(forceChecks: Bool = false, rebaseAfterCommit: Bool = false, staged
                     return
                 }
                 self.commitWorkspace.pendingCommitAndPush = false
-                self.commitWorkspace.feedback = errorMessage(error)
+                self.commitWorkspace.setFeedback(errorMessage(error), tone: .failure)
                 self.repositoryStatus.loadError = self.commitWorkspace.feedback
                 let detail = errorMessage(error)
                 if gitCommitSigningFailureNeedsGPGConfiguration(detail) {

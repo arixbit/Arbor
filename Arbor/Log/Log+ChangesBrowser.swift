@@ -817,11 +817,15 @@ struct LogChangesBrowserView: View {
                 ProgressView("Loading changed files…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if rows.isEmpty && filteredOutRecords.isEmpty && pendingFilterRecords.isEmpty {
-                Text(commits.isEmpty
-                     ? "Select commit to view changes"
-                     : (showsOnlyAffectedChanges && hasAffectedPathFilter
-                        ? "No changes affect the selected path"
-                        : (activeFilter == nil ? "No changed files" : "No files remain after filtering")))
+                // A ternary is typed as String, so Text would show these
+                // sentences verbatim and skip the string catalog.
+                Text(LocalizedStringKey(
+                    commits.isEmpty
+                        ? "Select a commit to see its changes"
+                        : (showsOnlyAffectedChanges && hasAffectedPathFilter
+                           ? "No changes affect the selected path"
+                           : (activeFilter == nil ? "No changed files" : "No files remain after filtering"))
+                ))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

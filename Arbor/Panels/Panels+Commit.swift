@@ -39,7 +39,6 @@ struct RebasedCommitWorkspace: View {
     let hasStaged: Bool
     let includedCommitPaths: Set<String>
     let onToggleCommitPath: (String, Bool) -> Void
-    let commitFeedback: String?
     /// OPS-001 统一操作状态：非 nil 时显示 Operation Recovery Bar。
     let operationState: OperationState?
     let operationFeedback: String?
@@ -211,7 +210,10 @@ struct RebasedCommitWorkspace: View {
     @State var pendingUnshelveMemberGroups: ShelfMemberBatchUnshelveRequest?
     @State var showClearStashesConfirmation = false
     @State var showCommitAllConfirmation = false
-    @State var showsLastCommitMenu = false
+    @State var commitDraftBeforeLastCommit: String?
+    /// The message this button inserted. Restore stays available only while
+    /// the field still contains exactly that text.
+    @State var insertedLastCommitMessage: String?
     @State var showsCommitMessageHistory = false
     @State var showsCommitOptions = false
     @State var groupByDirectory = false
@@ -1002,21 +1004,45 @@ struct RebasedCommitWorkspace: View {
                         .help("Stage the changes for this paused commit, then Amend before continuing the rebase.")
                 }
                 Button {
-                    showsLastCommitMenu.toggle()
-                } label: {
-                    HStack(spacing: 3) {
-                        Text("last commit")
-                            .font(.caption)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
+                    if let inserted = insertedLastCommitMessage, commitMessage == inserted {
+                        let draft = commitDraftBeforeLastCommit ?? ""
+                        insertedLastCommitMessage = nil
+                        commitDraftBeforeLastCommit = nil
+                        commitMessage = draft
+                    } else if let last = recentMessages.first {
+                        commitDraftBeforeLastCommit = commitMessage
+                        insertedLastCommitMessage = last
+                        commitMessage = last
                     }
-                    .foregroundStyle(.blue)
+                } label: {
+                    let canRestore = insertedLastCommitMessage != nil
+                        && commitMessage == insertedLastCommitMessage
+                    HStack(spacing: 3) {
+                        Text(canRestore ? "Restore message" : "last commit")
+                            .font(.caption)
+                        Image(systemName: canRestore ? "arrow.uturn.backward" : "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .foregroundStyle(Theme.Palette.accentInk)
                 }
                 .buttonStyle(.plain)
-                .help("last commit")
-                .accessibilityLabel("last commit")
-                .popover(isPresented: $showsLastCommitMenu, arrowEdge: .bottom) {
-                    commitMessageHistoryList { showsLastCommitMenu = false }
+                .disabled(recentMessages.isEmpty && insertedLastCommitMessage == nil)
+                .help(insertedLastCommitMessage != nil && commitMessage == insertedLastCommitMessage
+                      ? "Restore the previous message"
+                      : (recentMessages.isEmpty
+                         ? "No previous commit message"
+                         : "Use the last commit message"))
+                .accessibilityLabel(insertedLastCommitMessage != nil && commitMessage == insertedLastCommitMessage
+                                    ? "Restore message" : "last commit")
+                .onChange(of: commitMessage) { _, newValue in
+                    guard let inserted = insertedLastCommitMessage, newValue != inserted else { return }
+                    insertedLastCommitMessage = nil
+                    commitDraftBeforeLastCommit = nil
+                }
+                .onChange(of: recentMessages) { _, _ in
+                    insertedLastCommitMessage = nil
+                    commitDraftBeforeLastCommit = nil
                 }
                 Button {
                     showsCommitMessageHistory.toggle()
@@ -1079,7 +1105,7 @@ struct RebasedCommitWorkspace: View {
                             || (operationState != nil && (!canAmendPausedRebase || !amendMode))
                     )
                 Button("Commit and Push…", action: onCommitAndPush)
-                    .buttonStyle(RebasedActionButtonStyle(dimsWhenDisabled: false))
+                    .buttonStyle(RebasedActionButtonStyle())
                     .disabled(operationState != nil || repo == nil || amendMode || includedCommitEntries.isEmpty || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Spacer(minLength: 0)
                 if skipHooks || alwaysSkipCommitHooks {
@@ -1125,13 +1151,6 @@ struct RebasedCommitWorkspace: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
-            if let commitFeedback {
-                Text(commitFeedback)
-                    .font(.caption)
-                    .foregroundStyle(commitFeedback.hasPrefix("已") ? .green : .red)
-                    .lineLimit(1)
-                    .padding(.bottom, 7)
-            }
         }
     }
 
@@ -1635,11 +1654,12 @@ struct RebasedCommitWorkspace: View {
         let count = stashChangeFiles.count
         return VStack(alignment: .leading, spacing: 3) {
             Button {
-                stashFilesExpanded.toggle()
+                Theme.Motion.perform(.press) {
+                    stashFilesExpanded.toggle()
+                }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: stashFilesExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(isExpanded: stashFilesExpanded, size: 9, weight: .bold)
                     Image(systemName: "folder")
                         .font(.system(size: 12))
                     Text(count == 1 ? "1 file" : "\(count) files")
@@ -1675,8 +1695,11 @@ struct RebasedCommitWorkspace: View {
                 toggleStashFolder(row.path)
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: collapsedStashFolders.contains(row.path) ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(
+                        isExpanded: !collapsedStashFolders.contains(row.path),
+                        size: 9,
+                        weight: .bold
+                    )
                     Image(systemName: "folder")
                         .font(.system(size: 10))
                     Text(row.name)
@@ -2031,10 +2054,13 @@ struct RebasedCommitWorkspace: View {
                 toggleShelfFolder(shelf.id, row.path)
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: collapsedShelfFolders.contains(
-                        shelfFolderID(shelfID: shelf.id, path: row.path)
-                    ) ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(
+                        isExpanded: !collapsedShelfFolders.contains(
+                            shelfFolderID(shelfID: shelf.id, path: row.path)
+                        ),
+                        size: 9,
+                        weight: .bold
+                    )
                     Image(systemName: "folder")
                         .font(.caption2)
                     Text(row.name)
@@ -2116,9 +2142,12 @@ struct RebasedCommitWorkspace: View {
                 Button {
                     toggleShelfExpansion(shelf.id)
                 } label: {
-                    Image(systemName: expandedShelfIDs.contains(shelf.id) ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.bold))
-                        .frame(width: 14, height: 20)
+                    ArborDisclosureChevron(
+                        isExpanded: expandedShelfIDs.contains(shelf.id),
+                        size: 9,
+                        weight: .bold
+                    )
+                    .frame(width: 14, height: 20)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -2225,10 +2254,13 @@ struct RebasedCommitWorkspace: View {
                 toggleShelfFolder(shelf.id, row.path)
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: collapsedShelfFolders.contains(
-                        shelfFolderID(shelfID: shelf.id, path: row.path)
-                    ) ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(
+                        isExpanded: !collapsedShelfFolders.contains(
+                            shelfFolderID(shelfID: shelf.id, path: row.path)
+                        ),
+                        size: 9,
+                        weight: .bold
+                    )
                     Image(systemName: "folder")
                         .font(.caption2)
                     Text(row.name)
@@ -2280,13 +2312,12 @@ struct RebasedCommitWorkspace: View {
                 .padding(.vertical, 3)
             HStack(spacing: 6) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.12)) {
+                    Theme.Motion.perform(.press) {
                         deletedShelvesExpanded.toggle()
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: deletedShelvesExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption2.weight(.bold))
+                        ArborDisclosureChevron(isExpanded: deletedShelvesExpanded, size: 9, weight: .bold)
                         Image(systemName: "trash")
                             .font(.caption2)
                         Text("Recently Deleted")
@@ -2546,13 +2577,16 @@ struct RebasedCommitWorkspace: View {
         HStack(spacing: 6) {
             Button {
                 guard !visibleShelves.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
+                Theme.Motion.perform(.press) {
                     shelvesExpanded.toggle()
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: visibleShelves.isEmpty || !shelvesExpanded ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.bold))
+                    ArborDisclosureChevron(
+                        isExpanded: !visibleShelves.isEmpty && shelvesExpanded,
+                        size: 9,
+                        weight: .bold
+                    )
                     Text("Shelves")
                         .font(Design.Typography.interface(13, weight: .semibold))
                     Text("\(visibleShelves.count)")

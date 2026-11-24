@@ -171,7 +171,10 @@ func commitAndPush(
                 self.pushWorkspace.feedback = outcome.pushed
                     ? "已提交并推送 \(String(outcome.commitId.prefix(7)))"
                     : "已提交 \(String(outcome.commitId.prefix(7)))（未推送：没有可用远程或分支）"
-                self.commitWorkspace.feedback = self.pushWorkspace.feedback
+                self.commitWorkspace.setFeedback(
+                    self.pushWorkspace.feedback,
+                    tone: outcome.pushed ? .success : .caution
+                )
             }
         } catch {
             await MainActor.run {
@@ -199,7 +202,7 @@ func commitAndPush(
                     return
                 }
                 self.pushWorkspace.feedback = friendlyRemoteError(error)
-                self.commitWorkspace.feedback = self.pushWorkspace.feedback
+                self.commitWorkspace.setFeedback(self.pushWorkspace.feedback, tone: .failure)
                 let detail = errorMessage(error)
                 if gitCommitSigningFailureNeedsGPGConfiguration(detail) {
                     self.feedbackCenter.error(

@@ -166,7 +166,7 @@ func loadTemplate() {
             if let tpl, !tpl.isEmpty {
                 self.commitWorkspace.message = tpl
             } else {
-                self.commitWorkspace.feedback = "未配置提交模板"
+                self.commitWorkspace.setFeedback("未配置提交模板", tone: .failure)
             }
         }
     }

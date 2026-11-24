@@ -29,7 +29,7 @@ func runResetCommit(
                 force: false
             )
             await MainActor.run {
-                self.commitWorkspace.feedback = "已 \(resetModeName(mode)) reset 到 \(String(id.prefix(7)))"
+                self.commitWorkspace.setFeedback("已 \(resetModeName(mode)) reset 到 \(String(id.prefix(7)))", tone: .success)
                 let recoveryTarget = recovery.rollbackId.map {
                     PersistedResetRecoveryTarget(
                         rootPath: repo.workdir() ?? "",
@@ -55,7 +55,7 @@ func runResetCommit(
             }
         } catch {
             await MainActor.run {
-                self.commitWorkspace.feedback = errorMessage(error)
+                self.commitWorkspace.setFeedback(errorMessage(error), tone: .failure)
                 if case let .LocalChangesWouldBeOverwritten(paths) = error as? EngineError {
                     self.feedbackCenter.warning(
                         "Reset needs a decision",
@@ -129,7 +129,7 @@ func forceResetCommit(repo: Repository, id: String) {
                 force: true
             )
             await MainActor.run {
-                self.commitWorkspace.feedback = "已 hard reset 到 \(String(id.prefix(7)))"
+                self.commitWorkspace.setFeedback("已 hard reset 到 \(String(id.prefix(7)))", tone: .success)
                 let recoveryTarget = recovery.rollbackId.map {
                     PersistedResetRecoveryTarget(
                         rootPath: repo.workdir() ?? "",

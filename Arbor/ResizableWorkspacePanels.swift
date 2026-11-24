@@ -75,10 +75,8 @@ struct WorkspacePanelHeader: View {
     private var headerContent: some View {
         HStack(spacing: 8) {
             if showsDisclosure {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2.weight(.bold))
+                ArborDisclosureChevron(isExpanded: isExpanded, size: 9, weight: .bold)
                     .frame(width: 12)
-                    .accessibilityHidden(true)
             }
             Group {
                 if systemImage.isEmpty {

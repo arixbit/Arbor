@@ -206,6 +206,60 @@ enum Theme {
         /// 分组标题（NOV 10 这类日期组头）放宽的字距。
         static let groupTracking: CGFloat = 0.6
     }
+
+    /// 全应用一套动效。同一类状态变化用同一档，不要在各个视图里另写时长。
+    ///
+    /// 拖拽和调整大小不走这里：那些必须跟手，不能套一层弹簧。
+    enum Motion {
+        enum Kind: CaseIterable {
+            /// 按下、勾选、折叠。反复做的动作用最短的一档。
+            case press
+            /// 出现和消失：弹层、提示、一行反馈。
+            case reveal
+            /// 面板展开、收起这种布局移动。
+            case move
+            /// 内容换上了：加载、数字、状态文字。
+            case swap
+            /// 完成或需要被看见的一下，仍然很轻。
+            case emphasis
+        }
+
+        static let pressDuration = 0.16
+        static let revealDuration = 0.24
+        static let moveDuration = 0.32
+        static let swapDuration = 0.18
+        static let emphasisDuration = 0.32
+
+        static var systemReduceMotion: Bool {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        }
+
+        /// 减少动态效果时直接到位，不播一段缩短的动画充数。
+        static func animation(_ kind: Kind, reduceMotion: Bool? = nil) -> Animation? {
+            let reduced = reduceMotion ?? systemReduceMotion
+            guard !reduced else { return nil }
+            switch kind {
+            case .press:
+                return .snappy(duration: pressDuration, extraBounce: 0)
+            case .reveal:
+                return .smooth(duration: revealDuration, extraBounce: 0)
+            case .move:
+                return .snappy(duration: moveDuration, extraBounce: 0)
+            case .swap:
+                return .smooth(duration: swapDuration, extraBounce: 0)
+            case .emphasis:
+                return .snappy(duration: emphasisDuration, extraBounce: 0.04)
+            }
+        }
+
+        static func perform(_ kind: Kind, _ changes: () -> Void) {
+            if let animation = animation(kind) {
+                withAnimation(animation, changes)
+            } else {
+                changes()
+            }
+        }
+    }
 }
 
 extension NSColor {
@@ -217,5 +271,123 @@ extension NSColor {
             blue: CGFloat(value & 0xFF) / 255,
             alpha: alpha
         )
+    }
+}
+
+/// 一行操作结果。颜色跟语气走，不从文案里猜。
+enum InlineFeedbackTone: Equatable {
+    case success
+    case caution
+    case failure
+
+    var color: Color {
+        switch self {
+        case .success: Theme.Palette.addition
+        case .caution: Color.orange
+        case .failure: Theme.Palette.deletion
+        }
+    }
+}
+
+@MainActor
+protocol InlineFeedbackReporting: AnyObject {
+    var feedback: String? { get set }
+    var feedbackTone: InlineFeedbackTone { get set }
+}
+
+extension InlineFeedbackReporting {
+    func setFeedback(_ text: String?, tone: InlineFeedbackTone = .failure) {
+        feedbackTone = tone
+        feedback = text
+    }
+}
+
+extension View {
+    /// 只在 `value` 变化时使用统一曲线。别把这个修饰符挂在整窗上。
+    func arborMotion<V: Equatable>(_ kind: Theme.Motion.Kind, value: V) -> some View {
+        modifier(ArborMotionModifier(kind: kind, value: value))
+    }
+}
+
+private struct ArborMotionModifier<V: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let kind: Theme.Motion.Kind
+    let value: V
+
+    func body(content: Content) -> some View {
+        content.animation(Theme.Motion.animation(kind, reduceMotion: reduceMotion), value: value)
+    }
+}
+
+extension AnyTransition {
+    /// 从触发它的那一边轻轻进来，离开时只淡出，避免往回飞时挡住下一眼。
+    static var arborReveal: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+            removal: .opacity
+        )
+    }
+
+    static var arborToast: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .bottom).combined(with: .opacity),
+            removal: .opacity
+        )
+    }
+}
+
+/// 折叠箭头只旋转，不把两个符号对切。
+struct ArborDisclosureChevron: View {
+    var isExpanded: Bool
+    var size: CGFloat = 10
+    var weight: Font.Weight = .bold
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: size, weight: weight))
+            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            .animation(Theme.Motion.animation(.press, reduceMotion: reduceMotion), value: isExpanded)
+            .accessibilityHidden(true)
+    }
+}
+
+/// 提交、标签、worktree 下面那一行结果。出现和换一句都走同一档。
+struct InlineFeedbackLine: View {
+    let text: String?
+    var tone: InlineFeedbackTone = .failure
+
+    var body: some View {
+        Group {
+            if let text {
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(tone.color)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            }
+        }
+        .arborMotion(.reveal, value: text)
+        .arborMotion(.swap, value: tone)
+    }
+}
+
+/// 把提示的动画关在自己这一层，避免一次成功把整窗的布局也带动。
+struct ArborToastOverlay: View {
+    let message: FeedbackMessage?
+    let onDetails: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Group {
+            if let message {
+                FeedbackToastView(message: message, onDetails: onDetails, onDismiss: onDismiss)
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 42)
+                    .transition(.arborToast)
+            }
+        }
+        .arborMotion(.reveal, value: message?.id)
     }
 }

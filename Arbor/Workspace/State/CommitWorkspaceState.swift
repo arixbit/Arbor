@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 单 root 与多 root 提交草稿、提交选项和后续动作。
 @MainActor
-final class CommitWorkspaceState: ObservableObject {
+final class CommitWorkspaceState: ObservableObject, InlineFeedbackReporting {
     @Published var message: String = ""
     /// Keep the Commit/Stash choice when opening or closing the Project panel
     /// rebuilds the tool window's SwiftUI view.
@@ -12,6 +12,7 @@ final class CommitWorkspaceState: ObservableObject {
     /// A new repository starts with nothing selected, as in the Changes view.
     @Published private(set) var includedPathsByRoot: [String: Set<String>] = [:]
     @Published var feedback: String?
+    @Published var feedbackTone: InlineFeedbackTone = .failure
     @Published var amendMode = false
     @Published var recentMessages: [String] = []
     @Published var skipHooks = false

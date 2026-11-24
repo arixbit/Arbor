@@ -114,12 +114,12 @@ func createWorktree(
                     self.worktreeWorkspace.worktrees = items
                 }
                 self.loadMultiRoots()
-                self.worktreeWorkspace.feedback = "已创建 worktree：\(path)"
+                self.worktreeWorkspace.setFeedback("已创建 worktree：\(path)", tone: .success)
                 self.feedbackCenter.success("Worktree created", detail: path)
             }
         } catch {
             await MainActor.run {
-                self.worktreeWorkspace.feedback = errorMessage(error)
+                self.worktreeWorkspace.setFeedback(errorMessage(error), tone: .failure)
                 self.feedbackCenter.error("Create worktree failed", detail: errorMessage(error))
             }
         }
@@ -142,12 +142,12 @@ func removeWorktree(path: String, force: Bool) {
             let items = try repo.worktreeList()
             await MainActor.run {
                 self.worktreeWorkspace.worktrees = items
-                self.worktreeWorkspace.feedback = "已移除 worktree：\(path)"
+                self.worktreeWorkspace.setFeedback("已移除 worktree：\(path)", tone: .success)
                 self.feedbackCenter.success("Worktree removed", detail: path)
             }
         } catch {
             await MainActor.run {
-                self.worktreeWorkspace.feedback = errorMessage(error)
+                self.worktreeWorkspace.setFeedback(errorMessage(error), tone: .failure)
                 self.feedbackCenter.error("Remove worktree failed", detail: errorMessage(error))
             }
         }
@@ -176,7 +176,7 @@ func updateWorktreeLock(path: String, lock: Bool) {
             }
         } catch {
             await MainActor.run {
-                self.worktreeWorkspace.feedback = errorMessage(error)
+                self.worktreeWorkspace.setFeedback(errorMessage(error), tone: .failure)
                 self.feedbackCenter.error(lock ? "Lock worktree failed" : "Unlock worktree failed", detail: errorMessage(error))
             }
         }

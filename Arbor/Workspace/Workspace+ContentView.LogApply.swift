@@ -400,7 +400,7 @@ func runLogApplyOperation(
             let details = resultIDsSnapshot.map { rootPath, id in
                 "\(rootPath): \(String(id.prefix(7)))"
             }.joined(separator: "\n")
-            self.commitWorkspace.feedback = operation.title
+            self.commitWorkspace.setFeedback(operation.title, tone: .success)
             self.feedbackCenter.success(operation.title, detail: details)
             self.logSelectionState.selection = nil
             self.logSelectionState.selectedIDs = []
@@ -465,7 +465,7 @@ func handleLogApplyFailure(
         let completedDetail = completedCommits.isEmpty
             ? ""
             : " (\(completedCommits.count) commit(s) completed before this root)"
-        commitWorkspace.feedback = operation.pausedMessage + completedDetail
+        commitWorkspace.setFeedback(operation.pausedMessage + completedDetail, tone: .caution)
     } else {
         let expectedRecoveryOperation: PersistedLogApplyRecovery.Operation = operation == .revert
             ? .revert

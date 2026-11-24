@@ -17,14 +17,14 @@ func checkoutFromLog(_ commit: CommitInfo) {
         do {
             try repo.checkoutDetached(commitId: id)
             await MainActor.run {
-                self.commitWorkspace.feedback = "已 checkout \(String(id.prefix(7)))"
+                self.commitWorkspace.setFeedback("已 checkout \(String(id.prefix(7)))", tone: .success)
                 self.refreshAll(showFeedback: false)
                 self.loadRepoData()
             }
         } catch {
             let detail = errorMessage(error)
             await MainActor.run {
-                self.commitWorkspace.feedback = detail
+                self.commitWorkspace.setFeedback(detail, tone: .failure)
                 self.presentCheckoutRecovery(
                     repo: repo,
                     name: id,

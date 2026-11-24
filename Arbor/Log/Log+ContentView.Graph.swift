@@ -655,11 +655,8 @@ VStack(spacing: 0) {
                 Button("Create") { createTag() }
             }
             .padding(.horizontal, 8)
-            if let feedback = tagWorkspace.feedback {
-                Text(feedback).font(.caption)
-                    .foregroundStyle(feedback.hasPrefix("已") ? .green : .red)
-                    .padding(.horizontal, 8)
-            }
+            InlineFeedbackLine(text: tagWorkspace.feedback, tone: tagWorkspace.feedbackTone)
+                .padding(.horizontal, 8)
             List(tagWorkspace.tags, id: \.name) { tag in
                 HStack {
                     Text(tag.name).font(.system(.body, design: .monospaced))

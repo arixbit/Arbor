@@ -102,6 +102,16 @@ extension ContentView {
                     Image(systemName: "bell")
                         .font(.system(size: 17, weight: .regular))
                         .frame(width: 34, height: 34)
+                        .overlay(alignment: .topTrailing) {
+                            if feedbackCenter.current?.level == .error || feedbackCenter.current?.level == .warning {
+                                Circle()
+                                    .fill(feedbackCenter.current?.level == .error ? Theme.Palette.deletion : Color.orange)
+                                    .frame(width: 6, height: 6)
+                                    .offset(x: 3, y: 6)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
+                        .arborMotion(.emphasis, value: feedbackCenter.current?.level)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -133,7 +143,9 @@ extension ContentView {
                     toolWindowExpanded = true
                 },
                 onCancelOperation: feedbackCenter.cancel,
-                onFeedbackDetails: { projectWorkspace.feedbackDetailMessage = $0 }
+                onFeedbackDetails: { projectWorkspace.feedbackDetailMessage = $0 },
+                inlineNote: commitWorkspace.feedback,
+                inlineTone: commitWorkspace.feedbackTone
             )
         }
         .frame(minWidth: 980, minHeight: 540 - workspaceTitlebarHeight)
@@ -163,16 +175,15 @@ extension ContentView {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if let toast = feedbackCenter.toast {
-                FeedbackToastView(
-                    message: toast,
-                    onDetails: { projectWorkspace.feedbackDetailMessage = toast },
-                    onDismiss: feedbackCenter.dismissToast
-                )
-                .padding(.trailing, 18)
-                .padding(.bottom, 42)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+            ArborToastOverlay(
+                message: feedbackCenter.toast,
+                onDetails: {
+                    if let toast = feedbackCenter.toast {
+                        projectWorkspace.feedbackDetailMessage = toast
+                    }
+                },
+                onDismiss: feedbackCenter.dismissToast
+            )
         }
         .sheetLayer(item: $projectWorkspace.feedbackDetailMessage) { message in
             FeedbackDetailView(

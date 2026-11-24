@@ -25,7 +25,7 @@ extension ContentView {
                 showShelfRequestID: shelfWorkspace.tabRequestID,
                 onWorkspaceTabChange: { shelfWorkspace.isWorkspaceTabActive = $0 },
                 onHideToolWindow: {
-                    withAnimation(.easeInOut(duration: 0.16)) {
+                    Theme.Motion.perform(.move) {
                         projectPanelExpanded = true
                         toolWindowExpanded = false
                     }
@@ -46,7 +46,6 @@ extension ContentView {
                 onToggleCommitPath: { path, included in
                     commitWorkspace.setIncluded(included, path: path, in: repo?.workdir())
                 },
-                commitFeedback: commitWorkspace.feedback,
                 operationState: operationRecovery.operation,
                 operationFeedback: operationRecovery.feedback,
                 binaryPaths: stagingBinaryPaths,
@@ -447,6 +446,7 @@ extension ContentView {
                     WorktreePanel(
                         worktrees: worktreeWorkspace.worktrees,
                         feedback: worktreeWorkspace.feedback,
+                        feedbackTone: worktreeWorkspace.feedbackTone,
                         onRefresh: loadWorktrees,
                         onCreate: { path, branch, revision in
                             createWorktree(path: path, branch: branch, revision: revision)
@@ -512,7 +512,7 @@ extension ContentView {
                         systemImage: projectWorkspace.toolWindowMode.systemImage,
                         isExpanded: false,
                         onToggle: {
-                            withAnimation(.easeInOut(duration: 0.16)) {
+                            Theme.Motion.perform(.move) {
                                 toolWindowExpanded = true
                             }
                         }
@@ -528,7 +528,7 @@ extension ContentView {
                             systemImage: projectWorkspace.toolWindowMode.systemImage,
                             isExpanded: toolWindowExpanded,
                             onToggle: {
-                                withAnimation(.easeInOut(duration: 0.16)) {
+                                Theme.Motion.perform(.move) {
                                     toolWindowExpanded.toggle()
                                 }
                             }
@@ -561,7 +561,7 @@ extension ContentView {
                         isExpanded: projectPanelExpanded,
                         showsDisclosure: false,
                         onToggle: {
-                            withAnimation(.easeInOut(duration: 0.16)) {
+                            Theme.Motion.perform(.move) {
                                 projectPanelExpanded.toggle()
                             }
                         },
@@ -569,6 +569,7 @@ extension ContentView {
                             projectToolWindowToolbar
                                 .opacity(projectHeaderHovered ? 1 : 0)
                                 .allowsHitTesting(projectHeaderHovered)
+                                .arborMotion(.press, value: projectHeaderHovered)
                         )
                     )
                     .contentShape(Rectangle())
@@ -679,7 +680,7 @@ extension ContentView {
                 }
                 Divider()
                 Button("Hide Project Tool Window") {
-                    withAnimation(.easeInOut(duration: 0.16)) {
+                    Theme.Motion.perform(.move) {
                         projectPanelExpanded = false
                     }
                 }
@@ -695,7 +696,7 @@ extension ContentView {
             .accessibilityIdentifier("project-tool-window-options")
 
             projectHeaderButton("minus", help: "Hide Project Tool Window") {
-                withAnimation(.easeInOut(duration: 0.16)) {
+                Theme.Motion.perform(.move) {
                     projectPanelExpanded = false
                 }
             }
